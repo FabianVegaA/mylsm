@@ -8,6 +8,14 @@ proven laws plus a benchmark harness (no CI regression gate yet).
 Architecture: tiered LSM with WAL (Approach 1). Section 1 reviewed and
 approved in chat; Sections 2–5 written on agent judgment, to be reviewed here.
 
+Mission: this is a production-grade product, not a toy or an academic
+exercise. It competes on two axes at once — write performance against
+incumbent LSMs (RocksDB, LevelDB, Pebble) and assurance (machine-checked
+laws plus adversarial hardening). That mission is operational, not
+aspirational: performance claims are benchmarked comparatively on identical
+hardware (§5), and security claims are threat-modeled, fuzz-tested, and
+gated (§8–§9). Anything that cannot be measured or proven is not claimed.
+
 ## 1. Architecture and components (approved)
 
 Five components, each with one job:
@@ -105,6 +113,11 @@ this spec, tuned later by benchmark, default T = 4):
 3. Compactions at different levels and disjoint ranges may run concurrently;
    two compactions never share an input table (a table is claimed by the
    Manifest update that removes it).
+4. **Backpressure, not unbounded growth**: if L0 reaches 2T tables (flush
+   cannot keep up), writers stall until a flush completes — foreground
+   writes slow down instead of memory growing without bound. This is a
+   safety property (DoS resistance against write floods), not a performance
+   feature, and it is load-tested in §9.
 
 No work here sits on the write path: compaction only rewrites data
 bulk-wise, downward, in the background.
@@ -181,6 +194,12 @@ Structural / representation laws:
 15. **Bloom schedule adherence**: for every table, the allocated filter bits
     equal `bloom_bits(level, est_keys)` from §3.4 — the budget rule itself is
     law, so a wrong-sized filter fails the gate, not just the benchmark.
+16. **Fail-closed parsing**: every on-disk decoder (WAL record, SSTable
+    block, Manifest) is total — for any input bytes it terminates with a
+    value or an explicit error, never a crash, hang, or silent
+    misinterpretation. (In Bend this is nearly free: no exceptions, no
+    partial functions, mandatory termination. The law pins the property so
+    it can never regress; §8 hammers it empirically.)
 
 `bend PROOF.bend` printing "All terms check." is the commit gate for every
 change, per repo house rules.
@@ -259,7 +278,7 @@ gives us; ordered arrays / B+tree nodes dominate here.
 
 ## 5. Testing and benchmark harness
 
-- **Correctness**: the fifteen laws above plus the `PROOF.bend` gate are
+- **Correctness**: the sixteen laws above plus the `PROOF.bend` gate are
   the test suite. No hand-written unit-test suite duplicates what a proof
   states; property checks exist only as scaffolding while a proof is being
   built. Proofs are written before or alongside code, never after.
@@ -268,6 +287,18 @@ gives us; ordered arrays / B+tree nodes dominate here.
   (e.g. 100 keys), plus measured per-level Bloom false-positive rates (to
   observe the §3.4 schedule, no gate), on the developer's machine,
   reporting threads, disk, and dataset size alongside every number.
+- **Comparative benchmark (the performance claim)**: the same workloads run
+  against stock RocksDB (default tuning) on identical hardware, and
+  `bench/BASELINE.md` records both side by side. The product target is
+  write throughput at parity-or-better with RocksDB *with all sixteen laws
+  proven* — "verified and fast" is the revolutionary combination, since the
+  incumbent buys its speed with an unverified C++ codebase. A v1 that is
+  slower than RocksDB ships only with a documented, benchmarked reason
+  (e.g. missing key-value separation — see §7) and a plan to close the gap.
+- **Write-amplification accounting**: the harness reports bytes written to
+  SSTables per byte of acknowledged user data, per level. Optimizations
+  (fan-in T, MemTable cap, §7) are judged on this number first, ops/sec
+  second — throughput without amplification discipline is a toy metric.
 - **Target policy**: the first harness run calibrates and records the
   baseline in `bench/BASELINE.md`; afterwards no commit may land below
   90% of baseline throughput on the same hardware profile. If a design
@@ -294,3 +325,72 @@ compaction write-amp — not WAL sync or memtable insert — dominating write
 cost. Phase 2 gets its own spec → plan cycle; v1 must not pre-build hooks
 for it beyond keeping `V` opaque in the generic core (already required by
 §3.1, which is what makes the evolution possible).
+
+## 8. Security (threat model and hardening)
+
+Performance without security is a demo; this product treats an attacker as
+a first-class workload.
+
+**Threat model (v1):**
+- T1 — Corrupt or hostile bytes on disk: bitrot, torn writes, truncated
+  files, or deliberately crafted WAL/SSTable/Manifest contents.
+- T2 — Reader of disk files who should not see or alter data (stolen disk,
+  shared machine, backups): confidentiality and integrity of data at rest.
+- T3 — Write flood from a legitimate client: unbounded resource growth must
+  be impossible (availability).
+- Non-goals v1: malicious operator with root, side channels, network
+  attackers (no server in v1, see §6), encryption-key management
+  infrastructure.
+
+**Mechanisms:**
+- **Fail closed on T1**: every checksum failure, every malformed record,
+  every missing Manifest-listed file is a fatal startup/recovery error via
+  `IO.die` with a precise message. The engine never serves data it cannot
+  authenticate, never silently skips a suspicious record, never opens a DB
+  whose Manifest and directory disagree. Law 16 proves the parsers total;
+  §9 proves them hostile-input-tested.
+- **Integrity at rest**: per-record checksums in the WAL (already §2.1)
+  extended to every SSTable data block and to the Manifest file itself
+  (validated whole-file on open, as RocksDB 11.x does). Checksums are
+  corruption detectors, honestly labeled as such — not cryptographic
+  authentication; no MAC-then-lie.
+- **Confidentiality at rest (T2, v1 scope)**: DB files and directories are
+  created with `0600`/`0700` permissions; the operator guide documents that
+  OS-level access control is the v1 confidentiality boundary. Encryption at
+  rest is a Phase-3 candidate, explicitly not v1: Bend's Base has no vetted
+  crypto primitive, and hand-rolled crypto in any language is a
+  vulnerability factory. When a vetted primitive exists, it arrives with its
+  own laws (ciphertext indistinguishability is out of reach of equality
+  proofs — the spec will say so plainly rather than fake it).
+- **Availability under flood (T3)**: MemTable entry cap (§3.1 plan value
+  4096), WAL segment size cap with rotation, and the L0 2T stop-writes
+  trigger (§2.5) bound memory regardless of client behavior. Writers stall;
+  the process never OOMs from intake.
+- **Supply chain**: zero dependencies beyond Bend Base (§3.3 already bans
+  foreign code); any future package enters only by content-hash import
+  (`import 0x<hash>/…`), which Bend verifies on fetch.
+- **Language-level wins we exploit deliberately**: total functions (no
+  null/undefined, no exceptions — a whole class of crash bugs cannot exist),
+  affine file handles (a handle cannot be double-closed or used after
+  close), mandatory termination (no hang bugs in core paths). The spec
+  claims these as engineered properties with laws behind them, not as
+  marketing.
+
+## 9. Release gates (v1 ships only when all hold)
+
+1. `bend PROOF.bend` green on all sixteen laws, on a clean checkout.
+2. Fuzz clean: ≥1M random/mutated inputs through each of the three
+   decoders (WAL, SSTable block, Manifest) with zero crashes, zero hangs,
+   zero silent misparses (every rejection explicit).
+3. Fault-injection matrix green: process killed (`kill -9`) mid-WAL-append,
+   mid-flush, mid-compaction, and mid-Manifest-publish; every restart
+   recovers to exactly the acknowledged state (law 7, verified
+   empirically, not just proven).
+4. Comparative benchmark recorded: write throughput and write-amp vs stock
+   RocksDB, same hardware, same workloads, in `bench/BASELINE.md`, with a
+   written verdict on the parity target from §5.
+5. Backpressure demonstrated: sustained write flood stalls writers without
+   memory growth beyond the configured caps.
+6. Security review of §8 against the running code, signed off by the human
+   partner — proofs check logic, only a reviewer checks that the threat
+   model matches reality.
