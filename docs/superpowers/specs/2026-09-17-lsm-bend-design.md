@@ -37,7 +37,11 @@ Five components, each with one job:
 Bend mapping: MemTable over sorted arrays / `Map`; files via affine `File`
 handles inside `IO`; compaction parallelized over disjoint key ranges and
 Bloom construction parallelized per table; hot loops use `Nat` fuel-bounded
-recursion so termination checking holds; no `@unsafe` in DB core or proofs.
+recursion so termination checking holds. Memory discipline is total (see
+§3.3): no `@unsafe` anywhere in the repo, single-owner arrays only, explicit
+bounds checks (never relying on index wraparound), and no foreign C/JS
+memory tricks — host effects are limited to Base `IO` file operations, which
+proofs never touch.
 
 ## 2. Data flow
 
@@ -132,6 +136,14 @@ claims) and `PROOF.bend` (agent-owned proofs) at the repo root.
 
 ### 3.2 Laws (all stated in LAWS.bend, all proven in PROOF.bend)
 
+Every public def gets at least one law; representation invariants are
+encoded as types where possible (e.g. a `SortedRun` type whose constructors
+can only build ordered sequences, so SSTable sortedness is checked, not
+merely asserted). Proofs are developed before or alongside the code they
+cover — a module is done only when its laws check, not when its code runs.
+
+Observable-behavior laws:
+
 1. **Read-your-writes**: after an acknowledged `put(k, v)`, `get(k)` returns
    `v` until a later acknowledged write to `k`.
 2. **Batch atomicity**: a batch's mutations become visible all at once; no
@@ -146,13 +158,46 @@ claims) and `PROOF.bend` (agent-owned proofs) at the repo root.
 7. **Recovery equivalence**: the post-recovery observable state equals the
    pre-crash acknowledged state — every acked write present, no unacked
    write required present.
-8. **Tiering invariant**: within a level above L0, output table ranges are
-   disjoint; the Manifest always lists exactly the SSTable files on disk.
-9. **Bloom safety**: a Bloom filter never rejects a key the table contains
-   (no false negatives; false positives only cost a read).
+
+Structural / representation laws:
+
+8. **SSTable sortedness**: every table's key sequence is strictly ordered by
+   `cmp` (carried by the `SortedRun` type; the law states the type erases to
+   the on-disk order).
+9. **WAL codec round-trip**: decode(encode(batch)) == batch for all batches,
+   so replay can never misread a synced record.
+10. **Merge-iterator refinement**: the iterator over any source set yields
+    exactly what a naive sequential model (apply all mutations newest-first
+    to an empty map) yields.
+11. **Compaction multiset preservation**: compaction outputs contain exactly
+    the live entries of the inputs — no loss, no duplication, newest version
+    wins per key.
+12. **Tiering invariant**: within a level above L0, output table ranges are
+    disjoint; the Manifest always lists exactly the SSTable files on disk.
+13. **Manifest round-trip**: parse(serialize(manifest)) == manifest.
+14. **Bloom safety**: a Bloom filter never rejects a key the table contains
+    (no false negatives; false positives only cost a read).
 
 `bend PROOF.bend` printing "All terms check." is the commit gate for every
 change, per repo house rules.
+
+### 3.3 Memory-safety rules (no unsafe, by construction)
+
+Bend already frees every affine value at its `match` and reference-counts
+only `+` (`Data`) copies; the spec additionally forbids every escape hatch:
+
+- No `@unsafe` def in the repo — not in DB core, not in proofs, not in the
+  benchmark harness. Termination is proven for all recursion (structural or
+  `Nat`-fuel-bounded).
+- Arrays are always single-owner `Array<T>`; no `Array.clone` aliasing to
+  fake shared mutation; every index is explicitly bounds-checked against the
+  known size — the language's index wraparound is never load-bearing.
+- No custom foreign C/JS effects for memory or I/O tricks. The only host
+  code is Base's `File`/`IO` operations; all proofs stay in pure Bend and
+  never touch host code.
+- `+` (reusable) annotations appear only on `Data` values and only where the
+  design says sharing is needed (iterator cursors, filter bits); the default
+  everywhere else is affine.
 
 ## 4. Error handling and crash semantics
 
@@ -171,15 +216,16 @@ change, per repo house rules.
   (batching makes this cheap); flush and compaction run concurrently via
   `IO.fork` but touch disjoint state; the program is deadlock-free by
   construction (no cyclic channel waits; joins always have a matching fork).
-- **Termination/proofs**: all core recursion is structurally decreasing or
-  `Nat`-fuel-bounded; `@unsafe` is forbidden in DB core and proofs
-  (allowed only inside the benchmark harness, if ever).
+- **Termination/proofs**: all recursion is structurally decreasing or
+  `Nat`-fuel-bounded; `@unsafe` is forbidden everywhere in the repo (see
+  §3.3), with no harness exception.
 
 ## 5. Testing and benchmark harness
 
-- **Correctness**: the nine laws above plus the `PROOF.bend` gate. No
-  hand-written unit-test suite duplicates what a proof states; property
-  checks exist only as scaffolding while a proof is being built.
+- **Correctness**: the fourteen laws above plus the `PROOF.bend` gate are
+  the test suite. No hand-written unit-test suite duplicates what a proof
+  states; property checks exist only as scaffolding while a proof is being
+  built. Proofs are written before or alongside code, never after.
 - **Benchmark harness** (`bench/`): measures sustained write throughput in
   ops/sec for (a) single-key sequential puts and (b) fixed-size batches
   (e.g. 100 keys), on the developer's machine, reporting threads, disk,
