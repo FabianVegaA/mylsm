@@ -150,6 +150,11 @@ claims) and `PROOF.bend` (agent-owned proofs) at the repo root.
 
 ### 3.2 Laws (all stated in LAWS.bend, all proven in PROOF.bend)
 
+Trust root: Bend Base primitives (arithmetic, comparison, String/Char
+ops) are the trusted kernel — pinned by closed-term laws and the Task 12
+fuzz harness, not re-proven from axioms. Every law below is about OUR code
+and is proven in full.
+
 Every public def gets at least one law; representation invariants are
 encoded as types where possible (e.g. a `SortedRun` type whose constructors
 can only build ordered sequences, so SSTable sortedness is checked, not
