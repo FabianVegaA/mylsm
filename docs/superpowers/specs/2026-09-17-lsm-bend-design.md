@@ -25,7 +25,8 @@ Five components, each with one job:
    bulk-merge into the next level. Tiering means tables inside one level may
    overlap, so nothing is ever rewritten inside a level on the write path:
    minimal write amplification (reads pay more, writes pay less). Each table
-   carries a **Bloom filter** so point reads skip irrelevant tables cheaply.
+   carries a **Bloom filter** so point reads skip irrelevant tables cheaply,
+   with per-level bit budgets set by a Monkey-style schedule (§3.4).
 4. **Manifest** — small durable file listing which SSTables live at which
    level. Source of truth at startup; updated atomically when a flush or
    compaction completes.
@@ -177,6 +178,9 @@ Structural / representation laws:
 13. **Manifest round-trip**: parse(serialize(manifest)) == manifest.
 14. **Bloom safety**: a Bloom filter never rejects a key the table contains
     (no false negatives; false positives only cost a read).
+15. **Bloom schedule adherence**: for every table, the allocated filter bits
+    equal `bloom_bits(level, est_keys)` from §3.4 — the budget rule itself is
+    law, so a wrong-sized filter fails the gate, not just the benchmark.
 
 `bend PROOF.bend` printing "All terms check." is the commit gate for every
 change, per repo house rules.
@@ -198,6 +202,39 @@ only `+` (`Data`) copies; the spec additionally forbids every escape hatch:
 - `+` (reusable) annotations appear only on `Data` values and only where the
   design says sharing is needed (iterator cursors, filter bits); the default
   everywhere else is affine.
+
+### 3.4 Per-level Bloom budgets (Monkey schedule)
+
+State of the art (surveyed 2026-09: RocksDB 11.x, Bourbon, 2025 learned-index
+benchmarks): LSMs keep a Bloom filter per SSTable, and the optimal use of a
+fixed filter-memory budget is unequal — smaller (upper) levels get more bits
+per key than the giant bottom level, minimizing the summed false-positive
+cost of a lookup that probes newest-first (Monkey, Dayan et al., SIGMOD'17).
+
+The spec pins this as a pure function, not a tunable:
+
+- `bloom_bits(level: Nat, est_keys: Nat) -> Nat` computes the filter size for
+  a table from its level number and estimated key count, following Monkey's
+  closed-form allocation under the repo's fixed total budget
+  BLOOM_TOTAL_BITS (default 10 bits per key averaged over the dataset; the
+  exact closed form is pinned at implementation time against the Monkey
+  paper, and law 15 locks it afterwards — the formula may only change with
+  a deliberate spec amendment, never silently).
+- Builders must call it; hardcoded bit counts are forbidden.
+- The benchmark reports measured per-level false-positive rates alongside
+  throughput, so schedule regressions are visible even though they gate
+  nothing (reads carry no gate by design).
+
+Explicitly rejected after survey: learned indexes / learned Bloom filters
+(Bourbon-style piecewise-linear models, RMI, 2025 classifier filters). They
+accelerate reads only, add retraining cost on the compaction path, and —
+decisively — a trained model cannot be stated as a Bend equality law, which
+would punch a hole through the verification-first principle of §3.2.
+Revisit only if point-read latency becomes the bottleneck AND a verifiable
+formulation exists. Skiplist memtables (RocksDB/LevelDB/Pebble default) were
+likewise surveyed and rejected for Bend: probabilistic leveling resists
+termination proofs and pointer chasing wastes the cache advantages affinity
+gives us; ordered arrays / B+tree nodes dominate here.
 
 ## 4. Error handling and crash semantics
 
@@ -222,14 +259,15 @@ only `+` (`Data`) copies; the spec additionally forbids every escape hatch:
 
 ## 5. Testing and benchmark harness
 
-- **Correctness**: the fourteen laws above plus the `PROOF.bend` gate are
+- **Correctness**: the fifteen laws above plus the `PROOF.bend` gate are
   the test suite. No hand-written unit-test suite duplicates what a proof
   states; property checks exist only as scaffolding while a proof is being
   built. Proofs are written before or alongside code, never after.
 - **Benchmark harness** (`bench/`): measures sustained write throughput in
   ops/sec for (a) single-key sequential puts and (b) fixed-size batches
-  (e.g. 100 keys), on the developer's machine, reporting threads, disk,
-  and dataset size alongside every number.
+  (e.g. 100 keys), plus measured per-level Bloom false-positive rates (to
+  observe the §3.4 schedule, no gate), on the developer's machine,
+  reporting threads, disk, and dataset size alongside every number.
 - **Target policy**: the first harness run calibrates and records the
   baseline in `bench/BASELINE.md`; afterwards no commit may land below
   90% of baseline throughput on the same hardware profile. If a design
@@ -242,5 +280,17 @@ only `+` (`Data`) copies; the spec additionally forbids every escape hatch:
 
 Compression, snapshots, TTL, secondary indexes, multi-batch transactions,
 network server, GPU execution (revisit only with benchmark evidence of a
-uniform numeric bottleneck), and any key type beyond the generic core plus
-the `String` instantiation.
+uniform numeric bottleneck), learned indexes / learned filters (rejected in
+§3.4 — unverifiable, read-side only), and any key type beyond the generic
+core plus the `String` instantiation.
+
+## 7. Phase 2 evolution (post-benchmark, not v1)
+
+**Key-value separation (WiscKey-style vLog).** The largest documented
+write-amplification win in LSM literature: values leave the LSM (only keys
++ value pointers compact), bulk value bytes are appended once to an
+immutable value log. Adopt if and only if the Task 11 benchmark shows
+compaction write-amp — not WAL sync or memtable insert — dominating write
+cost. Phase 2 gets its own spec → plan cycle; v1 must not pre-build hooks
+for it beyond keeping `V` opaque in the generic core (already required by
+§3.1, which is what makes the evolution possible).
