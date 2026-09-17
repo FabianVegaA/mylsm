@@ -215,9 +215,19 @@ only `+` (`Data`) copies; the spec additionally forbids every escape hatch:
 - Arrays are always single-owner `Array<T>`; no `Array.clone` aliasing to
   fake shared mutation; every index is explicitly bounds-checked against the
   known size — the language's index wraparound is never load-bearing.
-- No custom foreign C/JS effects for memory or I/O tricks. The only host
-  code is Base's `File`/`IO` operations; all proofs stay in pure Bend and
-  never touch host code.
+- Foreign host code lives in exactly one place, `src/effs/`, as an
+  audited allowlist of six thin syscall wrappers — `fsync`, `rename`,
+  `remove`, `read_dir`, `make_dir`, `chmod` — each mirroring the shape of
+  Base's own `file_*.c` effects (open/do-syscall/pack-result, no logic, no
+  buffering, no memory management). Rationale, verified 2026-09 against
+  Bend 2.0.4: Base ships only open/read/write/close (no sync, no rename,
+  no delete, no directory listing; files are created `0644`), so the
+  durability, atomic-publish, cleanup, and `0600` promises of §2/§4/§8 are
+  unimplementable without them. Rules: every effect ships `.c` and `.js`
+  twins with identical semantics; no effect beyond these six without a spec
+  amendment; all proofs stay in pure Bend and never touch host code; the
+  effects are validated empirically (Task 12 fuzz + fault injection), never
+  by law.
 - `+` (reusable) annotations appear only on `Data` values and only where the
   design says sharing is needed (iterator cursors, filter bits); the default
   everywhere else is affine.
