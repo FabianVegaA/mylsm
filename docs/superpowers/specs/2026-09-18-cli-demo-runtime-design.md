@@ -23,7 +23,7 @@ is production-ready. The CLI must expose that distinction in its output.
 ### In scope
 
 1. A POSIX CLI launcher at `bin/mylsm`.
-2. A Bend mini application at `app/demo.bend`.
+2. A Bend mini application at `app/mylsm_demo.bend`.
 3. Native build/run support with configurable CPU thread count and optional GPU.
 4. A resource policy that detects host capabilities outside Bend and passes only
    supported runtime flags.
@@ -76,7 +76,7 @@ GPU: unavailable or unverified; using CPU fallback
 
 ## 4. Mini application behavior
 
-`app/demo.bend` must:
+`app/mylsm_demo.bend` must:
 
 1. Open a directory through `Recover.open_db`.
 2. Write at least two keys through the durable `Db.db_put` path.
