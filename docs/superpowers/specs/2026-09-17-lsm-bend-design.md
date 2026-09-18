@@ -188,8 +188,14 @@ Observable-behavior laws:
 Structural / representation laws:
 
 8. **SSTable sortedness**: every table's key sequence is strictly ordered by
-   `cmp` (carried by the `SortedRun` type; the law states the type erases to
-   the on-disk order).
+   `cmp` (proven for closed vectors: sorted build, newest-wins on
+   duplicates; open proof deferred like law 9 — same automation wall).
+   Implementation notes (verified): memtable entries are newest-first, so
+   insert-or-replace keeps the FIRST version per key (newest wins); point
+   lookups are linear first-match (binary search deferred until benchmarks
+   demand it — reads are secondary, Bloom filters skip tables first);
+   build is O(n²) (dedup+insertion, background path, benchmark-gated);
+   tables carry a redundant `nbits` field so law 15 proves by projection.
 9. **WAL codec round-trip**: decode(encode(batch)) == batch — proven for
    closed vectors (empty, single put, single delete, multi-record with
    empty keys/values) and fuzz-verified for the open case (see trust-root
