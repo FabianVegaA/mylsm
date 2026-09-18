@@ -2,6 +2,7 @@ import Base
 import ./LAWS.bend as Laws
 import ./src/MemTable.bend as MemTable
 import ./src/Sstable.bend as Sstable
+import ./src/Manifest.bend as Manifest
 
 def Laws.cmp_refl_a():
   {==}
@@ -37,4 +38,10 @@ def Laws.bloom_safe():
   {==}
 
 def Laws.bloom_schedule(e, l, n):
+  {==}
+
+def Laws.manifest_empty():
+  {==}
+
+def Laws.manifest_two():
   {==}

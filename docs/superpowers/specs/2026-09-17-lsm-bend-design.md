@@ -208,7 +208,10 @@ Structural / representation laws:
     wins per key.
 12. **Tiering invariant**: within a level above L0, output table ranges are
     disjoint; the Manifest always lists exactly the SSTable files on disk.
-13. **Manifest round-trip**: parse(serialize(manifest)) == manifest.
+13. **Manifest round-trip**: parse(serialize(manifest)) == manifest
+    (proven for closed vectors: empty + multi-level; whole-file checksum
+    validated on open (fail-closed verified empirically); strict name
+    charset rejects traversal).
 14. **Bloom safety**: a Bloom filter never rejects a key the table contains
     (no false negatives; false positives only cost a read).
 15. **Bloom schedule adherence**: for every table, the allocated filter bits

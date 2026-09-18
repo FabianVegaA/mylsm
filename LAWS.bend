@@ -3,6 +3,7 @@ import ./src/Keys.bend as Keys
 import ./src/MemTable.bend as MemTable
 import ./src/Wal.bend as Wal
 import ./src/Sstable.bend as Sstable
+import ./src/Manifest.bend as Manifest
 
 # Trust root (read before the laws below): Bend Base primitives —
 # arithmetic, comparison, String/Char ops — are the trusted kernel. They
@@ -100,3 +101,17 @@ law bloom_schedule:
   for l: Nat
   for n: Nat
   {Sstable.table_bits(Sstable.build(e, l, n)) == Sstable.bloom_bits(l, n) : Nat}
+
+# --- Manifest (Task 5): closed vectors + fuzz (same strategy as WAL) ---
+
+def mfst_empty() -> Manifest.Manifest:
+  Manifest.M{Nil{}}
+
+def mfst_two() -> Manifest.Manifest:
+  Manifest.M{Con{Con{"a.tbl", Con{"b.tbl", Nil{}}}, Con{Con{"c.tbl", Nil{}}, Nil{}}}}
+
+law manifest_empty:
+  {Manifest.parse(Manifest.serialize(mfst_empty())) == Some{mfst_empty()} : Maybe<&2, Manifest.Manifest>}
+
+law manifest_two:
+  {Manifest.parse(Manifest.serialize(mfst_two())) == Some{mfst_two()} : Maybe<&2, Manifest.Manifest>}
