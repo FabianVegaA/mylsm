@@ -7,6 +7,7 @@ import ./src/Manifest.bend as Manifest
 
 import ./src/MergeIter.bend as MergeIter
 import ./src/Db.bend as Db
+import ./src/SstFile.bend as SstFile
 
 # Trust root (read before the laws below): Bend Base primitives —
 # arithmetic, comparison, String/Char ops — are the trusted kernel. They
@@ -208,3 +209,36 @@ law db_batch_atomic:
 # LAW: recovery replay equals direct application (closed; composes wal_rt)
 law db_recover:
   {db_replay(batch_multi()) == Db.apply_batch(batch_muts(batch_multi()), MemTable.empty()) : MemTable.MemTable}
+
+# --- SSTable file codec + flush (Task 8): closed vectors (spec law 6) ---
+
+# LAW: table file round-trip rebuilds the identical table (closed)
+law sstfile_rt:
+  {SstFile.parse(SstFile.serialize(scan_mem(), 0n)) == Some{Sstable.build(scan_mem(), 0n, 2n)} : Maybe<&2, Sstable.Table>}
+
+# LAW: shapeless input rejected fail-closed (closed)
+law sstfile_reject:
+  {SstFile.parse("garbage") == None{} : Maybe<&2, Sstable.Table>}
+
+def fl_pre() -> Db.Db:
+  Db.Db{"/d", MemTable.MT{scan_mem()}, Nil{}, 0n}
+
+def fl_post() -> Db.Db:
+  Db.Db{"/d", MemTable.MT{Nil{}}, Con{Con{Sstable.build(scan_mem(), 0n, 2n), Nil{}}, Nil{}}, 1n}
+
+# LAW: pre-flush read hits (closed; kills vacuity for the pair below)
+law flush_hit_pre:
+  {Db.db_get(fl_pre(), "a") == Some{"v1"} : Maybe<&2, String>}
+
+# LAW: post-flush read hits identically (closed)
+law flush_hit_post:
+  {Db.db_get(fl_post(), "a") == Some{"v1"} : Maybe<&2, String>}
+
+# LAW: flush preservation shape — reads equal across the transition (closed)
+law flush_preserve:
+  {Db.db_get(fl_pre(), "a") == Db.db_get(fl_post(), "a") : Maybe<&2, String>}
+
+# LAW: absent key stays absent across flush (closed; meaningful paired
+# with the hit laws, which prove reads are not uniformly None)
+law flush_miss:
+  {Db.db_get(fl_pre(), "z") == Db.db_get(fl_post(), "z") : Maybe<&2, String>}

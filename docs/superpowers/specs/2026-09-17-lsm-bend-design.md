@@ -188,7 +188,18 @@ Observable-behavior laws:
 5. **Get-scan agreement**: `get(k)` equals the single-key scan result
     (proven for closed vectors on unique-keyed runs).
 6. **Flush/compaction preservation**: flush and compaction change no
-   observable read or scan result (they are pure reorganization).
+    observable read or scan result (they are pure reorganization; proven
+    for closed vectors: pre/post reads pinned to values, not just to each
+    other, plus the preservation shape; miss pinned alongside hit laws so
+    the pair cannot pass vacuously). Table files store header
+    ("T"+dashes(level) ";" length-prefixed WAL bytes) + Manifest-style
+    checksum; Bloom filters are rebuilt deterministically at parse (never
+    stored). Flush protocol: tmp + rename, fsync file AND dir (fsync twins
+    fixed to O_RDONLY/"r": directories cannot open O_RDWR), manifest
+    rewrite + fsync + rename, then WAL removal (a stale WAL replays
+    idempotently). Absent manifest = fresh DB; corrupt manifest aborts
+    fail-closed. The flush counter (table names l0-<dashes>.tbl) is
+    restored by Task-10 recovery by scanning l0/ (open_db starts at 0).
 7. **Recovery equivalence**: the post-recovery observable state equals the
     pre-crash acknowledged state — every acked write present, no unacked
     write required present (proven closed: replay(decode(encode(b))) ==

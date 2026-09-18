@@ -22,13 +22,13 @@ import ./Fs.bend as Fs
 # Cons'es new tables at the head; compaction (Task 9) preserves the order.
 
 type Db is Data:
-  Db{dir: String, mem: MemTable.MemTable, levels: List<&2, List<&2, Sstable.Table>>}
+  Db{dir: String, mem: MemTable.MemTable, levels: List<&2, List<&2, Sstable.Table>>, flushed: Nat}
 
 def wal_path(+dir: String) -> String:
   dir ++ "/wal.log"
 
 def open_db(+dir: String) -> Db:
-  Db{dir, MemTable.empty(), Nil{}}
+  Db{dir, MemTable.empty(), Nil{}, 0n}
 
 # --- Pure write core (laws below pin batch == sequential) ---
 
@@ -69,7 +69,7 @@ def all_level_entries(+lvls: List<&2, List<&2, Sstable.Table>>) -> List<&2, MemT
 
 def all_entries(+db: Db) -> List<&2, MemTable.Entry>:
   match db:
-    case Db{dir, mem, levels}:
+    case Db{dir, mem, levels, flushed}:
       match mem:
         case MemTable.MT{entries}:
           List.append(&2, MemTable.Entry, entries, all_level_entries(levels))
@@ -98,12 +98,12 @@ def wal_append(+dir: String, +data: String) -> IO(Result<&1, &1, U32 & String, U
 
 def db_write(+db: Db, +b: Wal.Batch) -> IO(Result<&1, &1, U32 & String, Db>):
   match db:
-    case Db{dir, mem, levels}:
+    case Db{dir, mem, levels, flushed}:
       match b:
         case Wal.Batch{muts}:
           do IO<Result<&1, &1, U32 & String, Db>>:
             res : Unit <- IO.try(Unit, wal_append(dir, Wal.encode(Wal.Batch{muts})))
-            return Done{Db{dir, apply_batch(muts, mem), levels}}
+            return Done{Db{dir, apply_batch(muts, mem), levels, flushed}}
 
 def db_put(+db: Db, +k: String, +v: String) -> IO(Result<&1, &1, U32 & String, Db>):
   db_write(db, Wal.Batch{Con{Wal.Put{k, v}, Nil{}}})

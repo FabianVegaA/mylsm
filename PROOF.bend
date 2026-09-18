@@ -4,6 +4,8 @@ import ./src/MemTable.bend as MemTable
 import ./src/Sstable.bend as Sstable
 import ./src/Manifest.bend as Manifest
 import ./src/MergeIter.bend as MergeIter
+import ./src/SstFile.bend as SstFile
+import ./src/Flush.bend as Flush
 
 def Laws.cmp_refl_a():
   {==}
@@ -69,4 +71,22 @@ def Laws.db_batch_atomic():
   {==}
 
 def Laws.db_recover():
+  {==}
+
+def Laws.sstfile_rt():
+  {==}
+
+def Laws.sstfile_reject():
+  {==}
+
+def Laws.flush_hit_pre():
+  {==}
+
+def Laws.flush_hit_post():
+  {==}
+
+def Laws.flush_preserve():
+  {==}
+
+def Laws.flush_miss():
   {==}
