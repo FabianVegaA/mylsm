@@ -90,7 +90,7 @@ git commit -m "feat: add adaptive MyLSM CLI"
 
 **Files:**
 
-- Create: `app/demo.bend`
+- Create: `app/mylsm_demo.bend`
 - Create: `app/README.md`
 
 ### Step 1: Add pure demo worker
@@ -119,8 +119,8 @@ Use `IO.try` to fail loudly on storage errors. Keep the default directory
 Run both portable and native paths where supported:
 
 ```sh
-bend app/demo.bend
-bend app/demo.bend -o .mylsm/build/demo
+bend app/mylsm_demo.bend
+bend app/mylsm_demo.bend -o .mylsm/build/demo
 .mylsm/build/demo --threads 1
 ```
 
@@ -137,7 +137,7 @@ bend PROOF.bend
 ### Step 5: Commit checkpoint
 
 ```sh
-git add app/demo.bend app/README.md LAWS.bend PROOF.bend
+git add app/mylsm_demo.bend app/README.md LAWS.bend PROOF.bend
  git commit -m "feat: add MyLSM demonstration app"
 ```
 
@@ -157,7 +157,7 @@ Build the demo with Bend and invoke the binary using the detected or overridden
 thread count:
 
 ```sh
-bend app/demo.bend -o .mylsm/build/demo
+bend app/mylsm_demo.bend -o .mylsm/build/demo
 .mylsm/build/demo --threads "$threads"
 ```
 
@@ -168,7 +168,7 @@ Validate that the generated executable exits with the demo completion marker.
 When the probe succeeds:
 
 ```sh
-bend app/demo.bend -o .mylsm/build/demo
+bend app/mylsm_demo.bend -o .mylsm/build/demo
 .mylsm/build/demo --threads "$threads" --gpu "$gpu_memory"
 ```
 
@@ -255,9 +255,9 @@ Create the following files:
 
 ```text
 bin/mylsm                  # POSIX adapter: argv, host probes, bend flags
-app/demo.bend              # Bend executable entry point
-app/Demo.bend              # pure demo helpers and formatting
-app/Runtime.bend           # Bend-side mode/configuration types
+app/mylsm_demo.bend              # Bend executable entry point
+app/demo_helpers.bend              # pure demo helpers and formatting
+app/Runtime.bend (future host-policy types)           # Bend-side mode/configuration types
 app/README.md              # direct Bend/native invocation notes
 bench/cli_smoke.sh         # launcher integration test
 ```
@@ -267,7 +267,7 @@ Do not put shell effects, hardware probes, or dynamic process execution in
 
 ### B. Bend-side runtime types
 
-`app/Runtime.bend` must use explicit `Data` types:
+`app/Runtime.bend (future host-policy types)` must use explicit `Data` types:
 
 ```python
 import Base
@@ -285,7 +285,7 @@ type DemoResult is Data:
 
 The Bend program receives the effective directory/device/thread policy from the
 launcher by compiling a small generated configuration module, or by using the
-checked-in defaults when invoked directly with `bend app/demo.bend`. It must not
+checked-in defaults when invoked directly with `bend app/mylsm_demo.bend`. It must not
 pretend that it can inspect the host itself.
 
 Required pure functions:
@@ -327,7 +327,7 @@ handles or a mutable-looking database value across parallel branches.
 
 ### C. Bend demo IO flow
 
-`app/demo.bend` must import:
+`app/mylsm_demo.bend` must import:
 
 ```python
 import Base
@@ -408,14 +408,14 @@ the existing `Maybe<&2, String>` annotations used by the repository.
 `bin/mylsm` is responsible for invoking Bend exactly as follows:
 
 ```sh
-bend app/demo.bend -o .mylsm/build/demo
+bend app/mylsm_demo.bend -o .mylsm/build/demo
 .mylsm/build/demo --threads "$threads"
 .mylsm/build/demo --threads "$threads" --gpu "$gpu_memory"
 ```
 
 The exact runtime flags are passed to the generated native binary, not to the
 Bend source checker. The wrapper must verify `.mylsm/build/demo.gpu` exists
-before selecting GPU mode. A direct `bend app/demo.bend` invocation is the
+before selecting GPU mode. A direct `bend app/mylsm_demo.bend` invocation is the
 portable JS/interpreter path and reports `device=cpu-portable`.
 
 The wrapper's mode table is:
@@ -450,7 +450,7 @@ exists. Otherwise `auto` prints a fallback and runs CPU.
 
 ### G. Laws and tests for Bend additions
 
-If `app/Runtime.bend` exports pure helpers, append closed laws to `LAWS.bend`:
+If `app/Runtime.bend (future host-policy types)` exports pure helpers, append closed laws to `LAWS.bend`:
 
 ```python
 law demo_worker_zero:
@@ -468,7 +468,7 @@ all IO/host code outside the laws. The smoke suite must run:
 
 ```sh
 bend PROOF.bend
-bend app/demo.bend
+bend app/mylsm_demo.bend
 sh -n bin/mylsm
 bench/cli_smoke.sh
 ```

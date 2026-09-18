@@ -1,0 +1,215 @@
+#!/bin/sh
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+DEMO="$ROOT/app/mylsm_demo.bend"
+REPL="$ROOT/app/repl.bend"
+DEMO_BUILD="$ROOT/.mylsm/build/mylsm-demo"
+REPL_BUILD="$ROOT/.mylsm/build/mylsm-repl"
+DEVICE=${MYLSM_DEVICE:-auto}
+GPU_MEMORY=${MYLSM_GPU_MEMORY:-4GB}
+
+usage() {
+  cat <<USAGE
+MyLSM developer CLI
+
+Usage: bin/mylsm [command]
+
+Commands:
+  demo                  run the durable demonstration (default)
+  repl [--dir PATH]     open the interactive persistent REPL
+  doctor                report Bend, CPU, compiler, and GPU capabilities
+  check                 run bend PROOF.bend
+  fuzz                  run the decoder smoke corpus
+  bench                 run the benchmark smoke program
+  build                 compile the native demo
+  run                   run an existing native demo, or portable fallback
+  --help                show this help
+
+Environment:
+  MYLSM_DEVICE=auto|cpu|gpu   execution policy (default: auto)
+  MYLSM_THREADS=N              native CPU thread count (1..256)
+  MYLSM_GPU_MEMORY=SIZE        Bend GPU memory budget (default: 4GB)
+  MYLSM_DIR=PATH               REPL database directory
+USAGE
+}
+
+logical_cpus() {
+  if command -v sysctl >/dev/null 2>&1; then
+    sysctl -n hw.logicalcpu 2>/dev/null || true
+  elif command -v nproc >/dev/null 2>&1; then
+    nproc 2>/dev/null || true
+  fi
+}
+
+threads() {
+  n=${MYLSM_THREADS:-$(logical_cpus)}
+  case "$n" in
+    ''|*[!0-9]*) echo "invalid MYLSM_THREADS: $n" >&2; exit 2 ;;
+  esac
+  if [ "$n" -lt 1 ] || [ "$n" -gt 256 ]; then
+    echo "MYLSM_THREADS must be between 1 and 256" >&2
+    exit 2
+  fi
+  printf '%s\n' "$n"
+}
+
+has_gpu() {
+  case "$(uname -s 2>/dev/null || echo unknown)" in
+    Darwin)
+      command -v system_profiler >/dev/null 2>&1 &&
+        system_profiler SPDisplaysDataType 2>/dev/null | grep -q 'Metal' ;;
+    Linux)
+      command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1 ;;
+    *) return 1 ;;
+  esac
+}
+
+bend_version() {
+  bend --version 2>/dev/null | sed -n '1p'
+}
+
+native_build() {
+  source_file=$1
+  output_file=$2
+  mkdir -p "$ROOT/.mylsm/build"
+  if bend "$source_file" -o "$output_file" >"$output_file-build.log" 2>&1 && [ -x "$output_file" ]; then
+    return 0
+  fi
+  return 1
+}
+
+run_native() {
+  output_file=$1
+  gpu_enabled=$2
+  t=$(threads)
+  export MYLSM_THREADS=$t
+  if [ "$gpu_enabled" = 1 ]; then
+    [ -f "$output_file.gpu" ] || { echo "GPU artifact missing: $output_file.gpu" >&2; return 1; }
+    export MYLSM_EFFECTIVE_DEVICE=gpu MYLSM_GPU_ENABLED=1
+    exec "$output_file" --threads "$t" --gpu "$GPU_MEMORY"
+  fi
+  export MYLSM_EFFECTIVE_DEVICE=cpu MYLSM_GPU_ENABLED=0
+  exec "$output_file" --threads "$t"
+}
+
+run_program() {
+  source_file=$1
+  output_file=$2
+  case "$DEVICE" in
+    cpu)
+      if native_build "$source_file" "$output_file"; then run_native "$output_file" 0; fi
+      echo "native CPU unavailable; using portable Bend backend" >&2
+      export MYLSM_EFFECTIVE_DEVICE=cpu MYLSM_GPU_ENABLED=0
+      exec bend "$source_file"
+      ;;
+    gpu)
+      has_gpu || { echo "GPU requested but no supported GPU was detected" >&2; exit 3; }
+      native_build "$source_file" "$output_file" || { echo "GPU requested but native Bend build failed" >&2; exit 3; }
+      run_native "$output_file" 1
+      ;;
+    auto)
+      if native_build "$source_file" "$output_file"; then
+        if has_gpu && [ -f "$output_file.gpu" ]; then
+          echo "runtime: GPU compute, CPU storage IO" >&2
+          run_native "$output_file" 1
+        fi
+        echo "runtime: CPU native" >&2
+        run_native "$output_file" 0
+      fi
+      echo "runtime: portable CPU fallback" >&2
+      export MYLSM_EFFECTIVE_DEVICE=cpu MYLSM_GPU_ENABLED=0
+      exec bend "$source_file"
+      ;;
+    *) echo "MYLSM_DEVICE must be auto, cpu, or gpu" >&2; exit 2 ;;
+  esac
+}
+
+doctor() {
+  printf 'MyLSM runtime\n'
+  printf '  Bend: %s\n' "$(bend_version)"
+  printf '  OS/arch: %s/%s\n' "$(uname -s 2>/dev/null || echo unknown)" "$(uname -m 2>/dev/null || echo unknown)"
+  printf '  CPU threads: %s\n' "$(threads)"
+  if has_gpu; then printf '  GPU: detected\n'; else printf '  GPU: unavailable or unverified\n'; fi
+  if command -v clang >/dev/null 2>&1; then printf '  native compiler: available\n'; else printf '  native compiler: unavailable\n'; fi
+  printf '  policy: %s\n' "$DEVICE"
+}
+
+repl_command() {
+  shift
+  repl_dir=${MYLSM_DIR:-.mylsm-repl-data}
+  if [ "$#" -gt 0 ]; then
+    [ "$#" -eq 2 ] && [ "$1" = --dir ] || { echo "usage: bin/mylsm repl [--dir PATH]" >&2; exit 2; }
+    repl_dir=$2
+  fi
+  [ -n "$repl_dir" ] || { echo "REPL directory cannot be empty" >&2; exit 2; }
+
+  repl_backend=portable
+  repl_gpu=0
+  case "$DEVICE" in
+    cpu)
+      if native_build "$REPL" "$REPL_BUILD"; then repl_backend=native; fi
+      ;;
+    gpu)
+      has_gpu || { echo "GPU requested but no supported GPU was detected" >&2; exit 3; }
+      native_build "$REPL" "$REPL_BUILD" || { echo "GPU requested but native Bend build failed" >&2; exit 3; }
+      [ -f "$REPL_BUILD.gpu" ] || { echo "GPU artifact missing: $REPL_BUILD.gpu" >&2; exit 3; }
+      repl_backend=native
+      repl_gpu=1
+      ;;
+    auto)
+      if native_build "$REPL" "$REPL_BUILD"; then
+        repl_backend=native
+        if has_gpu && [ -f "$REPL_BUILD.gpu" ]; then repl_gpu=1; fi
+      fi
+      ;;
+    *) echo "MYLSM_DEVICE must be auto, cpu, or gpu" >&2; exit 2 ;;
+  esac
+
+  t=$(threads)
+  restart_file=$repl_dir/.mylsm-restart-threads
+  export MYLSM_DIR=$repl_dir
+  for restart_round in 1 2 3 4 5 6 7 8; do
+    rm -f "$restart_file"
+    export MYLSM_THREADS=$t
+    if [ "$repl_backend" = native ]; then
+      export MYLSM_RUNTIME=native
+      if [ "$repl_gpu" = 1 ]; then
+        export MYLSM_EFFECTIVE_DEVICE=gpu MYLSM_GPU_ENABLED=1
+        if "$REPL_BUILD" --threads "$t" --gpu "$GPU_MEMORY"; then status=0; else status=$?; fi
+      else
+        export MYLSM_EFFECTIVE_DEVICE=cpu MYLSM_GPU_ENABLED=0
+        if "$REPL_BUILD" --threads "$t"; then status=0; else status=$?; fi
+      fi
+    else
+      export MYLSM_RUNTIME=portable MYLSM_EFFECTIVE_DEVICE=cpu MYLSM_GPU_ENABLED=0
+      if bend "$REPL"; then status=0; else status=$?; fi
+    fi
+
+    [ "$status" -eq 75 ] || return "$status"
+    [ -f "$restart_file" ] || { echo "restart requested without a sidecar" >&2; return 70; }
+    requested=$(cat "$restart_file")
+    case "$requested" in
+      ''|*[!0-9]*) echo "invalid thread restart request" >&2; return 70 ;;
+    esac
+    [ "$requested" -ge 1 ] && [ "$requested" -le 256 ] || { echo "thread restart must be 1..256" >&2; return 70; }
+    [ "$requested" -ne "$t" ] || { echo "refusing a redundant thread restart" >&2; return 70; }
+    t=$requested
+  done
+  echo "too many thread restarts in one session" >&2
+  return 70
+}
+
+command=${1:-demo}
+case "$command" in
+  --help|-h) usage ;;
+  doctor) doctor ;;
+  check) exec bend "$ROOT/PROOF.bend" ;;
+  fuzz) exec bend "$ROOT/bench/fuzz.bend" ;;
+  bench) exec bend "$ROOT/bench/bench.bend" ;;
+  build) native_build "$DEMO" "$DEMO_BUILD" ;;
+  run) if [ -x "$DEMO_BUILD" ]; then run_native "$DEMO_BUILD" 0; else exec bend "$DEMO"; fi ;;
+  repl) repl_command "$@" ;;
+  demo) run_program "$DEMO" "$DEMO_BUILD" ;;
+  *) echo "unknown command: $command" >&2; usage >&2; exit 2 ;;
+esac
