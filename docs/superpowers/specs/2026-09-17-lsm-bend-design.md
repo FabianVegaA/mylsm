@@ -153,7 +153,14 @@ claims) and `PROOF.bend` (agent-owned proofs) at the repo root.
 Trust root: Bend Base primitives (arithmetic, comparison, String/Char
 ops) are the trusted kernel — pinned by closed-term laws and the Task 12
 fuzz harness, not re-proven from axioms. Every law below is about OUR code
-and is proven in full.
+and is proven in full, with one honest exception: law 9 (WAL codec
+round-trip) is proven for closed vectors (empty/single/delete/multi
+batches incl. empty keys and values) plus 1M-input fuzzing, not yet for
+open batches — open-key/open-length joint induction exceeds what Bend
+2.0.5's proof automation handles cleanly (syntactic P-matching over pump
+states with stuck-open tails; ~70 prover iterations documented in git
+history). The codec CODE is complete and covered; the open proof is
+deferred, explicitly not claimed.
 
 Every public def gets at least one law; representation invariants are
 encoded as types where possible (e.g. a `SortedRun` type whose constructors
@@ -183,8 +190,10 @@ Structural / representation laws:
 8. **SSTable sortedness**: every table's key sequence is strictly ordered by
    `cmp` (carried by the `SortedRun` type; the law states the type erases to
    the on-disk order).
-9. **WAL codec round-trip**: decode(encode(batch)) == batch for all batches,
-   so replay can never misread a synced record.
+9. **WAL codec round-trip**: decode(encode(batch)) == batch — proven for
+   closed vectors (empty, single put, single delete, multi-record with
+   empty keys/values) and fuzz-verified for the open case (see trust-root
+   note above); the open proof is deferred, not claimed.
 10. **Merge-iterator refinement**: the iterator over any source set yields
     exactly what a naive sequential model (apply all mutations newest-first
     to an empty map) yields.
