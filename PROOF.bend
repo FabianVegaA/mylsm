@@ -6,6 +6,7 @@ import ./src/Manifest.bend as Manifest
 import ./src/MergeIter.bend as MergeIter
 import ./src/SstFile.bend as SstFile
 import ./src/Flush.bend as Flush
+import ./src/Compact.bend as Compact
 
 def Laws.cmp_refl_a():
   {==}
@@ -89,4 +90,25 @@ def Laws.flush_preserve():
   {==}
 
 def Laws.flush_miss():
+  {==}
+
+def Laws.compact_live():
+  {==}
+
+def Laws.compact_disjoint():
+  {==}
+
+def Laws.compact_absorbed():
+  {==}
+
+def Laws.compact_hit():
+  {==}
+
+def Laws.compact_preserve():
+  {==}
+
+def Laws.compact_miss():
+  {==}
+
+def Laws.compact_noop():
   {==}
