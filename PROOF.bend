@@ -3,6 +3,7 @@ import ./LAWS.bend as Laws
 import ./src/MemTable.bend as MemTable
 import ./src/Sstable.bend as Sstable
 import ./src/Manifest.bend as Manifest
+import ./src/MergeIter.bend as MergeIter
 
 def Laws.cmp_refl_a():
   {==}
@@ -44,4 +45,16 @@ def Laws.manifest_empty():
   {==}
 
 def Laws.manifest_two():
+  {==}
+
+def Laws.scan_newest():
+  {==}
+
+def Laws.scan_range():
+  {==}
+
+def Laws.scan_drops_dels():
+  {==}
+
+def Laws.scan_agree():
   {==}

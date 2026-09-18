@@ -176,9 +176,12 @@ Observable-behavior laws:
    reader ever observes a partial batch.
 3. **Delete semantics**: after an acknowledged `delete(k)`, `get(k)` reports
    not-found until a later acknowledged `put(k, _)`.
-4. **Scan order and completeness**: a scan over `[lo, hi]` yields every live
-   key in range exactly once, in `cmp` order, and no key outside the range.
-5. **Get-scan agreement**: `get(k)` equals the single-key scan result.
+4. **Scan order and completeness**: a scan over `[lo, hi)` yields every live
+    key in range exactly once, in `cmp` order, and no key outside the range
+    (proven for closed vectors: range, tombstone-drop; open proof deferred
+    — same automation wall as law 9).
+5. **Get-scan agreement**: `get(k)` equals the single-key scan result
+    (proven for closed vectors on unique-keyed runs).
 6. **Flush/compaction preservation**: flush and compaction change no
    observable read or scan result (they are pure reorganization).
 7. **Recovery equivalence**: the post-recovery observable state equals the
@@ -202,7 +205,10 @@ Structural / representation laws:
    note above); the open proof is deferred, not claimed.
 10. **Merge-iterator refinement**: the iterator over any source set yields
     exactly what a naive sequential model (apply all mutations newest-first
-    to an empty map) yields.
+    to an empty map) yields (proven for closed vectors: sorted newest-wins
+    merge; implementation reuses Sstable.build_go — concat mem newest-first
+    ++ levels newest-first — plus a pump+fuel+leaf range/tombstone filter
+    whose leaves thread String.cmp's hand-back pair, no clone needed).
 11. **Compaction multiset preservation**: compaction outputs contain exactly
     the live entries of the inputs — no loss, no duplication, newest version
     wins per key.
