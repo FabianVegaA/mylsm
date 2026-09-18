@@ -171,11 +171,16 @@ cover — a module is done only when its laws check, not when its code runs.
 Observable-behavior laws:
 
 1. **Read-your-writes**: after an acknowledged `put(k, v)`, `get(k)` returns
-   `v` until a later acknowledged write to `k`.
+    `v` until a later acknowledged write to `k` (proven for closed vectors
+    through Db.apply_batch; the IO path funnels through it after fsync,
+    verified end-to-end: put -> get "v" + wal.log bytes on disk).
 2. **Batch atomicity**: a batch's mutations become visible all at once; no
-   reader ever observes a partial batch.
+    reader ever observes a partial batch (proven closed: apply_batch equals
+    one sequential transition onto mem; only acked-after-fsync states are
+    readable).
 3. **Delete semantics**: after an acknowledged `delete(k)`, `get(k)` reports
-   not-found until a later acknowledged `put(k, _)`.
+    not-found until a later acknowledged `put(k, _)` (proven closed through
+    Db.apply_batch; tombstone freezes scan_go, hiding older versions).
 4. **Scan order and completeness**: a scan over `[lo, hi)` yields every live
     key in range exactly once, in `cmp` order, and no key outside the range
     (proven for closed vectors: range, tombstone-drop; open proof deferred
@@ -185,8 +190,11 @@ Observable-behavior laws:
 6. **Flush/compaction preservation**: flush and compaction change no
    observable read or scan result (they are pure reorganization).
 7. **Recovery equivalence**: the post-recovery observable state equals the
-   pre-crash acknowledged state — every acked write present, no unacked
-   write required present.
+    pre-crash acknowledged state — every acked write present, no unacked
+    write required present (proven closed: replay(decode(encode(b))) ==
+    direct application; write path order encode -> append -> fsync -> mem
+    makes the WAL prefix exactly the acked prefix; crash-between-steps
+    verified by Task-12 fault injection).
 
 Structural / representation laws:
 
