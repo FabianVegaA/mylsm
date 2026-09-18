@@ -1,6 +1,7 @@
 import Base
 import ./LAWS.bend as Laws
 import ./src/MemTable.bend as MemTable
+import ./src/Sstable.bend as Sstable
 
 def Laws.cmp_refl_a():
   {==}
@@ -24,4 +25,16 @@ def Laws.wal_rt_del1():
   {==}
 
 def Laws.wal_rt_multi():
+  {==}
+
+def Laws.sst_sorted():
+  {==}
+
+def Laws.sst_newest():
+  {==}
+
+def Laws.bloom_safe():
+  {==}
+
+def Laws.bloom_schedule(e, l, n):
   {==}

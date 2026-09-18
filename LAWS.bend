@@ -2,6 +2,7 @@ import Base
 import ./src/Keys.bend as Keys
 import ./src/MemTable.bend as MemTable
 import ./src/Wal.bend as Wal
+import ./src/Sstable.bend as Sstable
 
 # Trust root (read before the laws below): Bend Base primitives —
 # arithmetic, comparison, String/Char ops — are the trusted kernel. They
@@ -69,3 +70,33 @@ law wal_rt_del1:
 
 law wal_rt_multi:
   {Wal.decode(Wal.encode(batch_multi())) == Some{batch_multi()} : Maybe<&2, Wal.Batch>}
+
+# --- SSTable + Bloom (Task 4) ---
+# Closed vectors ({==}-proved) + open definitional schedule law.
+# Open sortedness/lookup need comparison facts on open keys (same
+# automation wall as Task 3); covered by closed vectors + Task-12 fuzz.
+
+def sst_e1() -> List<&2, MemTable.Entry>:
+  Con{MemTable.Entry{"b", Some{"2"}}, Con{MemTable.Entry{"a", Some{"1"}}, Nil{}}}
+
+def sst_e2() -> List<&2, MemTable.Entry>:
+  Con{MemTable.Entry{"k", Some{"new"}}, Con{MemTable.Entry{"k", Some{"old"}}, Nil{}}}
+
+# LAW: build sorts (closed)
+law sst_sorted:
+  {Sstable.build(sst_e1(), 0n, 2n) == Sstable.Tbl{Con{MemTable.Entry{"a", Some{"1"}}, Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}}, Sstable.bloom_of(sst_e1(), Sstable.bloom_new(Sstable.bloom_bits(0n, 2n))), Sstable.bloom_bits(0n, 2n)} : Sstable.Table}
+
+# LAW: newest version wins on duplicate keys (closed)
+law sst_newest:
+  {Sstable.lookup(Sstable.build(sst_e2(), 0n, 2n), "k") == Some{"new"} : Maybe<&2, String>}
+
+# LAW: bloom never rejects a present key (closed)
+law bloom_safe:
+  {Sstable.maybe_present(Sstable.build(sst_e1(), 0n, 2n), "a") == True{} : Bool}
+
+# LAW: filter bits follow the Monkey schedule (open, definitional)
+law bloom_schedule:
+  for e: List<&2, MemTable.Entry>
+  for l: Nat
+  for n: Nat
+  {Sstable.table_bits(Sstable.build(e, l, n)) == Sstable.bloom_bits(l, n) : Nat}
