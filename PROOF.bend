@@ -58,3 +58,15 @@ def Laws.scan_drops_dels():
 
 def Laws.scan_agree():
   {==}
+
+def Laws.db_ryw():
+  {==}
+
+def Laws.db_del():
+  {==}
+
+def Laws.db_batch_atomic():
+  {==}
+
+def Laws.db_recover():
+  {==}
