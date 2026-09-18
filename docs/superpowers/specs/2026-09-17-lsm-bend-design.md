@@ -230,9 +230,31 @@ Structural / representation laws:
     whose leaves thread String.cmp's hand-back pair, no clone needed).
 11. **Compaction multiset preservation**: compaction outputs contain exactly
     the live entries of the inputs — no loss, no duplication, newest version
-    wins per key.
+    wins per key (proven closed: exact post-levels equality pins the live
+    set, L0-drain, and L1 shape in one law; hits pinned to values
+    anti-vacuously). Tombstones drop only when shadowed by a STRICTLY
+    LOWER level (same-level versions have no provable order; retaining
+    extra tombstones is always sound). Merge concatenates in exact read
+    order (L0 stored order ++ absorbed-L1 stored order), so first-wins ==
+    read first-match by construction. Soundness argument: a key resolving
+    outside the closure is untouched (membership in both closure-inputs
+    and a remainder table contradicts hull-disjointness); keys inside
+    resolve to the same newest version (subset order == read order).
 12. **Tiering invariant**: within a level above L0, output table ranges are
-    disjoint; the Manifest always lists exactly the SSTable files on disk.
+    pairwise disjoint (proven closed: output-vs-witness overlap is False;
+    verified live: 6-table compaction drained L0, removed inputs, kept
+    reads). Maintained by overlap-closure over the final hull (rounds =
+    len(l1)+1 unconditionally; post-fixpoint rounds are idempotent, so no
+    done-flag; round 2+ widening verified in the fixture: a table absorbed
+    only via the widened hull). Remainder-membership for manifest name
+    splits reuses ranges (sound by disjointness: in a disjoint family,
+    overlap with a remainder table means identity — no table equality
+    needed). Trigger L0 > 4 tables; writers stall at 8 (2T). Outputs always
+    materialize (even empty merges — read-transparent); single output per
+    compaction; names positionally aligned with tables (output head).
+    Crash discipline mirrors flush (output durable, then manifest, then
+    inputs become orphans); the Manifest always lists exactly the live
+    SSTable files on disk.
 13. **Manifest round-trip**: parse(serialize(manifest)) == manifest
     (proven for closed vectors: empty + multi-level; whole-file checksum
     validated on open (fail-closed verified empirically); strict name
