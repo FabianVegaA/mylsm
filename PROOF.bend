@@ -7,6 +7,7 @@ import ./src/MergeIter.bend as MergeIter
 import ./src/SstFile.bend as SstFile
 import ./src/Flush.bend as Flush
 import ./src/Compact.bend as Compact
+import ./src/Recover.bend as Recover
 
 def Laws.cmp_refl_a():
   {==}
@@ -111,4 +112,34 @@ def Laws.compact_miss():
   {==}
 
 def Laws.compact_noop():
+  {==}
+
+def Laws.frame_len_ok():
+  {==}
+
+def Laws.replay_single():
+  {==}
+
+def Laws.replay_torn():
+  {==}
+
+def Laws.needs_flush_hi():
+  {==}
+
+def Laws.needs_flush_lo():
+  {==}
+
+def Laws.count_gen_one():
+  {==}
+
+def Laws.recover_equiv():
+  {==}
+
+def Laws.wal_fail_closed(s):
+  {==}
+
+def Laws.manifest_fail_closed(s):
+  {==}
+
+def Laws.sstfile_fail_closed(s):
   {==}

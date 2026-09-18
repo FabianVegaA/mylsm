@@ -50,6 +50,7 @@ def write_tail(fr: (File & Result<&1, &1, U32 & String, Unit>), +path: String) -
         res : Unit <- IO.try(Unit, IO.pure(Result<&1, &1, U32 & String, Unit>, r))
         cls : Unit <- File.close(f2)
         syn : Unit <- IO.try(Unit, Fs.fsync(path))
+        prm : Unit <- IO.try(Unit, Fs.chmod(path, U32.from_nat(384n)))
         return Done{res}
 
 def write_file(+path: String, +data: String) -> IO(Result<&1, &1, U32 & String, Unit>):
