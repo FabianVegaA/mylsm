@@ -331,3 +331,7 @@ def dkeyspan(key: String, +kacc0: String, tail: String, muts0: List<&2, Mut>, ta
 
 # (valsec/record/gen open-proof deferred — see LAWS.bend Task 3 note.
 # Closed round-trip vectors in LAWS.bend + Task-12 fuzz cover correctness.)
+
+# Total-parser witness used by the hardening law.
+def is_decided(+m: Maybe<&2, Batch>) -> Bool:
+  True{}

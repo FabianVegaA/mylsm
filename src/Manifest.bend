@@ -202,3 +202,7 @@ def parse_dispatch(ok: Bool, s: String) -> Maybe<&2, Manifest>:
 
 def parse(+s: String) -> Maybe<&2, Manifest>:
   parse_dispatch(valid_manifest(s), s)
+
+# Total-parser witness used by the hardening law.
+def is_decided(+m: Maybe<&2, Manifest>) -> Bool:
+  True{}

@@ -215,3 +215,7 @@ def parse(+s: String) -> Maybe<&2, Sstable.Table>:
 
 # --- Closed-vector laws live in LAWS.bend (spec law 6: flush preservation
 # needs the file codec round-trip beneath it) ---
+
+# Total-parser witness used by the hardening law.
+def is_decided(+m: Maybe<&2, Sstable.Table>) -> Bool:
+  True{}

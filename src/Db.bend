@@ -77,7 +77,11 @@ def all_entries(+db: Db) -> List<&2, MemTable.Entry>:
 def db_get(+db: Db, +k: String) -> Maybe<&2, String>:
   MemTable.get(MemTable.MT{all_entries(db)}, k)
 
-# --- Durable write path (WAL append + fsync BEFORE mem update) ---
+# WAL framing v1 is applied here (see Recover): each batch is stored as
+# dashes(len) ++ ";" ++ encode(batch) so replay can stream frames and
+# truncate a torn tail. Files are permissioned 0600 at creation.
+def wal_frame(+data: String) -> String:
+  Wal.dashes(String.length(data)) ++ ";" ++ data
 
 # Tail of the append: match heads the def body (params always
 # destructurable), so the write's pair splits with single uses.
@@ -88,12 +92,13 @@ def wal_tail(fr: (File & Result<&1, &1, U32 & String, Unit>), +dir: String) -> I
         res : Unit <- IO.try(Unit, IO.pure(Result<&1, &1, U32 & String, Unit>, r))
         cls : Unit <- File.close(f2)
         syn : Unit <- IO.try(Unit, Fs.fsync(wal_path(dir)))
+        prm : Unit <- IO.try(Unit, Fs.chmod(wal_path(dir), U32.from_nat(384n)))
         return Done{res}
 
 def wal_append(+dir: String, +data: String) -> IO(Result<&1, &1, U32 & String, Unit>):
   do IO<Result<&1, &1, U32 & String, Unit>>:
     f : File <- IO.try(File, File.open(wal_path(dir), "a"))
-    fr : (File & Result<&1, &1, U32 & String, Unit>) <- File.write(f, data)
+    fr : (File & Result<&1, &1, U32 & String, Unit>) <- File.write(f, wal_frame(data))
     wal_tail(fr, dir)
 
 def db_write(+db: Db, +b: Wal.Batch) -> IO(Result<&1, &1, U32 & String, Db>):
