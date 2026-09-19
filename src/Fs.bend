@@ -1,7 +1,7 @@
 import Base
 
-# Audited host effects (spec §3.3). Six thin syscall wrappers, .c + .js
-# twins with identical semantics. No laws — validated empirically.
+# Audited host effects (spec §3.3). Thin syscall wrappers with .c + .js
+# twins and matching intended semantics. No laws — validated empirically.
 
 def fsync(path: String) -> IO(Result<&1, &1, U32 & String, Unit>):
   import "./effs/fsync.c"
@@ -30,6 +30,10 @@ def make_dir(path: String) -> IO(Result<&1, &1, U32 & String, Unit>):
 def chmod(path: String, bits: U32) -> IO(Result<&1, &1, U32 & String, Unit>):
   import "./effs/chmod.c"
   import "./effs/chmod.js"
+
+def exists(path: String) -> IO(Result<&1, &1, U32 & String, Bool>):
+  import "./effs/exists.c"
+  import "./effs/exists.js"
 
 # Pure accumulator step (leaf: matches structurally, never recurses).
 # Past-end fetches answer "" (SNil{}), which is skipped.

@@ -3,3 +3,12 @@ node_modules/
 bench/results/
 .mylsm/
 .mylsm-demo-data/
+.mylsm-million-write-data/
+.mylsm-compaction-bench-data/
+.mylsm-compaction-baseline/
+.mylsm-compaction-regression/
+.mylsm-compaction-short/
+.mylsm-20k-t1/
+.mylsm-20k-t8/
+.mylsm-100k/
+.mylsm-1m/

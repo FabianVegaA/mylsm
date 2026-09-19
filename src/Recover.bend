@@ -167,20 +167,55 @@ def all_dash_mid(s: String) -> Bool:
 def shape_mid(a: Bool, b: Bool, c: Bool) -> Bool:
   mid_and(a, mid_and(b, c))
 
+# New names use compact decimal generations. Legacy unary-dash generations
+# remain readable so existing databases migrate without renaming table files.
+def gen_valid_read(parsed: Maybe<&2, Nat>, +middle: String) -> Bool:
+  match parsed:
+    case Some{n}:
+      True{}
+    case None{}:
+      all_dash_mid(middle)
+
+def gen_valid(+middle: String) -> Bool:
+  gen_valid_read(Nat.read(middle), middle)
+
 def ov_ok(+big: Bool, +name: String, +ln: Nat) -> Bool:
   match big:
     case True{}:
-      shape_mid(String.starts_with(name, "l"), String.ends_with(name, ".tbl"), all_dash_mid(String.take(String.drop(name, 3n), Nat.sub(ln, 7n))))
+      shape_mid(String.starts_with(name, "l"), String.ends_with(name, ".tbl"), gen_valid(String.take(String.drop(name, 3n), Nat.sub(ln, 7n))))
     case False{}:
       False{}
 
 def name_shape(+name: String) -> Bool:
   +ln = String.length(name)
-  ov_ok(Nat.is_lt(7n, ln), name, ln)
+  ov_ok(Nat.is_le(7n, ln), name, ln)
+
+def level_name_ok(+big: Bool, +name: String, +ln: Nat, +prefix: String, +prefix_len: Nat) -> Bool:
+  match big:
+    case False{}:
+      False{}
+    case True{}:
+      shape_mid(String.starts_with(name, prefix), String.ends_with(name, ".tbl"), gen_valid(String.take(String.drop(name, prefix_len), Nat.sub(ln, Nat.add(prefix_len, 4n)))))
+
+def name_shape_level(+name: String, +level: Nat) -> Bool:
+  +prefix = "l" ++ Nat.show(level) ++ "-"
+  +prefix_len = String.length(prefix)
+  +ln = String.length(name)
+  level_name_ok(Nat.is_le(Nat.add(prefix_len, 4n), ln), name, ln, prefix, prefix_len)
+
+def gen_value_read(parsed: Maybe<&2, Nat>, +middle: String) -> Nat:
+  match parsed:
+    case Some{n}:
+      n
+    case None{}:
+      String.length(middle)
+
+def gen_value(+middle: String) -> Nat:
+  gen_value_read(Nat.read(middle), middle)
 
 def name_gen(+name: String) -> Nat:
   +ln = String.length(name)
-  String.length(String.take(String.drop(name, 3n), Nat.sub(ln, 7n)))
+  gen_value(String.take(String.drop(name, 3n), Nat.sub(ln, 7n)))
 
 def names_ok(xs: List<&2, String>) -> Bool:
   match xs:
@@ -188,6 +223,20 @@ def names_ok(xs: List<&2, String>) -> Bool:
       True{}
     case Con{h, t}:
       mid_and(name_shape(h), names_ok(t))
+
+def level_names_ok(+level: Nat, xs: List<&2, String>) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case Con{h, t}:
+      mid_and(name_shape_level(h, level), level_names_ok(level, t))
+
+def manifest_names_ok(levels: List<&2, List<&2, String>>, +level: Nat) -> Bool:
+  match levels:
+    case Nil{}:
+      True{}
+    case Con{names, rest}:
+      mid_and(level_names_ok(level, names), manifest_names_ok(rest, Nat.add(level, 1n)))
 
 def names_all(lvls: List<&2, List<&2, String>>) -> List<&2, String>:
   match lvls:
@@ -210,6 +259,37 @@ def mfst_lists(+m: Manifest.Manifest) -> List<&2, List<&2, String>>:
   match m:
     case Manifest.M{lvs}:
       lvs
+
+# L0 may overlap by design. Every table within each level below L0 must have
+# a range disjoint from every peer; metadata makes this check independent of
+# SortedRun and avoids reparsing entries during recovery.
+def disjoint_with_table(+tbl: Sstable.Table, rest: List<&2, Sstable.Table>) -> Bool:
+  match rest:
+    case Nil{}:
+      True{}
+    case Con{+h, t}:
+      mid_and(Sstable.ranges_disjoint(tbl, h), disjoint_with_table(tbl, t))
+
+def level_pairwise_disjoint(tables: List<&2, Sstable.Table>) -> Bool:
+  match tables:
+    case Nil{}:
+      True{}
+    case Con{+h, +t}:
+      mid_and(disjoint_with_table(h, t), level_pairwise_disjoint(t))
+
+def lower_levels_disjoint(levels: List<&2, List<&2, Sstable.Table>>) -> Bool:
+  match levels:
+    case Nil{}:
+      True{}
+    case Con{+level, rest}:
+      mid_and(level_pairwise_disjoint(level), lower_levels_disjoint(rest))
+
+def l1_plus_disjoint(levels: List<&2, List<&2, Sstable.Table>>) -> Bool:
+  match levels:
+    case Nil{}:
+      True{}
+    case Con{l0, lower}:
+      lower_levels_disjoint(lower)
 
 # --- Loaders (self-recursive IO; fatal via IO.die, never silent) ---
 
@@ -372,11 +452,19 @@ def wal_part(+dir: String) -> IO(Result<&1, &1, U32 & String, MemTable.MemTable>
     r : Result<&1, &1, U32 & String, File> <- File.open(Db.wal_path(dir), "r")
     wal_open(r, dir)
 
+def open_levels_checked(ok: Bool, +dir: String, +m: Manifest.Manifest, levels: List<&2, List<&2, Sstable.Table>>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+  match ok:
+    case False{}:
+      IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{(U32.from_nat(6n), "overlapping tables in L1+ manifest")})
+    case True{}:
+      do IO<Result<&1, &1, U32 & String, Db.Db>>:
+        mem : MemTable.MemTable <- IO.try(MemTable.MemTable, wal_part(dir))
+        return Done{Db.Db{dir, mem, levels, count_gen(mfst_lists(m)), Manifest.serialize(m)}}
+
 def open_levels(+dir: String, +m: Manifest.Manifest) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
-    levels : List<&2, List<&2, Sstable.Table>> <- load_levels(mfst_lists(m), 0n, dir, Nil{})
-    mem : MemTable.MemTable <- IO.try(MemTable.MemTable, wal_part(dir))
-    return Done{Db.Db{dir, mem, levels, count_gen(mfst_lists(m))}}
+    +levels : List<&2, List<&2, Sstable.Table>> <- load_levels(mfst_lists(m), 0n, dir, Nil{})
+    open_levels_checked(l1_plus_disjoint(levels), dir, m, levels)
 
 def open_names_go(ok: Bool, +dir: String, +m: Manifest.Manifest) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match ok:
@@ -411,7 +499,7 @@ def open_db(+dir: String) -> IO(Result<&1, &1, U32 & String, Db.Db>):
     s3 : Unit <- sweep_dir(dir, "l3")
     s4 : Unit <- sweep_root(dir)
     +m : Manifest.Manifest <- IO.try(Manifest.Manifest, Flush.load_mfst(dir ++ "/MANIFEST"))
-    open_names_go(names_ok(names_all(mfst_lists(m))), dir, m)
+    open_names_go(manifest_names_ok(mfst_lists(m), 0n), dir, m)
 
 # --- Maintenance (synchronous auto flush/compact + stall) ---
 # One drain round always suffices (L0 >= 8 > 4, so the gated compaction
@@ -429,12 +517,12 @@ def flush_dec(full: Bool, +db: Db.Db) -> IO(Result<&1, &1, U32 & String, Db.Db>)
 
 def flush_gate(db: Db.Db) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match db:
-    case Db.Db{dir, +mem, levels, flushed}:
-      flush_dec(needs_flush_cap(mem, 4096n), Db.Db{dir, mem, levels, flushed})
+    case Db.Db{dir, +mem, levels, flushed, manifest_token}:
+      flush_dec(needs_flush_cap(mem, 4096n), Db.Db{dir, mem, levels, flushed, manifest_token})
 
 def l0_full(db: Db.Db) -> Bool:
   match db:
-    case Db.Db{dir, mem, levels, flushed}:
+    case Db.Db{dir, mem, levels, flushed, manifest_token}:
       Nat.is_lt(7n, List.length(&2, Sstable.Table, Compact.l0list(levels)))
 
 def drain_once(+db: Db.Db) -> IO(Result<&1, &1, U32 & String, Db.Db>):

@@ -3,11 +3,14 @@ import ./src/Keys.bend as Keys
 import ./src/MemTable.bend as MemTable
 import ./src/Wal.bend as Wal
 import ./src/Sstable.bend as Sstable
+import ./src/BitTree.bend as BitTree
+import ./src/SortedRun.bend as SortedRun
 import ./src/Manifest.bend as Manifest
 
 import ./src/MergeIter.bend as MergeIter
 import ./src/Db.bend as Db
 import ./src/SstFile.bend as SstFile
+import ./src/Flush.bend as Flush
 import ./src/Compact.bend as Compact
 import ./src/Recover.bend as Recover
 import ./app/demo_helpers.bend as Demo
@@ -21,10 +24,11 @@ import ./app/interchange.bend as Interchange
 # arithmetic, comparison, String/Char ops — are the trusted kernel. They
 # ship precompiled with Bend and are NOT re-proven here: reproving
 # Word.cmp reflexivity from bit axioms would burn the project proving the
-# compiler's own prelude. Instead every primitive WE depend on is pinned by
-# closed-term laws (all inputs concrete, proven by {==} normalization) and
-# hammered empirically by the Task 12 fuzz harness. All SIXTEEN product
-# laws below are about OUR code and are proven in full.
+# compiler's own prelude. Instead, selected primitive behavior is pinned by
+# closed normalization fixtures and exercised empirically by the fuzz harness.
+# The laws below deliberately distinguish quantified general theorems from
+# closed regression fixtures. Closed fixtures provide executable evidence for
+# concrete cases; they are not complete proofs for arbitrary inputs.
 
 # LAW: comparison unpacking is wired correctly (reflexive case)
 law cmp_refl_a:
@@ -33,6 +37,20 @@ law cmp_refl_a:
 # LAW: comparison unpacking is wired correctly (ordered case)
 law cmp_order_ab:
   {Keys.cmp("a", "b") == LT{} : Cmp}
+
+law key_cmp_refl:
+  for +key: String
+  {Keys.cmp(key, key) == EQ{} : Cmp}
+
+law key_cmp_eq_bridge:
+  for +a: String
+  for +b: String
+  {Keys.cmp_is_eq(Keys.cmp(a, b)) == Keys.eq(a, b) : Bool}
+
+law key_cmp_trichotomy:
+  for +a: String
+  for +b: String
+  {Keys.cmp_one_hot(Keys.cmp(a, b)) == True{} : Bool}
 
 # --- MemTable (Task 2) ---
 
@@ -55,9 +73,9 @@ law mt_del:
 # LAW: WAL codec round-trip (closed vectors; each is proven by {==}
 # normalization alone — no manual P's, no fragility).
 # The OPEN round-trip (all batches) is fuzz-verified (Task 12, 1M+ inputs)
-# and its full proof is deferred: open-key/open-length joint induction
-# hits Bend 2.0.5 automation limits (syntactic P-matching over pump states
-# with stuck-open tails). See spec §3.2.
+# and its full proof is deferred: open-key/open-length joint induction is not
+# currently accepted by the Bend 2.0.9 checker (syntactic P-matching over pump
+# states with stuck-open tails). See spec §3.2.
 
 # Batch fixtures (named defs: the parser rejects nested Con inside Some).
 def batch_empty() -> Wal.Batch:
@@ -97,7 +115,7 @@ def sst_e2() -> List<&2, MemTable.Entry>:
 
 # LAW: build sorts (closed)
 law sst_sorted:
-  {Sstable.build(sst_e1(), 0n, 2n) == Sstable.Tbl{Con{MemTable.Entry{"a", Some{"1"}}, Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}}, Sstable.bloom_of(sst_e1(), Sstable.bloom_new(Sstable.bloom_bits(0n, 2n))), Sstable.bloom_bits(0n, 2n)} : Sstable.Table}
+  {Db.table_entries(Sstable.build(sst_e1(), 0n, 2n)) == Con{MemTable.Entry{"a", Some{"1"}}, Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}} : List<&2, MemTable.Entry>}
 
 # LAW: newest version wins on duplicate keys (closed)
 law sst_newest:
@@ -112,7 +130,67 @@ law bloom_schedule:
   for e: List<&2, MemTable.Entry>
   for l: Nat
   for n: Nat
-  {Sstable.table_bits(Sstable.build(e, l, n)) == Sstable.bloom_bits(l, n) : Nat}
+  {Sstable.table_bits(Sstable.build(e, l, n)) == Sstable.bloom_bits(l, Nat.max(n, List.length(&2, MemTable.Entry, e))) : Nat}
+
+# LAW: indexed tree set exposes the selected bit (closed boundary vectors)
+law bit_tree_set_hit:
+  {BitTree.test(BitTree.set(BitTree.new(2n), 63n), 63n) == True{} : Bool}
+
+law bit_tree_oob_safe:
+  {BitTree.test(BitTree.set(BitTree.new(1n), 32n), 32n) == False{} : Bool}
+
+law bloom_tree_well_formed:
+  {Sstable.bloom_well_formed(Sstable.bloom_new(65n)) == True{} : Bool}
+
+law bloom_zero_estimate_safe:
+  {Sstable.maybe_present(Sstable.build(Con{MemTable.Entry{"present", Some{"v"}}, Nil{}}, 1n, 0n), "present") == True{} : Bool}
+
+# LAW: cached metadata is exact for canonical sorted construction
+law sst_metadata_count:
+  {Sstable.table_count(Sstable.from_sorted_unique(Con{MemTable.Entry{"a", Some{"1"}}, Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}}, 1n)) == 2n : Nat}
+
+law sst_metadata_bounds:
+  {(Sstable.table_smallest(Sstable.from_sorted_unique(Con{MemTable.Entry{"a", Some{"1"}}, Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}}, 1n)), Sstable.table_largest(Sstable.from_sorted_unique(Con{MemTable.Entry{"a", Some{"1"}}, Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}}, 1n))) == (Some{"a"}, Some{"b"}) : Maybe<&2, String> & Maybe<&2, String>}
+
+# --- Stable sorted-run merge: closed anti-vacuity fixtures.
+def run_newer() -> List<&2, MemTable.Entry>:
+  Con{MemTable.Entry{"a", Some{"new"}}, Con{MemTable.Entry{"c", None{}}, Nil{}}}
+
+def run_older() -> List<&2, MemTable.Entry>:
+  Con{MemTable.Entry{"a", Some{"old"}}, Con{MemTable.Entry{"b", Some{"bee"}}, Con{MemTable.Entry{"c", Some{"old-c"}}, Nil{}}}}
+
+def run_merged() -> List<&2, MemTable.Entry>:
+  Con{MemTable.Entry{"a", Some{"new"}}, Con{MemTable.Entry{"b", Some{"bee"}}, Con{MemTable.Entry{"c", None{}}, Nil{}}}}
+
+law run_merge_newer_wins:
+  {SortedRun.merge_newer(run_newer(), run_older()) == run_merged() : List<&2, MemTable.Entry>}
+
+law run_merge_resolve_closed:
+  {SortedRun.resolve(SortedRun.merge_newer(run_newer(), run_older()), "c") == SortedRun.resolve_newest(Con{run_newer(), Con{run_older(), Nil{}}}, "c") : Maybe<&2, Maybe<&2, String>>}
+
+law run_merge_strict_closed:
+  {SortedRun.is_strict(SortedRun.merge_newer(run_newer(), run_older())) == True{} : Bool}
+
+law run_merge_unique_closed:
+  {SortedRun.is_unique(SortedRun.merge_newer(run_newer(), run_older())) == True{} : Bool}
+
+def run_partitioned() -> List<&2, List<&2, MemTable.Entry>>:
+  Con{Con{MemTable.Entry{"a", Some{"new"}}, Con{MemTable.Entry{"b", Some{"bee"}}, Nil{}}}, Con{Con{MemTable.Entry{"c", None{}}, Nil{}}, Nil{}}}
+
+law run_partition_exact:
+  {SortedRun.partition(2n, run_merged()) == run_partitioned() : List<&2, List<&2, MemTable.Entry>>}
+
+law run_partition_concat:
+  {SortedRun.concat_chunks(SortedRun.partition(2n, run_merged())) == run_merged() : List<&2, MemTable.Entry>}
+
+law run_partition_bounded:
+  {SortedRun.chunks_bounded(2n, SortedRun.partition(2n, run_merged())) == True{} : Bool}
+
+law run_partition_well_formed:
+  {(SortedRun.chunks_strict_unique(SortedRun.partition(2n, run_merged())), SortedRun.chunks_pairwise_disjoint(SortedRun.partition(2n, run_merged()))) == (True{}, True{}) : Bool & Bool}
+
+law run_partition_zero_target:
+  {SortedRun.concat_chunks(SortedRun.partition(0n, run_merged())) == run_merged() : List<&2, MemTable.Entry>}
 
 # --- Manifest (Task 5): closed vectors + fuzz (same strategy as WAL) ---
 
@@ -229,10 +307,10 @@ law sstfile_reject:
   {SstFile.parse("garbage") == None{} : Maybe<&2, Sstable.Table>}
 
 def fl_pre() -> Db.Db:
-  Db.Db{"/d", MemTable.MT{scan_mem()}, Nil{}, 0n}
+  Db.Db{"/d", MemTable.MT{scan_mem()}, Nil{}, 0n, ""}
 
 def fl_post() -> Db.Db:
-  Db.Db{"/d", MemTable.MT{Nil{}}, Con{Con{Sstable.build(scan_mem(), 0n, 2n), Nil{}}, Nil{}}, 1n}
+  Db.Db{"/d", MemTable.MT{Nil{}}, Con{Con{Sstable.build(scan_mem(), 0n, 2n), Nil{}}, Nil{}}, 1n, ""}
 
 # LAW: pre-flush read hits (closed; kills vacuity for the pair below)
 law flush_hit_pre:
@@ -299,10 +377,10 @@ def cp_levels() -> List<&2, List<&2, Sstable.Table>>:
   Con{cp_l0(), Con{cp_l1(), Con{cp_l2(), Nil{}}}}
 
 def cp_kept() -> List<&2, MemTable.Entry>:
-  Con{MemTable.Entry{"a", Some{"v1"}}, Con{MemTable.Entry{"b", Some{"v2"}}, Con{MemTable.Entry{"c", Some{"v3"}}, Con{MemTable.Entry{"m", Some{"vm"}}, Con{MemTable.Entry{"p", Some{"vp"}}, Con{MemTable.Entry{"z", Some{"vz"}}, Nil{}}}}}}}
+  Con{MemTable.Entry{"a", Some{"v1"}}, Con{MemTable.Entry{"b", Some{"v2"}}, Con{MemTable.Entry{"c", Some{"v3"}}, Con{MemTable.Entry{"m", Some{"vm"}}, Con{MemTable.Entry{"p", Some{"vp"}}, Con{MemTable.Entry{"x", None{}}, Con{MemTable.Entry{"z", Some{"vz"}}, Nil{}}}}}}}}
 
 def cp_out() -> Sstable.Table:
-  Sstable.build(cp_kept(), 1n, 6n)
+  Sstable.from_sorted_unique(cp_kept(), 1n)
 
 def cp_u2() -> Sstable.Table:
   Sstable.build(cp_e1("zz", "vzz"), 1n, 1n)
@@ -329,14 +407,21 @@ law compact_absorbed:
   {Compact.table_overlap(cp_t2(), cp_u0()) == True{} : Bool}
 
 def cp_db_pre() -> Db.Db:
-  Db.Db{"/d", MemTable.MT{Nil{}}, cp_levels(), 5n}
+  Db.Db{"/d", MemTable.MT{Nil{}}, cp_levels(), 5n, ""}
 
 def cp_db_post() -> Db.Db:
-  Db.Db{"/d", MemTable.MT{Nil{}}, cp_post(), 6n}
+  Db.Db{"/d", MemTable.MT{Nil{}}, cp_post(), 6n, ""}
 
 # LAW: post-compaction hit pinned (closed; anti-vacuity)
 law compact_hit:
   {Db.db_get(cp_db_post(), "a") == Some{"v1"} : Maybe<&2, String>}
+
+# LAW: a compacted tombstone must continue hiding the older L2 value.
+law compact_no_resurrection:
+  {Db.db_get(cp_db_post(), "x") == None{} : Maybe<&2, String>}
+
+law compact_delete_preserve:
+  {Db.db_get(cp_db_pre(), "x") == Db.db_get(cp_db_post(), "x") : Maybe<&2, String>}
 
 # LAW: preservation shape across compaction (closed, law 6)
 law compact_preserve:
@@ -387,6 +472,19 @@ law needs_flush_lo:
 # LAW: counter restores to max dashes + 1 (closed)
 law count_gen_one:
   {Recover.count_gen(Con{Con{"l0-.tbl", Nil{}}, Nil{}}) == 1n : Nat}
+
+law table_name_decimal:
+  {Flush.table_name(12n) == "l0-12.tbl" : String}
+
+law generation_decimal_branch:
+  {Recover.gen_value_read(Some{12n}, "12") == 12n : Nat}
+
+law generation_legacy_branch:
+  {Recover.gen_value_read(None{}, "----") == 4n : Nat}
+
+law generation_shape_branches:
+  {(Recover.gen_valid_read(Some{12n}, "12"), Recover.gen_valid_read(None{}, "----")) == (True{}, True{}) : Bool & Bool}
+
 
 # LAW: recovery equivalence — replayed reads equal pre-crash reads (closed)
 law recover_equiv:

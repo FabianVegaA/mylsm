@@ -6,6 +6,7 @@ import ../src/Compact.bend as Compact
 import ../src/MergeIter.bend as MergeIter
 import ../src/MemTable.bend as MemTable
 import ../src/Sstable.bend as Sstable
+import ../src/SortedRun.bend as SortedRun
 import ../src/Wal.bend as Wal
 import ../src/Fs.bend as Fs
 import ../src/Console.bend as Console
@@ -59,12 +60,12 @@ def print_entries(es: List<&2, MemTable.Entry>) -> IO(Unit):
 
 def mem_count(db: Db.Db) -> Nat:
   match db:
-    case Db.Db{dir, mem, levels, flushed}:
+    case Db.Db{dir, mem, levels, flushed, manifest_token}:
       MemTable.count(mem)
 
 def level_count(db: Db.Db) -> Nat:
   match db:
-    case Db.Db{dir, mem, levels, flushed}:
+    case Db.Db{dir, mem, levels, flushed, manifest_token}:
       List.length(&2, List<&2, Sstable.Table>, levels)
 
 def compute_gpu_ok(enabled: Bool, fuel: Nat) -> IO(Nat):
@@ -99,7 +100,7 @@ def live_entries(es: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
           Con{MemTable.Entry{key, Some{value}}, live_entries(t)}
 
 def export_entries(db: Db.Db) -> List<&2, MemTable.Entry>:
-  live_entries(Sstable.build_go(Db.all_entries(db), Nil{}))
+  live_entries(SortedRun.sort_newest(Db.all_entries(db)))
 
 def parent_parts(parts: List<&2, String>, acc: List<&2, String>) -> String:
   match parts:

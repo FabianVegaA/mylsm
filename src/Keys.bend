@@ -14,6 +14,85 @@ def cmp(+a: String, +b: String) -> Cmp:
 def eq(+a: String, +b: String) -> Bool:
   String.eq(a, b)
 
+# Small, coherent views of Cmp used by key-order laws and sorted-run code.
+def cmp_is_lt(c: Cmp) -> Bool:
+  Cmp.is_lt(c)
+
+def cmp_is_eq(c: Cmp) -> Bool:
+  Cmp.is_eq(c)
+
+def cmp_is_gt(c: Cmp) -> Bool:
+  Cmp.is_gt(c)
+
+def cmp_is_le(c: Cmp) -> Bool:
+  Cmp.is_le(c)
+
+def lt(+a: String, +b: String) -> Bool:
+  cmp_is_lt(cmp(a, b))
+
+def le(+a: String, +b: String) -> Bool:
+  cmp_is_le(cmp(a, b))
+
+def cmp_reverse(c: Cmp) -> Cmp:
+  match c:
+    case LT{}:
+      GT{}
+    case EQ{}:
+      EQ{}
+    case GT{}:
+      LT{}
+
+def implies(a: Bool, b: Bool) -> Bool:
+  match a:
+    case False{}:
+      True{}
+    case True{}:
+      b
+
+def iff(+a: Bool, +b: Bool) -> Bool:
+  Bool.and(implies(a, b), implies(b, a))
+
+# True exactly when one of three arbitrary predicates is true.
+def one_hot3(a: Bool, b: Bool, c: Bool) -> Bool:
+  match a b c:
+    case True{} False{} False{}:
+      True{}
+    case False{} True{} False{}:
+      True{}
+    case False{} False{} True{}:
+      True{}
+    case _ _ _:
+      False{}
+
+# Cmp is intrinsically one-hot; this predicate gives K6 a reusable statement.
+def cmp_one_hot(+c: Cmp) -> Bool:
+  one_hot3(cmp_is_lt(c), cmp_is_eq(c), cmp_is_gt(c))
+
+def cmp_one_hot_proof(+c: Cmp) -> {cmp_one_hot(c) == True{} : Bool}:
+  match c:
+    case LT{}:
+      {==}
+    case EQ{}:
+      {==}
+    case GT{}:
+      {==}
+
+# `String.eq` is defined by the EQ projection of `String.cmp`; matching the
+# handed-back comparison pair exposes that definitional correspondence.
+def cmp_eq_pair(p: (String & String) & Cmp) -> {cmp_is_eq(unpack(p)) == String.eq.fin(p) : Bool}:
+  match p:
+    case ((a, b), c):
+      match c:
+        case LT{}:
+          {==}
+        case EQ{}:
+          {==}
+        case GT{}:
+          {==}
+
+def cmp_eq_bridge(+a: String, +b: String) -> {cmp_is_eq(cmp(a, b)) == eq(a, b) : Bool}:
+  cmp_eq_pair(String.cmp(a, b))
+
 # Reflexivity chain for open keys. Every product law about keyed lookup
 # rewrites with str_eq_refl; it rests on the layers below, down to bits.
 # (Proving Base's own primitives is the one exception to the trust-root

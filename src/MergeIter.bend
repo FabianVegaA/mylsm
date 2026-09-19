@@ -2,9 +2,10 @@ import Base
 import ./Keys.bend as Keys
 import ./MemTable.bend as MemTable
 import ./Sstable.bend as Sstable
+import ./SortedRun.bend as SortedRun
 
 # Merge iterator (Task 6): concat sources (memtable newest-first, then
-# SSTables newest-level-first) and reuse Sstable.build_go (insert-sort,
+# SSTables newest-level-first) and canonicalize with balanced stable merge;
 # first-inserted wins ties = newest wins). The range+tombstone filter is
 # pump+fuel+leaf: String.cmp hands both strings back beside the verdict,
 # so the key survives the keep/drop decision with no clone primitive.
@@ -57,7 +58,7 @@ def flatten(mem: List<&2, MemTable.Entry>, levels: List<&2, List<&2, MemTable.En
 
 # Full merge: sorted, unique, newest version wins each key.
 def merge(mem: List<&2, MemTable.Entry>, levels: List<&2, List<&2, MemTable.Entry>>) -> List<&2, MemTable.Entry>:
-  Sstable.build_go(flatten(mem, levels), Nil{})
+  SortedRun.sort_newest(flatten(mem, levels))
 
 # Range scan over a merged run: lo <= key < hi, tombstones dropped.
 def scan(+merged: List<&2, MemTable.Entry>, lo: String, hi: String) -> List<&2, MemTable.Entry>:

@@ -55,6 +55,21 @@ behavior still require stronger proofs or empirical validation. Passing the
 proof gate must not be interpreted as a proof of the entire operating system and
 storage stack.
 
+## Compaction performance status
+
+The current development tree uses balanced stable sorted-run merging for
+MemTable canonicalization and compaction, indexed BitTree Bloom filters, cached
+SSTable range metadata, conservative tombstone retention, and compact decimal
+table generations with legacy-name recovery. The first-compaction workload
+(20,485 durable writes) improved from a timeout beyond 30 minutes to 4.524
+seconds on the development M1, but that run had only 2% free disk and is not a
+publishable comparison. See `bench/BASELINE.md`.
+
+The 1,000,000-write acceptance run remains pending on a host volume with at least
+15% free space. MyLSM still needs block-oriented SSTables, bounded multi-output
+publication, stronger general proofs, and crash injection before making
+competitive or production claims.
+
 ## Roadmap
 
 ### Phase 1 — Useful developer product
@@ -101,7 +116,7 @@ Exit criteria:
 Goal: remove known algorithmic and IO bottlenecks before making comparisons.
 
 - [ ] Replace linear SSTable lookup with sparse block indexes and binary search.
-- [ ] Replace quadratic table construction with linear sorted-run construction.
+- [x] Replace quadratic table construction with balanced sorted-run construction.
 - [ ] Add block-oriented reads instead of whole-file reads.
 - [ ] Add block cache and measured Bloom-filter tuning.
 - [ ] Add real grouped commits and configurable batching.

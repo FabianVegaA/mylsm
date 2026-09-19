@@ -1,17 +1,28 @@
 import Base
 import ./Keys.bend as Keys
 import ./MemTable.bend as MemTable
+import ./BitTree.bend as BitTree
+import ./SortedRun.bend as SortedRun
 
-# SSTables (Task 4): immutable sorted runs with Bloom filters.
-# Build = fold insert-or-replace over MemTable entries (newest wins:
-# memtable is newest-first, EQ replaces the older acc version).
-# Lookup is linear first-match; binary search iff benchmarks demand it.
+# SSTables (Task 4): immutable strict sorted runs with BitTree Bloom filters.
+# `build` canonicalizes newest-first raw entries; `from_sorted_unique` trusts an
+# already strict, unique run and deliberately performs no sorting.
 
 type Bloom is Data:
-  Blm{bits: List<&2, Bool>, size: Nat}
+  Blm{bits: BitTree.BitTree, size: Nat}
 
 type Table is Data:
-  Tbl{entries: List<&2, MemTable.Entry>, filter: Bloom, nbits: Nat}
+  Tbl{
+    entries: List<&2, MemTable.Entry>,
+    filter: Bloom,
+    nbits: Nat,
+    smallest: Maybe<&2, String>,
+    largest: Maybe<&2, String>,
+    count: Nat
+  }
+
+type Metadata is Data:
+  Meta{smallest: Maybe<&2, String>, largest: Maybe<&2, String>, count: Nat}
 
 # --- Bloom allocator (Monkey-style: smaller/upper levels get more bits) ---
 # Closed form pinned here; Dayan-exact coefficients are tuning follow-up.
@@ -26,7 +37,7 @@ def bloom_bits(level: Nat, est_keys: Nat) -> Nat:
         case 1n+p:
           Nat.mul(est_keys, 5n)
 
-# --- Local byte hash (duplicated 5-line fold; keeps Sstable independent) ---
+# --- Local byte hash (kept stable for on-disk/rebuild compatibility) ---
 def bhash(s: String, h: U32) -> U32:
   match s:
     case SNil{}:
@@ -41,38 +52,35 @@ def bhash_n(s: String, seed: U32, m: Nat) -> Nat:
     case 1n+p:
       Nat.mod(U32.to_nat(bhash(s, seed)), m)
 
-# --- Bit array over List<Bool> (joint structural recursion, no fuel) ---
-def bits_new(n: Nat) -> List<&2, Bool>:
+# BitTree stores whole U32 words while Bloom.size preserves the exact logical
+# bit count selected by bloom_bits.
+def bit_words(n: Nat) -> Nat:
   match n:
     case 0n:
-      Nil{}
+      0n
     case 1n+m:
-      Con{False{}, bits_new(m)}
+      Nat.add(1n, Nat.div(m, 32n))
 
-def bit_set(i: Nat, bits: List<&2, Bool>) -> List<&2, Bool>:
-  match i bits:
-    case 0n Nil{}:
-      Nil{}
-    case 0n Con{h, t}:
-      Con{True{}, t}
-    case 1n+m Nil{}:
-      Nil{}
-    case 1n+m Con{h, t}:
-      Con{h, bit_set(m, t)}
+def bits_new(+n: Nat) -> BitTree.BitTree:
+  BitTree.new(bit_words(n))
 
-def bit_get(i: Nat, bits: List<&2, Bool>) -> Bool:
-  match i bits:
-    case 0n Nil{}:
-      False{}
-    case 0n Con{h, t}:
-      h
-    case 1n+m Nil{}:
-      False{}
-    case 1n+m Con{h, t}:
-      bit_get(m, t)
+def bit_set(i: Nat, bits: BitTree.BitTree) -> BitTree.BitTree:
+  BitTree.set(bits, i)
+
+def bit_get(i: Nat, bits: BitTree.BitTree) -> Bool:
+  BitTree.test(bits, i)
 
 def bloom_new(+n: Nat) -> Bloom:
   Blm{bits_new(n), n}
+
+def bloom_well_formed(b: Bloom) -> Bool:
+  match b:
+    case Blm{+bits, +size}:
+      Bool.and(
+        BitTree.well_formed(bits),
+        Bool.and(
+          Nat.is_eq(BitTree.word_count(bits), bit_words(size)),
+          Nat.is_le(size, BitTree.bit_count(bits))))
 
 def bloom_add(b: Bloom, +k: String) -> Bloom:
   match b:
@@ -93,77 +101,26 @@ def bloom_test(b: Bloom, +k: String) -> Bool:
 
 def table_bits(t: Table) -> Nat:
   match t:
-    case Tbl{entries, filter, nbits}:
+    case Tbl{entries, filter, nbits, smallest, largest, count}:
       nbits
 
 def maybe_present(t: Table, +k: String) -> Bool:
   match t:
-    case Tbl{entries, filter, nbits}:
+    case Tbl{entries, filter, nbits, smallest, largest, count}:
       bloom_test(filter, k)
 
-# --- Sorted insert-or-replace (newest wins on EQ) ---
-# No pairs anywhere (pair-results can't be destructured): done/acc travel
-# as separate params, decisions via leaves, recursion structural on rest.
+# --- Canonicalization and construction ---
+# Keep the established API used by MergeIter/Compact, now backed by the shared
+# SortedRun implementation. Input order is newest-first, so equal keys retain
+# the first (newest) entry.
 def cmp_entry(e1: MemTable.Entry, e2: MemTable.Entry) -> Cmp:
-  match e1:
-    case MemTable.Entry{k1, v1}:
-      match e2:
-        case MemTable.Entry{k2, v2}:
-          Keys.cmp(k1, k2)
-
-def ins_done(done: Bool, c: Cmp) -> Bool:
-  match done:
-    case True{}:
-      True{}
-    case False{}:
-      match c:
-        case LT{}:
-          True{}
-        case EQ{}:
-          True{}
-        case GT{}:
-          False{}
-
-def ins_acc(done: Bool, c: Cmp, e: MemTable.Entry, h: MemTable.Entry, acc: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
-  match done:
-    case True{}:
-      acc
-    case False{}:
-      match c:
-        case LT{}:
-          List.append(&2, MemTable.Entry, acc, Con{e, Con{h, Nil{}}})
-        case EQ{}:
-          List.append(&2, MemTable.Entry, acc, Con{h, Nil{}})
-        case GT{}:
-          List.append(&2, MemTable.Entry, acc, Con{h, Nil{}})
-
-def ins_go(rest: List<&2, MemTable.Entry>, +e: MemTable.Entry, +done: Bool, acc: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
-  match rest:
-    case Nil{}:
-      match done:
-        case True{}:
-          acc
-        case False{}:
-          List.append(&2, MemTable.Entry, acc, Con{e, Nil{}})
-    case Con{+h, t}:
-      match done:
-        case True{}:
-          List.append(&2, MemTable.Entry, acc, Con{h, t})
-        case False{}:
-          +c = cmp_entry(e, h)
-          +nb = ins_done(done, c)
-          +na = ins_acc(done, c, e, h, acc)
-          ins_go(t, e, nb, na)
+  SortedRun.entry_cmp(e1, e2)
 
 def insert_sorted(e: MemTable.Entry, sorted: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
-  ins_go(sorted, e, False{}, Nil{})
+  SortedRun.reference_insert(e, sorted)
 
 def build_go(entries: List<&2, MemTable.Entry>, acc: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
-  match entries:
-    case Nil{}:
-      acc
-    case Con{e, t}:
-      build_go(t, insert_sorted(e, acc))
+  SortedRun.reference_fold(entries, acc)
 
 def bloom_of(entries: List<&2, MemTable.Entry>, +blm: Bloom) -> Bloom:
   match entries:
@@ -174,17 +131,80 @@ def bloom_of(entries: List<&2, MemTable.Entry>, +blm: Bloom) -> Bloom:
         case MemTable.Entry{key, val}:
           bloom_of(t, bloom_add(blm, key))
 
+def metadata_tail(entries: List<&2, MemTable.Entry>, +first: String, last: String, +count: Nat) -> Metadata:
+  match entries:
+    case Nil{}:
+      Meta{Some{first}, Some{last}, count}
+    case Con{MemTable.Entry{key, val}, rest}:
+      metadata_tail(rest, first, key, Nat.add(count, 1n))
+
+def metadata(entries: List<&2, MemTable.Entry>) -> Metadata:
+  match entries:
+    case Nil{}:
+      Meta{None{}, None{}, 0n}
+    case Con{MemTable.Entry{+key, val}, rest}:
+      metadata_tail(rest, key, key, 1n)
+
+def from_sorted_unique_est_meta(+entries: List<&2, MemTable.Entry>, level: Nat, est_keys: Nat, meta: Metadata) -> Table:
+  match meta:
+    case Meta{smallest, largest, count}:
+      +nb = bloom_bits(level, est_keys)
+      Tbl{entries, bloom_of(entries, bloom_new(nb)), nb, smallest, largest, count}
+
+def from_sorted_unique_meta(+entries: List<&2, MemTable.Entry>, level: Nat, meta: Metadata) -> Table:
+  match meta:
+    case Meta{smallest, largest, +count}:
+      +nb = bloom_bits(level, count)
+      Tbl{entries, bloom_of(entries, bloom_new(nb)), nb, smallest, largest, count}
+
+def from_sorted_unique(+entries: List<&2, MemTable.Entry>, level: Nat) -> Table:
+  from_sorted_unique_meta(entries, level, metadata(entries))
+
+def build_sorted(+entries: List<&2, MemTable.Entry>, level: Nat, est_keys: Nat) -> Table:
+  from_sorted_unique_est_meta(entries, level, est_keys, metadata(entries))
+
 def build(+entries: List<&2, MemTable.Entry>, level: Nat, est_keys: Nat) -> Table:
-  +nb = bloom_bits(level, est_keys)
-  Tbl{build_go(entries, Nil{}), bloom_of(entries, bloom_new(nb)), nb}
+  +effective = Nat.max(est_keys, List.length(&2, MemTable.Entry, entries))
+  build_sorted(SortedRun.sort_newest(entries), level, effective)
+
+# Metadata accessors keep clients independent of the Tbl field layout.
+def table_smallest(t: Table) -> Maybe<&2, String>:
+  match t:
+    case Tbl{entries, filter, nbits, smallest, largest, count}:
+      smallest
+
+def table_largest(t: Table) -> Maybe<&2, String>:
+  match t:
+    case Tbl{entries, filter, nbits, smallest, largest, count}:
+      largest
+
+def table_count(t: Table) -> Nat:
+  match t:
+    case Tbl{entries, filter, nbits, smallest, largest, count}:
+      count
+
+# Open bridge: metadata is matched explicitly so the Bloom schedule projects
+# through `build` without relying on reduction of an open entry list.
+def table_bits_from_meta(+entries: List<&2, MemTable.Entry>, level: Nat, est_keys: Nat, meta: Metadata) -> {table_bits(from_sorted_unique_est_meta(entries, level, est_keys, meta)) == bloom_bits(level, est_keys) : Nat}:
+  match meta:
+    case Meta{smallest, largest, count}:
+      {==}
+
+def table_bits_build(+entries: List<&2, MemTable.Entry>, level: Nat, est_keys: Nat) -> {table_bits(build(entries, level, est_keys)) == bloom_bits(level, Nat.max(est_keys, List.length(&2, MemTable.Entry, entries))) : Nat}:
+  +effective = Nat.max(est_keys, List.length(&2, MemTable.Entry, entries))
+  table_bits_from_meta(SortedRun.sort_newest(entries), level, effective, metadata(SortedRun.sort_newest(entries)))
+
+
+def ranges_disjoint(+a: Table, +b: Table) -> Bool:
+  SortedRun.range_disjoint_bounds(table_smallest(a), table_largest(a), table_smallest(b), table_largest(b))
 
 def size_of(b: Bloom) -> Nat:
   match b:
     case Blm{bits, size}:
       size
 
-# Lemma: bloom filter size is invariant under inserts (set flips bits only).
-def bloom_size_stable(entries: List<&2, MemTable.Entry>, bits: List<&2, Bool>, +size: Nat) -> {size_of(bloom_of(entries, Blm{bits, size})) == size : Nat}:
+# Bloom insertions only set tree bits and preserve the exact logical size.
+def bloom_size_stable(entries: List<&2, MemTable.Entry>, bits: BitTree.BitTree, +size: Nat) -> {size_of(bloom_of(entries, Blm{bits, size})) == size : Nat}:
   match entries:
     case Nil{}:
       {==}
@@ -195,5 +215,5 @@ def bloom_size_stable(entries: List<&2, MemTable.Entry>, bits: List<&2, Bool>, +
 
 def lookup(t: Table, +k: String) -> Maybe<&2, String>:
   match t:
-    case Tbl{entries, filter, nbits}:
+    case Tbl{entries, filter, nbits, smallest, largest, count}:
       MemTable.get(MemTable.MT{entries}, k)

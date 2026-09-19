@@ -2,6 +2,7 @@ import Base
 import ./Keys.bend as Keys
 import ./MemTable.bend as MemTable
 import ./Sstable.bend as Sstable
+import ./SortedRun.bend as SortedRun
 import ./SstFile.bend as SstFile
 import ./Wal.bend as Wal
 import ./Manifest.bend as Manifest
@@ -19,9 +20,9 @@ import ./Db.bend as Db
 #   rounds past fixpoint are idempotent, so no done-flag is needed).
 # - READ-ORDER MERGE: inputs merge in exact read order (L0 stored order ++
 #   absorbed-L1 stored order), so first-wins == read first-match.
-# - SHADOW-DROP: a tombstone is dropped only if its key is present in a
-#   STRICTLY LOWER level (never same-level: same-level versions have no
-#   provable order). Retaining extra tombstones is always sound.
+# - TOMBSTONE-SAFE: all winning tombstones are retained at this checkpoint.
+#   This conservative policy prevents resurrection without requiring zero-output
+#   publication support.
 # Trigger: L0 count > 4 (spec: backpressure stall at 8 = 2T, Task 10).
 # Soundness sketch (spec law 11): keys resolving outside the closure are
 # untouched (a key in both closure-inputs and a remainder table would put
@@ -64,7 +65,7 @@ def last_go(es: List<&2, MemTable.Entry>) -> Maybe<&2, String>:
   first_go(List.reverse(&2, MemTable.Entry, es))
 
 def table_overlap(+a: Sstable.Table, +b: Sstable.Table) -> Bool:
-  ov_and(ov12(first_go(Db.table_entries(a)), last_go(Db.table_entries(b))), ov12(first_go(Db.table_entries(b)), last_go(Db.table_entries(a))))
+  ov_and(ov12(Sstable.table_smallest(a), Sstable.table_largest(b)), ov12(Sstable.table_smallest(b), Sstable.table_largest(a)))
 
 # Hull bound folds (pump+fuel+leaf; single-Maybe state, no pairs).
 def pick_lo(c: Cmp, a: String, b: String) -> Maybe<&2, String>:
@@ -94,7 +95,7 @@ def min_go(fuel: Nat, +cur: Maybe<&2, String>, tabs: List<&2, Sstable.Table>) ->
         case Nil{}:
           cur
         case Con{h, t}:
-          min_go(f, min_step(first_go(Db.table_entries(h)), cur), t)
+          min_go(f, min_step(Sstable.table_smallest(h), cur), t)
 
 def min_first(+tabs: List<&2, Sstable.Table>) -> Maybe<&2, String>:
   min_go(List.length(&2, Sstable.Table, tabs), None{}, tabs)
@@ -126,7 +127,7 @@ def max_go(fuel: Nat, +cur: Maybe<&2, String>, tabs: List<&2, Sstable.Table>) ->
         case Nil{}:
           cur
         case Con{h, t}:
-          max_go(f, max_step(last_go(Db.table_entries(h)), cur), t)
+          max_go(f, max_step(Sstable.table_largest(h), cur), t)
 
 def max_last(+tabs: List<&2, Sstable.Table>) -> Maybe<&2, String>:
   max_go(List.length(&2, Sstable.Table, tabs), None{}, tabs)
@@ -147,7 +148,7 @@ def hull_neg(keep: Bool, +t: Sstable.Table, +acc: List<&2, Sstable.Table>) -> Li
       Con{t, acc}
 
 def ov_hull(+t: Sstable.Table, +lo: Maybe<&2, String>, +hi: Maybe<&2, String>) -> Bool:
-  ov_and(ov12(first_go(Db.table_entries(t)), hi), ov12(lo, last_go(Db.table_entries(t))))
+  ov_and(ov12(Sstable.table_smallest(t), hi), ov12(lo, Sstable.table_largest(t)))
 
 def filt_go(fuel: Nat, +lo: Maybe<&2, String>, +hi: Maybe<&2, String>, +acc: List<&2, Sstable.Table>, rest: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
   match fuel:
@@ -185,7 +186,9 @@ def tables_entries(tabs: List<&2, Sstable.Table>) -> List<&2, MemTable.Entry>:
     case Con{h, t}:
       List.append(&2, MemTable.Entry, Db.table_entries(h), tables_entries(t))
 
-# Shadow-drop: keep live versions, drop tombstones present strictly below.
+# Compatibility helpers for the established shadow_drop API. The production
+# policy is conservative: every winning tombstone is retained regardless of the
+# lower-level shadow list.
 def pres_leaf(+eq: Bool, +acc: Bool) -> Bool:
   match eq:
     case True{}:
@@ -215,7 +218,7 @@ def drop_step(+shadowed: Bool, +e: MemTable.Entry, +acc: List<&2, MemTable.Entry
       Con{e, acc}
 
 def drop_none(+k: String, +shadow: List<&2, MemTable.Entry>, +acc: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
-  drop_step(member(k, shadow), MemTable.Entry{k, None{}}, acc)
+  Con{MemTable.Entry{k, None{}}, acc}
 
 def drop_go(fuel: Nat, +shadow: List<&2, MemTable.Entry>, +acc: List<&2, MemTable.Entry>, xs: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
   match fuel:
@@ -235,8 +238,9 @@ def drop_go(fuel: Nat, +shadow: List<&2, MemTable.Entry>, +acc: List<&2, MemTabl
 def shadow_drop(+xs: List<&2, MemTable.Entry>, +shadow: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
   drop_go(List.length(&2, MemTable.Entry, xs), shadow, Nil{}, xs)
 
-# Output table (empty merged output emits nothing; emptiness tested by a
-# leaf — the merged list is never matched and reused).
+# Compatibility output helper. The production finish_runs path below always
+# emits one output table; retaining tombstones avoids the all-deletes zero-output
+# publication case at this checkpoint.
 def emit_empty(kept: List<&2, MemTable.Entry>) -> Bool:
   match kept:
     case Nil{}:
@@ -249,16 +253,54 @@ def emit_dec(e: Bool, +kept: List<&2, MemTable.Entry>, +rest: List<&2, Sstable.T
     case True{}:
       rest
     case False{}:
-      +n = List.length(&2, MemTable.Entry, kept)
-      Con{Sstable.build(kept, 1n, n), rest}
+      Con{Sstable.from_sorted_unique(kept, 1n), rest}
 
 def emit_go(+kept: List<&2, MemTable.Entry>, +rest: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
   emit_dec(emit_empty(kept), kept, rest)
 
-def finish_go(+abs_entries: List<&2, MemTable.Entry>, +shadow: List<&2, MemTable.Entry>, +rest: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
-  emit_go(shadow_drop(Sstable.build_go(abs_entries, Nil{}), shadow), rest)
+# Convert raw newest-first entries to preserved singleton runs. This keeps the
+# established finish_go API canonicalizing without insertion sort.
+def entry_runs(entries: List<&2, MemTable.Entry>) -> List<&2, List<&2, MemTable.Entry>>:
+  match entries:
+    case Nil{}:
+      Nil{}
+    case Con{e, rest}:
+      Con{Con{e, Nil{}}, entry_runs(rest)}
 
-# Closure rounds (major fuel = len(l1)+1; tail rounds are idempotent).
+# Preserve each table's strict sorted-run boundary and stored read order.
+def table_runs(tabs: List<&2, Sstable.Table>) -> List<&2, List<&2, MemTable.Entry>>:
+  match tabs:
+    case Nil{}:
+      Nil{}
+    case Con{h, rest}:
+      Con{Db.table_entries(h), table_runs(rest)}
+
+# Existing helper API: raw entries are newest-first, so singleton-run order
+# reproduces first-wins canonicalization without the quadratic build_go path.
+def finish_go(+abs_entries: List<&2, MemTable.Entry>, +shadow: List<&2, MemTable.Entry>, +rest: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
+  emit_go(shadow_drop(SortedRun.merge_many_newest(entry_runs(abs_entries)), shadow), rest)
+
+# Production output: merge L0 in chronological stored order, merge absorbed L1
+# in its original stored order, then merge L0 as strictly newer than L1.
+# Tombstones are retained, so a triggered compaction publishes exactly one table.
+def finish_runs(+l0_runs: List<&2, List<&2, MemTable.Entry>>, +l1_runs: List<&2, List<&2, MemTable.Entry>>, +rest: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
+  +merged_l0 = SortedRun.merge_many_newest(l0_runs)
+  +merged_l1 = SortedRun.merge_many_newest(l1_runs)
+  +merged = SortedRun.merge_many_newest(Con{merged_l0, Con{merged_l1, Nil{}}})
+  Con{Sstable.from_sorted_unique(shadow_drop(merged, Nil{}), 1n), rest}
+
+# Closure rounds retain the original L1 list so the final absorbed runs are
+# selected in exact stored read order, independent of the round that found them.
+def closed_runs_go(major: Nat, +lo: Maybe<&2, String>, +hi: Maybe<&2, String>, +l0_runs: List<&2, List<&2, MemTable.Entry>>, +all_l1: List<&2, Sstable.Table>, +rest: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
+  match major:
+    case 0n:
+      finish_runs(l0_runs, table_runs(filter_pos(all_l1, lo, hi)), rest)
+    case 1n+m:
+      +abs_new = filter_pos(rest, lo, hi)
+      +rem_new = filter_neg(rest, lo, hi)
+      closed_runs_go(m, min_step(min_first(abs_new), lo), max_step(max_last(abs_new), hi), l0_runs, all_l1, rem_new)
+
+# Established helper API retained for callers that already supply raw entries.
 def closed_go(major: Nat, +lo: Maybe<&2, String>, +hi: Maybe<&2, String>, +abs_entries: List<&2, MemTable.Entry>, +shadow: List<&2, MemTable.Entry>, +rest: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
   match major:
     case 0n:
@@ -272,9 +314,9 @@ def closed_go(major: Nat, +lo: Maybe<&2, String>, +hi: Maybe<&2, String>, +abs_e
 def compact_snd(+l0: List<&2, Sstable.Table>, rest1: List<&2, List<&2, Sstable.Table>>) -> List<&2, List<&2, Sstable.Table>>:
   match rest1:
     case Nil{}:
-      Con{Nil{}, Con{finish_go(tables_entries(l0), Nil{}, Nil{}), Nil{}}}
+      Con{Nil{}, Con{finish_runs(table_runs(l0), Nil{}, Nil{}), Nil{}}}
     case Con{+l1, +below}:
-      Con{Nil{}, Con{closed_go(Nat.add(List.length(&2, Sstable.Table, l1), 1n), min_first(l0), max_last(l0), tables_entries(l0), Db.all_level_entries(below), l1), below}}
+      Con{Nil{}, Con{closed_runs_go(Nat.add(List.length(&2, Sstable.Table, l1), 1n), min_first(l0), max_last(l0), table_runs(l0), l1, l1), below}}
 
 def compact_dec(gt: Bool, +l0: List<&2, Sstable.Table>, +rest1: List<&2, List<&2, Sstable.Table>>) -> List<&2, List<&2, Sstable.Table>>:
   match gt:
@@ -371,8 +413,8 @@ def rem_names(+tabs: List<&2, Sstable.Table>, +names: List<&2, String>, +rem: Li
 # Crash discipline mirrors flush: output durable, then manifest (tmp +
 # rename + dir fsync), then input files become orphans (recovery ignores
 # files absent from the manifest; Task 12 sweeps them). Manifest/table
-# drift (length mismatch) aborts fail-closed; names stay positionally
-# aligned with tables (output head, remainder tail).
+# drift (exact serialized Manifest identity mismatch) aborts fail-closed;
+# names stay positionally aligned with tables (output head, remainder tail).
 
 def l1hd(r1: List<&2, List<&2, Sstable.Table>>) -> List<&2, Sstable.Table>:
   match r1:
@@ -398,7 +440,7 @@ def l0list(lvls: List<&2, List<&2, Sstable.Table>>) -> List<&2, Sstable.Table>:
 def hd_tbl(l: List<&2, Sstable.Table>) -> Sstable.Table:
   match l:
     case Nil{}:
-      Sstable.build(Nil{}, 1n, 0n)
+      Sstable.from_sorted_unique(Nil{}, 1n)
     case Con{h, t}:
       h
 
@@ -468,7 +510,7 @@ def compact_goB(+dir: String, +mpath: String, +mtmp: String, +m2: Manifest.Manif
     v2 : Unit <- IO.try(Unit, Fs.rename(mtmp, mpath))
     v3 : Unit <- IO.try(Unit, Fs.fsync(dir))
     ign : Result<&1, &1, U32 & String, Unit> <- remove_list(dels)
-    return Done{Db.Db{dir, mem, levels2, Nat.add(flushed, 1n)}}
+    return Done{Db.Db{dir, mem, levels2, Nat.add(flushed, 1n), Manifest.serialize(m2)}}
 
 def prefix_go(names: List<&2, String>, +dir: String, +acc: List<&2, String>) -> List<&2, String>:
   match names:
@@ -487,36 +529,36 @@ def drift_go(ok: Bool, +dir: String, +mpath: String, +mtmp: String, +m: Manifest
     case False{}:
       IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{(U32.from_nat(2n), "manifest drift")})
 
-def compact_goA(+dir: String, +l1dir: String, +tmp: String, +final: String, +mpath: String, +mtmp: String, +content: String, +outname: String, +mem: MemTable.MemTable, +levels2: List<&2, List<&2, Sstable.Table>>, +oldl1: List<&2, Sstable.Table>, +remt: List<&2, Sstable.Table>, +l0n: Nat, +l1n: Nat, +flushed: Nat) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def compact_goA(+dir: String, +l1dir: String, +tmp: String, +final: String, +mpath: String, +mtmp: String, +content: String, +outname: String, +mem: MemTable.MemTable, +levels2: List<&2, List<&2, Sstable.Table>>, +oldl1: List<&2, Sstable.Table>, +remt: List<&2, Sstable.Table>, +flushed: Nat, +manifest_token: String) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
     u1 : Unit <- IO.try(Unit, Flush.ensure_dir(l1dir))
     u2 : Unit <- IO.try(Unit, Flush.write_file(tmp, content))
     u3 : Unit <- IO.try(Unit, Fs.rename(tmp, final))
     u4 : Unit <- IO.try(Unit, Fs.fsync(l1dir))
     +m : Manifest.Manifest <- IO.try(Manifest.Manifest, Flush.load_mfst(mpath))
-    drift_go(ov_and(Nat.is_eq(List.length(&2, String, ml0(m)), l0n), Nat.is_eq(List.length(&2, String, ml1(m)), l1n)), dir, mpath, mtmp, m, oldl1, remt, outname, mem, levels2, flushed)
+    drift_go(String.eq(Manifest.serialize(m), manifest_token), dir, mpath, mtmp, m, oldl1, remt, outname, mem, levels2, flushed)
 
-def compact_pre(+dir: String, +mem: MemTable.MemTable, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def compact_pre(+dir: String, +mem: MemTable.MemTable, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   +levels2 = compact_levels(levels)
   +newl1 = l1list(levels2)
   +out = hd_tbl(newl1)
   +remt = tail_of(newl1)
   +l1dir = dir ++ "/l1"
-  +outname = "l1-" ++ Wal.dashes(flushed) ++ ".tbl"
-  compact_goA(dir, l1dir, l1dir ++ "/" ++ outname ++ ".tmp", l1dir ++ "/" ++ outname, dir ++ "/MANIFEST", dir ++ "/MANIFEST.tmp", SstFile.serialize(Db.table_entries(out), 1n), outname, mem, levels2, l1list(levels), remt, List.length(&2, Sstable.Table, l0list(levels)), List.length(&2, Sstable.Table, l1list(levels)), flushed)
+  +outname = "l1-" ++ Nat.show(flushed) ++ ".tbl"
+  compact_goA(dir, l1dir, l1dir ++ "/" ++ outname ++ ".tmp", l1dir ++ "/" ++ outname, dir ++ "/MANIFEST", dir ++ "/MANIFEST.tmp", SstFile.serialize(Db.table_entries(out), 1n), outname, mem, levels2, l1list(levels), remt, flushed, manifest_token)
 
-def compact_trig(gt: Bool, +dir: String, +mem: MemTable.MemTable, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def compact_trig(gt: Bool, +dir: String, +mem: MemTable.MemTable, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match gt:
     case True{}:
-      compact_pre(dir, mem, levels, flushed)
+      compact_pre(dir, mem, levels, flushed, manifest_token)
     case False{}:
-      IO.pure(Result<&1, &1, U32 & String, Db.Db>, Done{Db.Db{dir, mem, levels, flushed}})
+      IO.pure(Result<&1, &1, U32 & String, Db.Db>, Done{Db.Db{dir, mem, levels, flushed, manifest_token}})
 
 def compact(+db: Db.Db) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match db:
-    case Db.Db{dir, mem, levels, flushed}:
+    case Db.Db{dir, mem, levels, flushed, manifest_token}:
       match levels:
         case Nil{}:
-          IO.pure(Result<&1, &1, U32 & String, Db.Db>, Done{Db.Db{dir, mem, Nil{}, flushed}})
+          IO.pure(Result<&1, &1, U32 & String, Db.Db>, Done{Db.Db{dir, mem, Nil{}, flushed, manifest_token}})
         case Con{+l0, r1}:
-          compact_trig(Nat.is_lt(4n, List.length(&2, Sstable.Table, l0)), dir, mem, Con{l0, r1}, flushed)
+          compact_trig(Nat.is_lt(4n, List.length(&2, Sstable.Table, l0)), dir, mem, Con{l0, r1}, flushed, manifest_token)

@@ -4,6 +4,7 @@ import ./MemTable.bend as MemTable
 import ./Sstable.bend as Sstable
 import ./Wal.bend as Wal
 import ./Fs.bend as Fs
+import ./Manifest.bend as Manifest
 
 # Db API (Task 7): durable write path + reads.
 #
@@ -22,13 +23,13 @@ import ./Fs.bend as Fs
 # Cons'es new tables at the head; compaction (Task 9) preserves the order.
 
 type Db is Data:
-  Db{dir: String, mem: MemTable.MemTable, levels: List<&2, List<&2, Sstable.Table>>, flushed: Nat}
+  Db{dir: String, mem: MemTable.MemTable, levels: List<&2, List<&2, Sstable.Table>>, flushed: Nat, manifest_token: String}
 
 def wal_path(+dir: String) -> String:
   dir ++ "/wal.log"
 
 def open_db(+dir: String) -> Db:
-  Db{dir, MemTable.empty(), Nil{}, 0n}
+  Db{dir, MemTable.empty(), Nil{}, 0n, Manifest.serialize(Manifest.M{Nil{}})}
 
 # --- Pure write core (laws below pin batch == sequential) ---
 
@@ -50,7 +51,7 @@ def apply_batch(+muts: List<&2, Wal.Mut>, +mem: MemTable.MemTable) -> MemTable.M
 
 def table_entries(+t: Sstable.Table) -> List<&2, MemTable.Entry>:
   match t:
-    case Sstable.Tbl{entries, filter, nbits}:
+    case Sstable.Tbl{entries, filter, nbits, smallest, largest, count}:
       entries
 
 def level_entries(+tabs: List<&2, Sstable.Table>) -> List<&2, MemTable.Entry>:
@@ -69,7 +70,7 @@ def all_level_entries(+lvls: List<&2, List<&2, Sstable.Table>>) -> List<&2, MemT
 
 def all_entries(+db: Db) -> List<&2, MemTable.Entry>:
   match db:
-    case Db{dir, mem, levels, flushed}:
+    case Db{dir, mem, levels, flushed, manifest_token}:
       match mem:
         case MemTable.MT{entries}:
           List.append(&2, MemTable.Entry, entries, all_level_entries(levels))
@@ -103,12 +104,12 @@ def wal_append(+dir: String, +data: String) -> IO(Result<&1, &1, U32 & String, U
 
 def db_write(+db: Db, +b: Wal.Batch) -> IO(Result<&1, &1, U32 & String, Db>):
   match db:
-    case Db{dir, mem, levels, flushed}:
+    case Db{dir, mem, levels, flushed, manifest_token}:
       match b:
         case Wal.Batch{muts}:
           do IO<Result<&1, &1, U32 & String, Db>>:
             res : Unit <- IO.try(Unit, wal_append(dir, Wal.encode(Wal.Batch{muts})))
-            return Done{Db{dir, apply_batch(muts, mem), levels, flushed}}
+            return Done{Db{dir, apply_batch(muts, mem), levels, flushed, manifest_token}}
 
 def db_put(+db: Db, +k: String, +v: String) -> IO(Result<&1, &1, U32 & String, Db>):
   db_write(db, Wal.Batch{Con{Wal.Put{k, v}, Nil{}}})

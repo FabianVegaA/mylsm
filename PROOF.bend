@@ -1,7 +1,10 @@
 import Base
 import ./LAWS.bend as Laws
+import ./src/Keys.bend as Keys
 import ./src/MemTable.bend as MemTable
 import ./src/Sstable.bend as Sstable
+import ./src/BitTree.bend as BitTree
+import ./src/SortedRun.bend as SortedRun
 import ./src/Manifest.bend as Manifest
 import ./src/MergeIter.bend as MergeIter
 import ./src/SstFile.bend as SstFile
@@ -20,6 +23,15 @@ def Laws.cmp_refl_a():
 
 def Laws.cmp_order_ab():
   {==}
+
+def Laws.key_cmp_refl(key):
+  Keys.str_refl(key)
+
+def Laws.key_cmp_eq_bridge(a, b):
+  Keys.cmp_eq_bridge(a, b)
+
+def Laws.key_cmp_trichotomy(a, b):
+  Keys.cmp_one_hot_proof(Keys.cmp(a, b))
 
 def Laws.mt_ryw(t, k, v):
   MemTable.ryw_bridge(t, k, v)
@@ -49,6 +61,51 @@ def Laws.bloom_safe():
   {==}
 
 def Laws.bloom_schedule(e, l, n):
+  Sstable.table_bits_build(e, l, n)
+
+def Laws.bit_tree_set_hit():
+  {==}
+
+def Laws.bit_tree_oob_safe():
+  {==}
+
+def Laws.bloom_tree_well_formed():
+  {==}
+
+def Laws.bloom_zero_estimate_safe():
+  {==}
+
+def Laws.sst_metadata_count():
+  {==}
+
+def Laws.sst_metadata_bounds():
+  {==}
+
+def Laws.run_merge_newer_wins():
+  {==}
+
+def Laws.run_merge_resolve_closed():
+  {==}
+
+def Laws.run_merge_strict_closed():
+  {==}
+
+def Laws.run_merge_unique_closed():
+  {==}
+
+def Laws.run_partition_exact():
+  {==}
+
+def Laws.run_partition_concat():
+  {==}
+
+def Laws.run_partition_bounded():
+  {==}
+
+def Laws.run_partition_well_formed():
+  {==}
+
+def Laws.run_partition_zero_target():
   {==}
 
 def Laws.manifest_empty():
@@ -111,6 +168,12 @@ def Laws.compact_absorbed():
 def Laws.compact_hit():
   {==}
 
+def Laws.compact_no_resurrection():
+  {==}
+
+def Laws.compact_delete_preserve():
+  {==}
+
 def Laws.compact_preserve():
   {==}
 
@@ -136,6 +199,18 @@ def Laws.needs_flush_lo():
   {==}
 
 def Laws.count_gen_one():
+  {==}
+
+def Laws.table_name_decimal():
+  {==}
+
+def Laws.generation_decimal_branch():
+  {==}
+
+def Laws.generation_legacy_branch():
+  {==}
+
+def Laws.generation_shape_branches():
   {==}
 
 def Laws.recover_equiv():
