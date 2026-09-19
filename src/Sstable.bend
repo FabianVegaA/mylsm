@@ -45,12 +45,38 @@ def bhash(s: String, h: U32) -> U32:
     case SCon{c, t}:
       bhash(t, U32.add(U32.mul(h, 31), Char.to_u32(c)))
 
+# --- U32->Nat bridges that stay checker-tractable ---
+# The Bend checker does not share across sequentially-chained U32.mul terms:
+# `U32.to_nat` applied to a hash accumulated over 4+ bytes diverges in
+# `{==}` elaboration (runtime is unaffected). The bridges below therefore
+# never materialize a chained U32 as a Nat: each `to_nat` covers at most two
+# U32 ops (shift+mask on the ORIGINAL word — parallel, shared), and all
+# accumulation happens in small-Nat land. Both are EXACT (no semantic
+# change): bytes are the base-256 digits of the word (Horner), so
+# u32_to_nat_exact(w) == U32.to_nat(w) and bhash_n computes the same mod.
+def u32_byte(+w: U32, shift: Nat) -> Nat:
+  U32.to_nat(U32.and(U32.shrn(w, shift), 255))
+
+def u32_to_nat_exact(+w: U32) -> Nat:
+  +b0 = u32_byte(w, 24n)
+  +b1 = u32_byte(w, 16n)
+  +b2 = u32_byte(w, 8n)
+  +b3 = u32_byte(w, 0n)
+  Nat.add(Nat.mul(b0, Nat.mul(Nat.mul(256n, 256n), 256n)), Nat.add(Nat.mul(b1, Nat.mul(256n, 256n)), Nat.add(Nat.mul(b2, 256n), b3)))
+
+def bhash_n_pos(+s: String, +seed: U32, +m: Nat) -> Nat:
+  +w = bhash(s, seed)
+  +a0 = Nat.mod(u32_byte(w, 24n), m)
+  +a1 = Nat.mod(Nat.add(Nat.mul(a0, 256n), u32_byte(w, 16n)), m)
+  +a2 = Nat.mod(Nat.add(Nat.mul(a1, 256n), u32_byte(w, 8n)), m)
+  Nat.mod(Nat.add(Nat.mul(a2, 256n), u32_byte(w, 0n)), m)
+
 def bhash_n(s: String, seed: U32, m: Nat) -> Nat:
   match m:
     case 0n:
       0n
     case 1n+p:
-      Nat.mod(U32.to_nat(bhash(s, seed)), m)
+      bhash_n_pos(s, seed, m)
 
 # BitTree stores whole U32 words while Bloom.size preserves the exact logical
 # bit count selected by bloom_bits.

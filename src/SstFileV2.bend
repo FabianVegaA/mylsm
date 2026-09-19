@@ -387,7 +387,7 @@ def checksum_value(parsed: Decimal.Parse, entries: List<&2, MemTable.Entry>, lev
     case Decimal.Rejected{error}:
       ParseRejected{TruncatedChecksum{}}
     case Decimal.Accepted{Decimal.Dec{value, rest}}:
-      checksum_decision(Nat.is_eq(value, U32.to_nat(hash)), entries, level)
+      checksum_decision(Nat.is_eq(value, Sstable.u32_to_nat_exact(hash)), entries, level)
 
 def finish_decoder(decoder: Decoder) -> ParseResult:
   match decoder:

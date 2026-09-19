@@ -1,5 +1,8 @@
 import Base
 import ../laws/SstFileDispatchV2.bend as Laws
 
-def Laws.sst2_dispatch_v2():
+def Laws.sst2_dispatch_v2_passthrough():
+  {==}
+
+def Laws.sst2_dispatch_v2_tag():
   {==}

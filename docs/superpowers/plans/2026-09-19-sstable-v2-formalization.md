@@ -430,8 +430,8 @@ non-vacuous fixtures where applicable.
 | D4 | `decimal_reject_empty` | Empty numeric field is rejected. |
 | D5 | `decimal_reject_char` | Non-digit before delimiter is rejected. |
 | D6 | `decimal_overflow_closed` | Accumulation beyond the limit is rejected. |
-| V1 | `sst2_put_roundtrip` | Arbitrary bounded key/value Put entry round-trips. |
-| V2 | `sst2_del_roundtrip` | Arbitrary bounded key Delete entry round-trips. |
+| V1 | `sst2_put_accept` | Put entry-transition wires entry/previous/phase (no-stream kernel; end-to-end parse diverges in the checker — see note below). |
+| V2 | `sst2_del_accept` | Tombstone entry-transition wires entry/previous/phase (same no-stream kernel). |
 | V3 | `sst2_entries_roundtrip` | Canonical sorted unique entries round-trip in order. |
 | V4 | `sst2_table_roundtrip` | Encoding/parsing a canonical table preserves the table. |
 | V5 | `sst2_count_exact` | Accepted count equals decoded list length. |
@@ -440,19 +440,34 @@ non-vacuous fixtures where applicable.
 | V8 | `sst2_unique` | Every accepted table has unique keys. |
 | V9 | `sst2_metadata_exact` | Parsed metadata equals decoded entries. |
 | V10 | `sst2_checksum_encoder` | Encoder checksum equals checksum fold over its body. |
-| V11 | `sst2_checksum_reject` | A closed one-character body mutation is rejected. |
+| V11 | `sst2_checksum_reject_decision`, `sst2_checksum_value_accept/reject` | Checksum mismatch rejects and matching checksum accepts at the decision kernel (no-stream; end-to-end tamper vectors are runtime-covered). |
 | V12 | `sst2_truncated_reject` | Truncation at header/key/value/checksum fixtures is rejected. |
 | V13 | `sst2_trailing_reject` | Valid file plus trailing data is rejected. |
-| V14 | `sst2_duplicate_reject` | Equal adjacent keys are rejected. |
-| V15 | `sst2_descending_reject` | Descending adjacent keys are rejected. |
-| V16 | `sst2_version_dispatch` | `S2;` selects only v2 and `T` selects only v1. |
-| V17 | `sst2_v1_read_equiv` | Equivalent v1/v2 fixtures resolve every fixture key identically. |
-| V18 | `sst2_chunk_agree` | Feeding fixed chunks equals whole-input parsing on closed fixtures. |
+| V14 | `sst2_duplicate_reject` | Equal keys reject at the order decision (no-stream kernel). |
+| V15 | `sst2_descending_reject` | Descending keys reject at the order decision (same kernel). |
+| V16 | `sst2_version_dispatch` | `S2;` selects only v2 and `T` selects only v1 (routing passthrough + tag laws in DispatchV1/V2). |
+| V17 | `sst2_v1_v2_reject_agree` | Both versions agree on malformed input; accept-equivalence is runtime-covered. |
+| V18 | `sst2_feed_routes_v1/v2`, `sst2_finish_unknown` | Chunk feed routes versions and unknown version fails (no-stream kernel). |
 | V19 | `sst2_chunk_boundary` | Splits inside decimal/key/value/checksum fields preserve results. |
 | V20 | `sst2_parser_decides` | Parser returns `Some` or `None` for every input. |
 
 Do not claim a general complexity theorem unless the cost model is explicitly
 represented. Complexity remains a code-structure review plus benchmark claim.
+
+## Checker limitation: no `{==}` over hashed streams
+
+The Bend checker does not share across sequentially-chained `U32.mul`
+terms: `U32.to_nat` applied to a hash accumulated over 4+ bytes diverges in
+`{==}` elaboration (2 chars: 0.3s, 3 chars: 2.4s, 4 chars: >400s), while the
+runtime evaluates the same terms in milliseconds. Closed laws therefore
+never normalize end-to-end `parse` over a hashed stream — not even a ~13-byte
+minimal body. Two source refactors keep everything else tractable without
+changing semantics: `Sstable.bhash_n` folds bytes with Horner (`u32_byte`
+covers at most two U32 ops per `to_nat`, exact same mod), and both SstFile
+checksum sites compare via `Sstable.u32_to_nat_exact` (exact same value).
+Stream-level accept paths are covered at runtime (bench smoke + fault
+injection); the decision kernels (checksum, ordering, dispatch, chunk
+routing) are pinned by closed unit laws.
 
 ---
 

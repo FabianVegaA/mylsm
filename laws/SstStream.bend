@@ -2,13 +2,18 @@ import Base
 import ../src/MemTable.bend as MemTable
 import ../src/Sstable.bend as Sstable
 import ../src/SstFileV2.bend as SstFileV2
+import ../src/SstFileV1Fast.bend as SstFileV1Fast
 import ../src/SstStream.bend as SstStream
 
-def sst2_del_entries() -> List<&2, MemTable.Entry>:
-  Con{MemTable.Entry{"a", None{}}, Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}}
+# Chunk-dispatch kernel, tested on 3-byte inputs (no hash accumulation
+# reaches the checker-critical length; U32-only chains stay shared).
+# End-to-end chunk agreement is covered at runtime (bench smoke).
 
-def sst2_feed_two(+s: String) -> Result<&1, &1, U32 & String, Sstable.Table>:
-  SstStream.finish_mode(SstStream.feed_mode(SstStream.feed_mode(SstStream.Unknown{}, String.take(s, 10n)), String.drop(s, 10n)))
+law sst2_feed_routes_v2:
+  {SstStream.feed_mode(SstStream.Unknown{}, "S2;") == SstStream.Current{SstStream.feed_v2("S2;", SstFileV2.Dec{SstFileV2.NeedS{}, 0n, None{}, Nil{}, 0n, 0n, 7, 0n})} : SstStream.Mode}
 
-law sst2_chunk_agree:
-  {sst2_feed_two(SstFileV2.serialize(sst2_del_entries(), 1n)) == Done{Sstable.from_sorted_unique(sst2_del_entries(), 1n)} : Result<&1, &1, U32 & String, Sstable.Table>}
+law sst2_feed_routes_v1:
+  {SstStream.feed_mode(SstStream.Unknown{}, "T") == SstStream.Legacy{SstStream.feed_v1("T", SstFileV1Fast.Dec{SstFileV1Fast.NeedT{}, 0n, None{}, True{}, Nil{}, 0n, 0n, 7})} : SstStream.Mode}
+
+law sst2_finish_unknown:
+  {SstStream.finish_mode(SstStream.Unknown{}) == Fail{(U32.from_nat(3n), "unknown table version")} : Result<&1, &1, U32 & String, Sstable.Table>}
