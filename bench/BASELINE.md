@@ -56,9 +56,25 @@ threads but only 2% free disk, so they are functional observations marked
 - second 1,000,000 attempt: stopped after 862.61 seconds with `No space left on
   device`; the host volume reached 100% capacity.
 
-The million-write acceptance result remains pending until the host has at least
-15% free disk. Do not extrapolate or compare the low-disk runs against another
-database.
+## SSTable v2 acceptance observation
+
+With Bend 2.0.13, eight logical CPUs, and 18% free disk, the versioned v2 codec
+completed the durable acceptance workload:
+
+- 20,485 writes: 11,343 ms, 1,805.96 ops/s; first compaction and post-restart
+  shape checks passed;
+- 1,000,000 writes: 1,048,023 ms of Bend-measured write time and 1,087.20 seconds
+  real time, 954.18 ops/s;
+- pre- and post-recovery first/middle/last samples passed;
+- isolated v2 1M reopen-and-reopen validation: 30.83 seconds real time;
+- final shape: 332 MemTable entries, four L0 tables, and one L1 table;
+- v2 L1 size: 29,175,202 bytes;
+- equivalent v1 L1 size: 103,339,329 bytes (v2 is about 72% smaller);
+- streaming recovery of the preserved v1 1M database completed with matching
+  samples and shape in 68.66 seconds.
+
+These are single development observations, not cross-database performance
+claims. Record at least three clean runs and use the median for publication.
 
 ## Timed phases and current API boundary
 

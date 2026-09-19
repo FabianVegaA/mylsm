@@ -22,6 +22,8 @@ import ./Manifest.bend as Manifest
 # table; within a level, tables are stored newest-first. Flush (Task 8)
 # Cons'es new tables at the head; compaction (Task 9) preserves the order.
 
+# manifest_token is the exact serialized Manifest observed by this handle. Flush
+# and compaction compare it before publication to reject stale-handle drift.
 type Db is Data:
   Db{dir: String, mem: MemTable.MemTable, levels: List<&2, List<&2, Sstable.Table>>, flushed: Nat, manifest_token: String}
 

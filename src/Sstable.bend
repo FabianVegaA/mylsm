@@ -110,18 +110,6 @@ def maybe_present(t: Table, +k: String) -> Bool:
       bloom_test(filter, k)
 
 # --- Canonicalization and construction ---
-# Keep the established API used by MergeIter/Compact, now backed by the shared
-# SortedRun implementation. Input order is newest-first, so equal keys retain
-# the first (newest) entry.
-def cmp_entry(e1: MemTable.Entry, e2: MemTable.Entry) -> Cmp:
-  SortedRun.entry_cmp(e1, e2)
-
-def insert_sorted(e: MemTable.Entry, sorted: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
-  SortedRun.reference_insert(e, sorted)
-
-def build_go(entries: List<&2, MemTable.Entry>, acc: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
-  SortedRun.reference_fold(entries, acc)
-
 def bloom_of(entries: List<&2, MemTable.Entry>, +blm: Bloom) -> Bloom:
   match entries:
     case Nil{}:

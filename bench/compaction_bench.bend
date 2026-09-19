@@ -159,7 +159,7 @@ def run_case(+dir: String, +entries_per_run: Nat, +runs: Nat) -> IO(Unit):
     p4 : Unit <- print_phase(case_name, "bloom_construction", bloom_start, bloom_stop)
 
     serialization_start : Nat <- IO.now()
-    +serialized : String <- IO.pure(String, SstFile.serialize(kept, 1n))
+    +serialized : String <- IO.pure(String, SstFile.serialize_v2(kept, 1n))
     serialized_bytes : Nat <- IO.pure(Nat, String.length(serialized))
     +parse_correct : Bool <- IO.pure(Bool, parsed_ok(SstFile.parse(serialized), entries_per_run, runs))
     serialization_stop : Nat <- IO.now()

@@ -66,41 +66,15 @@ def read_tail3(fr: (File & Result<&1, &1, U32 & String, String>)) -> IO(Result<&
         cls : Unit <- File.close(f3)
         IO.pure(Result<&1, &1, U32 & String, String>, r1)
 
-# Read a complete file in bounded chunks. SSTables can be much larger than one
-# MiB; treating a single chunk as the whole file truncates valid tables and
-# makes recovery fail at scale.
-def read_all_tail(fuel: Nat, fr: (File & Result<&1, &1, U32 & String, String>), acc: List<&2, String>) -> IO(Result<&1, &1, U32 & String, String>):
-  match fuel:
-    case 0n:
-      match fr:
-        case (f2, r):
-          do IO<Result<&1, &1, U32 & String, String>>:
-            cls : Unit <- File.close(f2)
-            return Fail{(U32.from_nat(7n), "file exceeds 4 GiB read limit")}
-    case 1n+rest:
-      match fr:
-        case (f2, r):
-          match r:
-            case Fail{e}:
-              do IO<Result<&1, &1, U32 & String, String>>:
-                cls : Unit <- File.close(f2)
-                return Fail{e}
-            case Done{chunk}:
-              match chunk:
-                case SNil{}:
-                  do IO<Result<&1, &1, U32 & String, String>>:
-                    cls : Unit <- File.close(f2)
-                    return Done{String.join(List.reverse(&2, String, acc), "")}
-                case SCon{h, t}:
-                  do IO<Result<&1, &1, U32 & String, String>>:
-                    next : (File & Result<&1, &1, U32 & String, String>) <- File.read(f2, U32.mul(U32.from_nat(1024n), U32.from_nat(1024n)))
-                    read_all_tail(rest, next, Con{SCon{h, t}, acc})
 
+# Base File.read decodes each returned chunk independently. A chunk boundary can
+# split a multi-byte UTF-8 character, so table files are read in one bounded call
+# until a byte-oriented streaming effect with decoder carry is available.
 def read_file(+path: String) -> IO(Result<&1, &1, U32 & String, String>):
   do IO<Result<&1, &1, U32 & String, String>>:
     f : File <- IO.try(File, File.open(path, "r"))
-    first : (File & Result<&1, &1, U32 & String, String>) <- File.read(f, U32.mul(U32.from_nat(1024n), U32.from_nat(1024n)))
-    read_all_tail(4096n, first, Nil{})
+    fr : (File & Result<&1, &1, U32 & String, String>) <- File.read(f, U32.from_nat(4294967295n))
+    read_tail3(fr)
 
 def mfst_parsed(+m: Maybe<&2, Manifest.Manifest>) -> Result<&1, &1, U32 & String, Manifest.Manifest>:
   match m:
@@ -188,7 +162,7 @@ def flush_pre(+dir: String, +entries: List<&2, MemTable.Entry>, +levels: List<&2
   +tbl = Sstable.build(entries, 0n, List.length(&2, MemTable.Entry, entries))
   +name = table_name(flushed)
   +l0dir = dir ++ "/l0"
-  flush_goA(dir, l0dir, l0dir ++ "/" ++ name ++ ".tmp", l0dir ++ "/" ++ name, dir ++ "/MANIFEST", dir ++ "/MANIFEST.tmp", SstFile.serialize(entries, 0n), tbl, name, levels, flushed, manifest_token)
+  flush_goA(dir, l0dir, l0dir ++ "/" ++ name ++ ".tmp", l0dir ++ "/" ++ name, dir ++ "/MANIFEST", dir ++ "/MANIFEST.tmp", SstFile.serialize_v2(Db.table_entries(tbl), 0n), tbl, name, levels, flushed, manifest_token)
 
 def flush(+db: Db.Db) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match db:

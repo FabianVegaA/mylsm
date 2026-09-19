@@ -9,8 +9,8 @@ recovery, and machine-checked laws for parts of the pure storage core.
 
 ## Quick start
 
-Requirements: Bend 2.0.4 or newer. Bend 2.0.5 is currently used during
-development.
+Requirements: Bend 2.0.4 or newer. Bend 2.0.13 was used for the latest
+SSTable v2 development and million-write validation.
 
 ```sh
 # Inspect available CPU/GPU/native capabilities
@@ -48,12 +48,13 @@ CPU.
 
 ## Correctness status
 
-`bend PROOF.bend` currently reports `All terms check.` The proof suite covers
-closed laws for key storage transitions, codecs, flush, compaction, recovery,
-and CPU/GPU worker agreement. Some general open-input properties and all host IO
-behavior still require stronger proofs or empirical validation. Passing the
-proof gate must not be interpreted as a proof of the entire operating system and
-storage stack.
+The proof suite contains witnesses for key storage transitions, codecs, flush,
+compaction, recovery, and CPU/GPU worker agreement. The current aggregate
+`bend PROOF.bend` run exceeds the 15-minute development gate without a
+diagnostic, so the complete proof gate is presently inconclusive. New SSTable v2
+closed fixtures and module-level checks compile, but some general open-input
+properties and all host IO behavior still require stronger proofs or empirical
+validation.
 
 ## Compaction performance status
 
@@ -65,8 +66,10 @@ table generations with legacy-name recovery. The first-compaction workload
 seconds on the development M1, but that run had only 2% free disk and is not a
 publishable comparison. See `bench/BASELINE.md`.
 
-The 1,000,000-write acceptance run remains pending on a host volume with at least
-15% free space. MyLSM still needs block-oriented SSTables, bounded multi-output
+The SSTable v2 acceptance run completed 1,000,000 durable writes and post-restart
+first/middle/last-key verification in 1,087.20 seconds on Bend 2.0.13. Its main
+L1 table was 29,175,202 bytes versus 103,339,329 bytes for the equivalent legacy
+v1 table. MyLSM still needs block-oriented lookups, bounded multi-output
 publication, stronger general proofs, and crash injection before making
 competitive or production claims.
 

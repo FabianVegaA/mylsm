@@ -10,6 +10,10 @@ import ./src/Manifest.bend as Manifest
 import ./src/MergeIter.bend as MergeIter
 import ./src/Db.bend as Db
 import ./src/SstFile.bend as SstFile
+import ./src/Decimal.bend as Decimal
+import ./src/SstFileV1Fast.bend as SstFileV1Fast
+import ./src/SstFileV2.bend as SstFileV2
+import ./src/SstStream.bend as SstStream
 import ./src/Flush.bend as Flush
 import ./src/Compact.bend as Compact
 import ./src/Recover.bend as Recover
@@ -305,6 +309,58 @@ law sstfile_rt:
 # LAW: shapeless input rejected fail-closed (closed)
 law sstfile_reject:
   {SstFile.parse("garbage") == None{} : Maybe<&2, Sstable.Table>}
+
+# --- SSTable v2 compact framing and legacy compatibility ---
+
+law decimal_internal_zero:
+  {Decimal.parse_complete("1010", 2000n) == Decimal.Accepted{Decimal.Dec{1010n, ""}} : Decimal.Parse}
+
+law decimal_leading_zero_reject:
+  {Decimal.parse_complete("01", 2000n) == Decimal.Rejected{Decimal.LeadingZero{}} : Decimal.Parse}
+
+def sst2_put_entries() -> List<&2, MemTable.Entry>:
+  Con{MemTable.Entry{"a", Some{"1"}}, Con{MemTable.Entry{"b", Some{"20"}}, Nil{}}}
+
+def sst2_del_entries() -> List<&2, MemTable.Entry>:
+  Con{MemTable.Entry{"a", None{}}, Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}}
+
+law sst2_put_roundtrip:
+  {SstFileV2.parse(SstFileV2.serialize(sst2_put_entries(), 1n)) == Some{Sstable.from_sorted_unique(sst2_put_entries(), 1n)} : Maybe<&2, Sstable.Table>}
+
+law sst2_del_roundtrip:
+  {SstFileV2.parse(SstFileV2.serialize(sst2_del_entries(), 1n)) == Some{Sstable.from_sorted_unique(sst2_del_entries(), 1n)} : Maybe<&2, Sstable.Table>}
+
+law sst2_checksum_reject:
+  {SstFileV2.parse(SstFileV2.body(sst2_put_entries(), 1n) ++ "#0") == None{} : Maybe<&2, Sstable.Table>}
+
+law sst2_duplicate_reject:
+  {SstFileV2.parse(SstFileV2.serialize(Con{MemTable.Entry{"a", Some{"new"}}, Con{MemTable.Entry{"a", Some{"old"}}, Nil{}}}, 1n)) == None{} : Maybe<&2, Sstable.Table>}
+
+law sst2_descending_reject:
+  {SstFileV2.parse(SstFileV2.serialize(Con{MemTable.Entry{"b", Some{"2"}}, Con{MemTable.Entry{"a", Some{"1"}}, Nil{}}}, 1n)) == None{} : Maybe<&2, Sstable.Table>}
+
+law sst2_dispatch_v2:
+  {SstFile.parse(SstFile.serialize_v2(sst2_del_entries(), 1n)) == Some{Sstable.from_sorted_unique(sst2_del_entries(), 1n)} : Maybe<&2, Sstable.Table>}
+
+law sst2_dispatch_v1:
+  {SstFile.parse(SstFile.serialize_v1(sst2_put_entries(), 1n)) == Some{Sstable.from_sorted_unique(sst2_put_entries(), 1n)} : Maybe<&2, Sstable.Table>}
+
+law sst2_v1_read_equiv:
+  {SstFile.parse(SstFile.serialize_v1(sst2_del_entries(), 1n)) == SstFile.parse(SstFile.serialize_v2(sst2_del_entries(), 1n)) : Maybe<&2, Sstable.Table>}
+
+law sst2_parser_decides:
+  for s: String
+  {SstFileV2.parser_decides(SstFileV2.parse_result(s)) == True{} : Bool}
+
+law sst1_fast_parser_decides:
+  for s: String
+  {SstFileV1Fast.parser_decides(SstFileV1Fast.parse_result(s)) == True{} : Bool}
+
+def sst2_feed_two(+s: String) -> Result<&1, &1, U32 & String, Sstable.Table>:
+  SstStream.finish_mode(SstStream.feed_mode(SstStream.feed_mode(SstStream.Unknown{}, String.take(s, 10n)), String.drop(s, 10n)))
+
+law sst2_chunk_agree:
+  {sst2_feed_two(SstFileV2.serialize(sst2_del_entries(), 1n)) == Done{Sstable.from_sorted_unique(sst2_del_entries(), 1n)} : Result<&1, &1, U32 & String, Sstable.Table>}
 
 def fl_pre() -> Db.Db:
   Db.Db{"/d", MemTable.MT{scan_mem()}, Nil{}, 0n, ""}

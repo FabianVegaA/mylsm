@@ -12,3 +12,5 @@ bench/results/
 .mylsm-20k-t8/
 .mylsm-100k/
 .mylsm-1m/
+.mylsm-v2-*/
+.mylsm-compaction-v2-*/

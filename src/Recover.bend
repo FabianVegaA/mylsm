@@ -3,6 +3,7 @@ import ./Keys.bend as Keys
 import ./MemTable.bend as MemTable
 import ./Sstable.bend as Sstable
 import ./SstFile.bend as SstFile
+import ./SstStream.bend as SstStream
 import ./Wal.bend as Wal
 import ./Manifest.bend as Manifest
 import ./Flush.bend as Flush
@@ -293,12 +294,6 @@ def l1_plus_disjoint(levels: List<&2, List<&2, Sstable.Table>>) -> Bool:
 
 # --- Loaders (self-recursive IO; fatal via IO.die, never silent) ---
 
-def parse_io(+mp: Maybe<&2, Sstable.Table>, +path: String) -> IO(Sstable.Table):
-  match mp:
-    case None{}:
-      IO.die(Sstable.Table, U32.from_nat(3n), "bad table: " ++ path)
-    case Some{tbl}:
-      IO.pure(Sstable.Table, tbl)
 
 def load_tables(names: List<&2, String>, +ldir: String, +dir: String, +acc: List<&2, Sstable.Table>) -> IO(List<&2, Sstable.Table>):
   match names:
@@ -306,8 +301,7 @@ def load_tables(names: List<&2, String>, +ldir: String, +dir: String, +acc: List
       IO.pure(List<&2, Sstable.Table>, List.reverse(&2, Sstable.Table, acc))
     case Con{+n, t}:
       do IO<List<&2, Sstable.Table>>:
-        s : String <- IO.try(String, Flush.read_file(dir ++ "/" ++ ldir ++ "/" ++ n))
-        tbl : Sstable.Table <- parse_io(SstFile.parse(s), n)
+        tbl : Sstable.Table <- IO.try(Sstable.Table, SstStream.read_table(dir ++ "/" ++ ldir ++ "/" ++ n))
         load_tables(t, ldir, dir, Con{tbl, acc})
 
 def ldir_io(+m: Maybe<&2, String>) -> IO(String):

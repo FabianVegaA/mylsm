@@ -8,6 +8,10 @@ import ./src/SortedRun.bend as SortedRun
 import ./src/Manifest.bend as Manifest
 import ./src/MergeIter.bend as MergeIter
 import ./src/SstFile.bend as SstFile
+import ./src/Decimal.bend as Decimal
+import ./src/SstFileV1Fast.bend as SstFileV1Fast
+import ./src/SstFileV2.bend as SstFileV2
+import ./src/SstStream.bend as SstStream
 import ./src/Flush.bend as Flush
 import ./src/Compact.bend as Compact
 import ./src/Recover.bend as Recover
@@ -142,6 +146,45 @@ def Laws.sstfile_rt():
   {==}
 
 def Laws.sstfile_reject():
+  {==}
+
+def Laws.decimal_internal_zero():
+  {==}
+
+def Laws.decimal_leading_zero_reject():
+  {==}
+
+def Laws.sst2_put_roundtrip():
+  {==}
+
+def Laws.sst2_del_roundtrip():
+  {==}
+
+def Laws.sst2_checksum_reject():
+  {==}
+
+def Laws.sst2_duplicate_reject():
+  {==}
+
+def Laws.sst2_descending_reject():
+  {==}
+
+def Laws.sst2_dispatch_v2():
+  {==}
+
+def Laws.sst2_dispatch_v1():
+  {==}
+
+def Laws.sst2_v1_read_equiv():
+  {==}
+
+def Laws.sst2_parser_decides(s):
+  {==}
+
+def Laws.sst1_fast_parser_decides(s):
+  {==}
+
+def Laws.sst2_chunk_agree():
   {==}
 
 def Laws.flush_hit_pre():

@@ -35,6 +35,12 @@ def exists(path: String) -> IO(Result<&1, &1, U32 & String, Bool>):
   import "./effs/exists.c"
   import "./effs/exists.js"
 
+# Returns `<byte-count>;<text>` for a positional chunk whose end is adjusted to
+# a complete UTF-8 boundary. The byte count advances the next positional read.
+def read_utf8_chunk(path: String, offset: Nat, max_bytes: Nat) -> IO(Result<&1, &1, U32 & String, String>):
+  import "./effs/read_utf8_chunk.c"
+  import "./effs/read_utf8_chunk.js"
+
 # Pure accumulator step (leaf: matches structurally, never recurses).
 # Past-end fetches answer "" (SNil{}), which is skipped.
 
