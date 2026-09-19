@@ -145,10 +145,10 @@ Adding a numeric-key instantiation later must not change the core: only the
 
 Module layout: `src/MemTable.bend`, `src/Wal.bend`, `src/Sstable.bend`,
 `src/Manifest.bend`, `src/MergeIter.bend`, `src/Db.bend` (public API:
-`put`, `get`, `delete`, `write_batch`, `scan`), plus `LAWS.bend` (human-owned
-claims) and `PROOF.bend` (agent-owned proofs) at the repo root.
+`put`, `get`, `delete`, `write_batch`, `scan`), plus `laws/*.bend` (human-owned
+claims) and `proofs/*Proof.bend` (agent-owned proofs) at the repo root.
 
-### 3.2 Laws (all stated in LAWS.bend, all proven in PROOF.bend)
+### 3.2 Laws (all stated in laws/*.bend, all proven in proofs/*Proof.bend)
 
 Trust root: Bend Base primitives (arithmetic, comparison, String/Char
 ops) are the trusted kernel — pinned by closed-term laws and the Task 12
@@ -271,7 +271,7 @@ Structural / representation laws:
     partial functions, mandatory termination. The law pins the property so
     it can never regress; §8 hammers it empirically.)
 
-`bend PROOF.bend` printing "All terms check." is the commit gate for every
+`./proofs/run.sh` printing "All terms check." is the commit gate for every
 change, per repo house rules.
 
 ### 3.3 Memory-safety rules (no unsafe, by construction)
@@ -358,7 +358,7 @@ gives us; ordered arrays / B+tree nodes dominate here.
 
 ## 5. Testing and benchmark harness
 
-- **Correctness**: the sixteen laws above plus the `PROOF.bend` gate are
+- **Correctness**: the sixteen laws above plus the `proofs/*Proof.bend` gate are
   the test suite. No hand-written unit-test suite duplicates what a proof
   states; property checks exist only as scaffolding while a proof is being
   built. Proofs are written before or alongside code, never after.
@@ -458,7 +458,7 @@ a first-class workload.
 
 ## 9. Release gates (v1 ships only when all hold)
 
-1. `bend PROOF.bend` green on all sixteen laws, on a clean checkout.
+1. `./proofs/run.sh` green on all sixteen laws, on a clean checkout.
 2. Fuzz clean: ≥1M random/mutated inputs through each of the three
    decoders (WAL, SSTable block, Manifest) with zero crashes, zero hangs,
    zero silent misparses (every rejection explicit).

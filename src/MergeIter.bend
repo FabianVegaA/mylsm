@@ -64,4 +64,4 @@ def merge(mem: List<&2, MemTable.Entry>, levels: List<&2, List<&2, MemTable.Entr
 def scan(+merged: List<&2, MemTable.Entry>, lo: String, hi: String) -> List<&2, MemTable.Entry>:
   scan_go(List.length(&2, MemTable.Entry, merged), lo, hi, Nil{}, merged)
 
-# --- Closed-vector laws live in LAWS.bend (spec laws 4, 5, 10) ---
+# --- Closed-vector laws live in laws/MergeIter.bend (spec laws 4, 5, 10) ---

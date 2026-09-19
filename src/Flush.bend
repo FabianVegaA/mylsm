@@ -175,4 +175,4 @@ def flush(+db: Db.Db) -> IO(Result<&1, &1, U32 & String, Db.Db>):
             case Con{_, _}:
               flush_pre(dir, entries, levels, flushed, manifest_token)
 
-# --- Closed-vector laws live in LAWS.bend (spec law 6) ---
+# --- Closed-vector laws live in laws/Flush.bend (spec law 6) ---

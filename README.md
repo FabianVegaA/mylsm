@@ -48,13 +48,16 @@ CPU.
 
 ## Correctness status
 
-The proof suite contains witnesses for key storage transitions, codecs, flush,
-compaction, recovery, and CPU/GPU worker agreement. The current aggregate
-`bend PROOF.bend` run exceeds the 15-minute development gate without a
-diagnostic, so the complete proof gate is presently inconclusive. New SSTable v2
-closed fixtures and module-level checks compile, but some general open-input
-properties and all host IO behavior still require stronger proofs or empirical
-validation.
+The modular proof suite contains witnesses for key storage transitions, codecs,
+flush, compaction, recovery, and CPU/GPU worker agreement. Run
+`./proofs/run.sh` for the bounded parallel proof gate, or target an individual
+`proofs/*Proof.bend` module while developing. During the modularization check,
+22 of 33 isolated modules passed and 11 closed SSTable/Bloom fixtures reached
+the five-minute per-module timeout; `BloomZeroEstimateProof` also remained
+inconclusive after 15 minutes in isolation. A timeout is not a passing proof.
+Closed fixtures provide concrete executable evidence, but some general
+open-input properties and all host IO behavior still require stronger proofs or
+empirical validation.
 
 ## Compaction performance status
 

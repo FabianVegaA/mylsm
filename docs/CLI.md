@@ -194,12 +194,12 @@ threads <n>
   because Bend runtime thread count is process-global.
 
 A session can switch to `mode gpu` only when the process was started with GPU
-support. CPU and GPU worker agreement is covered by closed laws in `LAWS.bend`.
+support. CPU and GPU worker agreement is covered by closed laws in `laws/Demo.bend`.
 
 ## Validation commands
 
 ```sh
-bend PROOF.bend
+./proofs/run.sh
 printf 'hello\n' | MYLSM_TEST_ENV=world bend bench/console_smoke.bend
 bench/cli_smoke.sh
 ```

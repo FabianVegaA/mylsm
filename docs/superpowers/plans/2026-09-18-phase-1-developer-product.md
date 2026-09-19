@@ -1,7 +1,7 @@
 # Phase 1 — Useful Developer Product Implementation Plan
 
 > **For agentic workers:** follow `AGENT.md`. Run `bend guide` before Bend work,
-> keep product rules in `LAWS.bend`, run `bend PROOF.bend` before every commit,
+> keep product rules in `laws/*.bend`, run `./proofs/run.sh` before every commit,
 > and parallelize only independent pure work. Implement tasks in order and keep
 > each checkpoint green.
 
@@ -10,7 +10,7 @@ persistent Bend REPL, durable commands, timing, runtime-mode controls,
 administrative operations, predictable errors, and import/export foundations.
 
 **Baseline:** branch `feature/cli-demo-runtime`; `bin/mylsm demo`, native CPU,
-native Metal GPU, `bend PROOF.bend`, and `bench/cli_smoke.sh` already pass.
+native Metal GPU, `./proofs/run.sh`, and `bench/cli_smoke.sh` already pass.
 
 **Related design:**
 
@@ -30,7 +30,7 @@ native Metal GPU, `bend PROOF.bend`, and `bench/cli_smoke.sh` already pass.
   switch CPU/GPU compute dispatch only if GPU was enabled at process start;
   changing threads requires a controlled restart.
 - Host effects receive C/JS twins and empirical smoke tests. Pure parsing and
-  state transitions receive laws in `LAWS.bend` and proofs in `PROOF.bend`.
+  state transitions receive laws in `laws/*.bend` and proofs in `proofs/*Proof.bend`.
 - Initial command grammar uses whitespace-delimited tokens. Quoted strings are a
   later task in this phase and must not be approximated unsafely.
 
@@ -106,7 +106,7 @@ Also compile the native path where clang is available.
 Host effects have no laws, but the full proof gate must remain green:
 
 ```sh
-bend PROOF.bend
+./proofs/run.sh
 git add src/Console.bend src/effs/read_line.* src/effs/get_env.* bench/console_smoke.bend bench/cli_smoke.sh
 git commit -m "feat: add audited console effects for the REPL"
 ```
@@ -119,8 +119,8 @@ git commit -m "feat: add audited console effects for the REPL"
 
 - Create: `app/repl_types.bend`
 - Create: `app/repl_parser.bend`
-- Modify: `LAWS.bend`
-- Modify: `PROOF.bend`
+- Modify: `laws/*.bend`
+- Modify: `proofs/*Proof.bend`
 
 ### Step 1: Define commands and state modes
 
@@ -202,13 +202,13 @@ an honest open parser theorem is practical.
 ### Step 4: Validate
 
 ```sh
-bend PROOF.bend
+./proofs/run.sh
 ```
 
 ### Step 5: Commit checkpoint
 
 ```sh
-git add app/repl_types.bend app/repl_parser.bend LAWS.bend PROOF.bend
+git add app/repl_types.bend app/repl_parser.bend LAWS../proofs/run.sh
 git commit -m "feat: define the proven REPL command language"
 ```
 
@@ -299,7 +299,7 @@ Restart against the same directory and confirm the deletion remains visible.
 ### Step 6: Commit checkpoint
 
 ```sh
-bend PROOF.bend
+./proofs/run.sh
 git add app/repl.bend app/repl_exec.bend app/README.md bin/mylsm
 git commit -m "feat: add persistent Bend REPL with durable commands"
 ```
@@ -313,8 +313,8 @@ git commit -m "feat: add persistent Bend REPL with durable commands"
 - Modify: `app/repl_types.bend`
 - Modify: `app/repl_exec.bend`
 - Modify: `app/repl.bend`
-- Modify: `LAWS.bend`
-- Modify: `PROOF.bend`
+- Modify: `laws/*.bend`
+- Modify: `proofs/*Proof.bend`
 
 ### Step 1: Implement timing policy as pure state
 
@@ -357,12 +357,12 @@ time <command>
 ### Step 4: Test
 
 Pipe commands and assert timing lines appear only when expected. Add parser and
-state-transition laws, then run `bend PROOF.bend`.
+state-transition laws, then run `./proofs/run.sh`.
 
 ### Step 5: Commit checkpoint
 
 ```sh
-git add app/repl_types.bend app/repl_exec.bend app/repl.bend LAWS.bend PROOF.bend bench/cli_smoke.sh
+git add app/repl_types.bend app/repl_exec.bend app/repl.bend LAWS../proofs/run.sh bench/cli_smoke.sh
 git commit -m "feat: add precise REPL timing controls"
 ```
 
@@ -376,8 +376,8 @@ git commit -m "feat: add precise REPL timing controls"
 - Modify: `app/demo_helpers.bend`
 - Modify: `bin/mylsm`
 - Modify: `docs/CLI.md`
-- Modify: `LAWS.bend`
-- Modify: `PROOF.bend`
+- Modify: `laws/*.bend`
+- Modify: `proofs/*Proof.bend`
 
 ### Step 1: Pure compute dispatch
 
@@ -444,8 +444,8 @@ Test:
 ### Step 5: Commit checkpoint
 
 ```sh
-bend PROOF.bend
-git add app/repl_exec.bend app/demo_helpers.bend bin/mylsm docs/CLI.md LAWS.bend PROOF.bend bench/cli_smoke.sh
+./proofs/run.sh
+git add app/repl_exec.bend app/demo_helpers.bend bin/mylsm docs/CLI.md LAWS../proofs/run.sh bench/cli_smoke.sh
 git commit -m "feat: control REPL CPU GPU and timing modes"
 ```
 
@@ -458,8 +458,8 @@ git commit -m "feat: control REPL CPU GPU and timing modes"
 - Modify: `app/repl_parser.bend`
 - Modify: `app/repl_exec.bend`
 - Modify: `src/Db.bend` only for missing pure projections
-- Modify: `LAWS.bend`
-- Modify: `PROOF.bend`
+- Modify: `laws/*.bend`
+- Modify: `proofs/*Proof.bend`
 
 ### Step 1: Scan
 
@@ -502,8 +502,8 @@ identical reads/scans. Existing preservation laws remain mandatory.
 ### Step 5: Commit checkpoint
 
 ```sh
-bend PROOF.bend
-git add app/repl_parser.bend app/repl_exec.bend src/Db.bend LAWS.bend PROOF.bend bench/cli_smoke.sh
+./proofs/run.sh
+git add app/repl_parser.bend app/repl_exec.bend src/Db.bend LAWS../proofs/run.sh bench/cli_smoke.sh
 git commit -m "feat: add REPL scan stats and maintenance commands"
 ```
 
@@ -516,8 +516,8 @@ git commit -m "feat: add REPL scan stats and maintenance commands"
 - Create: `app/repl_lexer.bend`
 - Modify: `app/repl_parser.bend`
 - Modify: `app/repl_exec.bend`
-- Modify: `LAWS.bend`
-- Modify: `PROOF.bend`
+- Modify: `laws/*.bend`
+- Modify: `proofs/*Proof.bend`
 - Modify: `docs/CLI.md`
 
 ### Step 1: Pure lexer
@@ -561,8 +561,8 @@ Run malformed, truncated, and checksum-corrupt fixtures.
 ### Step 5: Commit checkpoint
 
 ```sh
-bend PROOF.bend
-git add app/repl_lexer.bend app/repl_parser.bend app/repl_exec.bend docs/CLI.md LAWS.bend PROOF.bend bench/cli_smoke.sh
+./proofs/run.sh
+git add app/repl_lexer.bend app/repl_parser.bend app/repl_exec.bend docs/CLI.md LAWS../proofs/run.sh bench/cli_smoke.sh
 git commit -m "feat: add quoted REPL values and data interchange"
 ```
 
@@ -599,7 +599,7 @@ eligibility, and errors. Include a scripted session and recovery example.
 ### Step 3: Final validation
 
 ```sh
-bend PROOF.bend
+./proofs/run.sh
 bend bench/fuzz.bend
 sh -n bin/mylsm bench/cli_smoke.sh
 bench/cli_smoke.sh
@@ -632,6 +632,6 @@ git commit -m "docs: complete the Phase 1 developer product"
 - CPU-only machines remain fully functional.
 - Native GPU mode is claimed only with a built `.gpu` artifact and successful
   execution.
-- All new pure behavior has closed laws, `bend PROOF.bend` passes, and host
+- All new pure behavior has closed laws, `./proofs/run.sh` passes, and host
   effects have C/JS smoke coverage.
 - `README.md` labels MyLSM as a developer product, not production-ready.

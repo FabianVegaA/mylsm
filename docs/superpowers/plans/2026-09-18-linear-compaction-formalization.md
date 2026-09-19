@@ -1,8 +1,8 @@
 # Linear Compaction and Complete Pure-Core Formalization Plan
 
 > **For agentic workers:** follow `AGENT.md`. Run `bend guide` before Bend work,
-> keep every load-bearing pure rule in `LAWS.bend`, add its witness to
-> `PROOF.bend`, run `bend PROOF.bend` before every commit, and parallelize only
+> keep every load-bearing pure rule in `laws/*.bend`, add its witness to
+> `proofs/*Proof.bend`, run `./proofs/run.sh` before every commit, and parallelize only
 > independent work with disjoint write sets. Do not use `@unsafe`.
 
 **Goal:** replace the current quadratic compaction pipeline with a sorted-run
@@ -54,8 +54,8 @@ The work is complete only when all of the following are true:
 - Output tables are bounded and pairwise range-disjoint.
 - Existing on-disk files remain readable, or a versioned migration is provided.
 - Every pure correctness claim in the formalization matrix below has a law in
-  `LAWS.bend` and a checking witness in `PROOF.bend`.
-- `bend PROOF.bend`, `bend bench/fuzz.bend`, `bench/cli_smoke.sh`, compaction
+  `laws/*.bend` and a checking witness in `proofs/*Proof.bend`.
+- `./proofs/run.sh`, `bend bench/fuzz.bend`, `bench/cli_smoke.sh`, compaction
   differential tests, and crash tests all pass.
 - The 20,485-write cliff is eliminated and the 1,000,000-write benchmark
   completes within the initial 30-minute gate on the same machine and disk
@@ -203,8 +203,8 @@ as substitutes for those general theorems.
 
 ## Formalization matrix
 
-Each row requires: a named pure helper, a law in `LAWS.bend`, a same-name witness
-in `PROOF.bend`, and at least one non-vacuous closed fixture. Laws marked general
+Each row requires: a named pure helper, a law in `laws/*.bend`, a same-name witness
+in `proofs/*Proof.bend`, and at least one non-vacuous closed fixture. Laws marked general
 must quantify arbitrary inputs under explicit well-formedness preconditions;
 closed normalization fixtures supplement those theorems but never replace them.
 If the installed Bend checker cannot accept a required general theorem, document
@@ -315,7 +315,7 @@ bash -n bench/million_writes.sh
 bash -n bench/compaction_regression.sh
 MYLSM_BENCH_RESET=1 bench/million_writes.sh 4097 .mylsm-compaction-baseline
 bench/compaction_regression.sh baseline
-bend PROOF.bend
+./proofs/run.sh
 ```
 
 ### Checkpoint
@@ -333,8 +333,8 @@ git commit -m "bench: capture the compaction performance cliff"
 
 - Modify: `src/Keys.bend`
 - Create: `src/SortedRun.bend`
-- Modify: `LAWS.bend`
-- Modify: `PROOF.bend`
+- Modify: `laws/*.bend`
+- Modify: `proofs/*Proof.bend`
 
 ### Foundational key-order API and laws
 
@@ -371,7 +371,7 @@ inside preservation proofs.
 
 ### Steps
 
-1. Prove K1–K6 in `Keys.bend`/`LAWS.bend`/`PROOF.bend`, including empty,
+1. Prove K1–K6 in `Keys.bend`/`laws/*.bend`/`proofs/*Proof.bend`, including empty,
    prefix-related, unequal-length, differing-character, and Unicode-scalar
    structural branches.
 2. Implement validators with structural or fuel-bounded recursion.
@@ -385,13 +385,13 @@ inside preservation proofs.
 6. Port existing compaction fixtures to model-level fixtures.
 7. Add non-vacuity laws showing one hit, one tombstone, one miss, and one bounded
    scan before adding preservation equalities.
-8. Add `{==}` witnesses in `PROOF.bend` where normalization closes the law; use
+8. Add `{==}` witnesses in `proofs/*Proof.bend` where normalization closes the law; use
    explicit structural witness recursion otherwise.
 
 ### Gate
 
 ```sh
-bend PROOF.bend
+./proofs/run.sh
 ```
 
 Do not implement the optimized merge until the reference model is green.
@@ -399,7 +399,7 @@ Do not implement the optimized merge until the reference model is green.
 ### Checkpoint
 
 ```sh
-git add src/Keys.bend src/SortedRun.bend LAWS.bend PROOF.bend
+git add src/Keys.bend src/SortedRun.bend LAWS../proofs/run.sh
 git commit -m "proof: define compaction reference semantics"
 ```
 
@@ -410,8 +410,8 @@ git commit -m "proof: define compaction reference semantics"
 **Files:**
 
 - Modify: `src/SortedRun.bend`
-- Modify: `LAWS.bend`
-- Modify: `PROOF.bend`
+- Modify: `laws/*.bend`
+- Modify: `proofs/*Proof.bend`
 - Create: `bench/sorted_run_smoke.bend`
 
 ### Required API
@@ -456,13 +456,13 @@ def merge_newer(
 
 ```sh
 bend bench/sorted_run_smoke.bend
-bend PROOF.bend
+./proofs/run.sh
 ```
 
 ### Checkpoint
 
 ```sh
-git add src/SortedRun.bend bench/sorted_run_smoke.bend LAWS.bend PROOF.bend
+git add src/SortedRun.bend bench/sorted_run_smoke.bend LAWS../proofs/run.sh
 git commit -m "feat: add proven linear sorted-run merge"
 ```
 
@@ -473,8 +473,8 @@ git commit -m "feat: add proven linear sorted-run merge"
 **Files:**
 
 - Modify: `src/SortedRun.bend`
-- Modify: `LAWS.bend`
-- Modify: `PROOF.bend`
+- Modify: `laws/*.bend`
+- Modify: `proofs/*Proof.bend`
 - Modify: `bench/sorted_run_smoke.bend`
 
 ### Required API
@@ -526,7 +526,7 @@ not commit machine noise unless updating an explicit baseline record.
 ### Checkpoint
 
 ```sh
-git add src/SortedRun.bend bench/sorted_run_smoke.bend LAWS.bend PROOF.bend
+git add src/SortedRun.bend bench/sorted_run_smoke.bend LAWS../proofs/run.sh
 git commit -m "feat: merge sorted runs with stable precedence"
 ```
 
@@ -537,8 +537,8 @@ git commit -m "feat: merge sorted runs with stable precedence"
 **Files:**
 
 - Modify: `src/Sstable.bend`
-- Modify: `LAWS.bend`
-- Modify: `PROOF.bend`
+- Modify: `laws/*.bend`
+- Modify: `proofs/*Proof.bend`
 - Create: `bench/bloom_bench.bend`
 
 ### Steps
@@ -572,13 +572,13 @@ git commit -m "feat: merge sorted runs with stable precedence"
 
 ```sh
 bend bench/bloom_bench.bend
-bend PROOF.bend
+./proofs/run.sh
 ```
 
 ### Checkpoint
 
 ```sh
-git add src/Sstable.bend bench/bloom_bench.bend LAWS.bend PROOF.bend
+git add src/Sstable.bend bench/bloom_bench.bend LAWS../proofs/run.sh
 git commit -m "perf: replace linear Bloom bit indexing"
 ```
 
@@ -593,8 +593,8 @@ git commit -m "perf: replace linear Bloom bit indexing"
 - Modify: `src/Db.bend`
 - Modify: `src/Flush.bend`
 - Modify: `src/Recover.bend`
-- Modify: `LAWS.bend`
-- Modify: `PROOF.bend`
+- Modify: `laws/*.bend`
+- Modify: `proofs/*Proof.bend`
 
 ### Required APIs
 
@@ -635,7 +635,7 @@ def table_count(table: Table) -> Nat
 ### Gate
 
 ```sh
-bend PROOF.bend
+./proofs/run.sh
 bend bench/fuzz.bend
 bench/cli_smoke.sh
 ```
@@ -643,7 +643,7 @@ bench/cli_smoke.sh
 ### Checkpoint
 
 ```sh
-git add src/Sstable.bend src/SstFile.bend src/Db.bend src/Flush.bend src/Recover.bend LAWS.bend PROOF.bend
+git add src/Sstable.bend src/SstFile.bend src/Db.bend src/Flush.bend src/Recover.bend LAWS../proofs/run.sh
 git commit -m "feat: add linear SSTable construction and metadata"
 ```
 
@@ -658,8 +658,8 @@ git commit -m "feat: add linear SSTable construction and metadata"
 - Modify: `src/Manifest.bend`
 - Modify: `src/Recover.bend`
 - Modify: `bench/fault_inject.sh`
-- Modify: `LAWS.bend`
-- Modify: `PROOF.bend`
+- Modify: `laws/*.bend`
+- Modify: `proofs/*Proof.bend`
 - Modify: `bench/compaction_bench.bend`
 
 ### Steps
@@ -712,7 +712,7 @@ git commit -m "feat: add linear SSTable construction and metadata"
 ### Gate
 
 ```sh
-bend PROOF.bend
+./proofs/run.sh
 bend bench/compaction_bench.bend
 bench/compaction_regression.sh linear-core
 bench/fault_inject.sh zero-output
@@ -724,7 +724,7 @@ continuing.
 ### Checkpoint
 
 ```sh
-git add src/Compact.bend src/MergeIter.bend src/Manifest.bend src/Recover.bend bench/compaction_bench.bend bench/fault_inject.sh LAWS.bend PROOF.bend
+git add src/Compact.bend src/MergeIter.bend src/Manifest.bend src/Recover.bend bench/compaction_bench.bend bench/fault_inject.sh LAWS../proofs/run.sh
 git commit -m "perf: compact SSTables with linear sorted-run merges"
 ```
 
@@ -736,8 +736,8 @@ git commit -m "perf: compact SSTables with linear sorted-run merges"
 
 - Modify: `src/SortedRun.bend`
 - Modify: `src/Compact.bend`
-- Modify: `LAWS.bend`
-- Modify: `PROOF.bend`
+- Modify: `laws/*.bend`
+- Modify: `proofs/*Proof.bend`
 
 ### Required API
 
@@ -773,14 +773,14 @@ policy and add a regression fixture before optimization.
 ### Gate
 
 ```sh
-bend PROOF.bend
+./proofs/run.sh
 bend bench/compaction_bench.bend
 ```
 
 ### Checkpoint
 
 ```sh
-git add src/SortedRun.bend src/Compact.bend LAWS.bend PROOF.bend
+git add src/SortedRun.bend src/Compact.bend LAWS../proofs/run.sh
 git commit -m "perf: process compacted tombstones linearly"
 ```
 
@@ -792,8 +792,8 @@ git commit -m "perf: process compacted tombstones linearly"
 
 - Modify: `src/SortedRun.bend`
 - Modify: `src/Compact.bend`
-- Modify: `LAWS.bend`
-- Modify: `PROOF.bend`
+- Modify: `laws/*.bend`
+- Modify: `proofs/*Proof.bend`
 
 ### Required API
 
@@ -821,7 +821,7 @@ def partition(
 ### Gate
 
 ```sh
-bend PROOF.bend
+./proofs/run.sh
 bend bench/fuzz.bend
 bench/compaction_regression.sh partitioned-pure
 ```
@@ -843,8 +843,8 @@ after the Task 9 crash gate.
 - Modify: `src/Manifest.bend`
 - Modify: `src/Recover.bend`
 - Modify: `src/Flush.bend`
-- Modify: `LAWS.bend`
-- Modify: `PROOF.bend`
+- Modify: `laws/*.bend`
+- Modify: `proofs/*Proof.bend`
 - Modify: `bench/fault_inject.sh`
 - Create: `bench/compact_crash_oracle.bend`
 - Modify: `docs/superpowers/specs/2026-09-17-lsm-bend-design.md`
@@ -896,14 +896,14 @@ These are empirical crash tests, not Bend proofs over host IO.
 
 ```sh
 bench/fault_inject.sh
-bend PROOF.bend
+./proofs/run.sh
 bench/cli_smoke.sh
 ```
 
 ### Checkpoint
 
 ```sh
-git add src/SortedRun.bend src/Compact.bend src/Manifest.bend src/Recover.bend src/Flush.bend bench/fault_inject.sh bench/compact_crash_oracle.bend LAWS.bend PROOF.bend docs/superpowers/specs/2026-09-17-lsm-bend-design.md
+git add src/SortedRun.bend src/Compact.bend src/Manifest.bend src/Recover.bend src/Flush.bend bench/fault_inject.sh bench/compact_crash_oracle.bend LAWS../proofs/run.sh docs/superpowers/specs/2026-09-17-lsm-bend-design.md
 git commit -m "test: harden multi-output compaction publication"
 ```
 
@@ -915,8 +915,8 @@ git commit -m "test: harden multi-output compaction publication"
 
 - Modify: `src/SortedRun.bend`
 - Modify: `src/Compact.bend`
-- Modify: `LAWS.bend`
-- Modify: `PROOF.bend`
+- Modify: `laws/*.bend`
+- Modify: `proofs/*Proof.bend`
 - Modify: `bench/compaction_bench.bend`
 
 ### Rules
@@ -950,7 +950,7 @@ git commit -m "test: harden multi-output compaction publication"
 ### Gate
 
 ```sh
-bend PROOF.bend
+./proofs/run.sh
 MYLSM_THREADS=1 bend bench/compaction_bench.bend -o .mylsm/build/compact-bench
 .mylsm/build/compact-bench --threads 1
 .mylsm/build/compact-bench --threads 8
@@ -959,7 +959,7 @@ MYLSM_THREADS=1 bend bench/compaction_bench.bend -o .mylsm/build/compact-bench
 ### Checkpoint
 
 ```sh
-git add src/SortedRun.bend src/Compact.bend bench/compaction_bench.bend LAWS.bend PROOF.bend
+git add src/SortedRun.bend src/Compact.bend bench/compaction_bench.bend LAWS../proofs/run.sh
 git commit -m "perf: parallelize disjoint compaction ranges"
 ```
 
@@ -997,8 +997,8 @@ git commit -m "perf: parallelize disjoint compaction ranges"
 ### Gate
 
 ```sh
-grep -R "build_go\|insert_sorted" src app bench LAWS.bend PROOF.bend
-bend PROOF.bend
+grep -R "build_go\|insert_sorted" src app bench LAWS../proofs/run.sh
+./proofs/run.sh
 bend bench/fuzz.bend
 bench/cli_smoke.sh
 bench/compaction_regression.sh final
@@ -1007,7 +1007,7 @@ bench/compaction_regression.sh final
 ### Checkpoint
 
 ```sh
-git add src app bench LAWS.bend PROOF.bend docs
+git add src app bench LAWS../proofs/run.sh docs
 git commit -m "refactor: remove quadratic SSTable construction"
 ```
 
@@ -1056,24 +1056,24 @@ median. Do not reuse a recovered database for a clean-write throughput claim.
 - 1,000,000 writes must complete within 30 minutes on the same development
   machine; this is only a first regression gate, not a competitiveness claim.
 - Recovery must observe exactly 1,000,000 live benchmark keys.
-- `bend PROOF.bend` must still print `All terms check.`
+- `./proofs/run.sh` must still print `All terms check.`
 
 ### Final checkpoint
 
 ```sh
-bend PROOF.bend
+./proofs/run.sh
 bend bench/fuzz.bend
 bench/cli_smoke.sh
 bench/fault_inject.sh
 bench/compaction_regression.sh final
 git diff --check
-git add src bench docs LAWS.bend PROOF.bend .gitignore
+git add src bench docs LAWS../proofs/run.sh .gitignore
 git commit -m "perf: complete proven linear compaction"
 ```
 
 ---
 
-## Required `PROOF.bend` structure
+## Required `proofs/*Proof.bend` structure
 
 Append witnesses in the same order as their laws. Keep the existing witness
 names untouched until migration is complete. The final compaction section must
@@ -1196,7 +1196,7 @@ def Laws.partition_worker_agrees(...):
 ```
 
 Ellipses in this planning document are signatures to be resolved during proof
-implementation, not code to paste into `PROOF.bend`. Every final witness must
+implementation, not code to paste into `proofs/*Proof.bend`. Every final witness must
 have a concrete Bend 2 signature accepted by the checker.
 
 ## Review checklist

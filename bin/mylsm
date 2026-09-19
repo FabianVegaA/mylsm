@@ -19,7 +19,7 @@ Commands:
   demo                  run the durable demonstration (default)
   repl [--dir PATH]     open the interactive persistent REPL
   doctor                report Bend, CPU, compiler, and GPU capabilities
-  check                 run bend PROOF.bend
+  check                 run the modular proof suite
   fuzz                  run the decoder smoke corpus
   bench                 run the benchmark smoke program
   build                 compile the native demo
@@ -204,7 +204,7 @@ command=${1:-demo}
 case "$command" in
   --help|-h) usage ;;
   doctor) doctor ;;
-  check) exec bend "$ROOT/PROOF.bend" ;;
+  check) exec "$ROOT/proofs/run.sh" ;;
   fuzz) exec bend "$ROOT/bench/fuzz.bend" ;;
   bench) exec bend "$ROOT/bench/bench.bend" ;;
   build) native_build "$DEMO" "$DEMO_BUILD" ;;

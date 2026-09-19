@@ -320,7 +320,7 @@ def rem_go(fuel: Nat, +rem: List<&2, Sstable.Table>, +acc: List<&2, String>, tab
 def rem_names(+tabs: List<&2, Sstable.Table>, +names: List<&2, String>, +rem: List<&2, Sstable.Table>) -> List<&2, String>:
   rem_go(List.length(&2, Sstable.Table, tabs), rem, Nil{}, tabs, names)
 
-# --- Closed-vector laws live in LAWS.bend (spec laws 6, 11, 12) ---
+# --- Closed-vector laws live in laws/Compact.bend (spec laws 6, 11, 12) ---
 
 # --- IO chain (Task 9b): output file + manifest rewrite + input removal.
 # Crash discipline mirrors flush: output durable, then manifest (tmp +

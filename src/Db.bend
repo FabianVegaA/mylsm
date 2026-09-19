@@ -119,4 +119,4 @@ def db_put(+db: Db, +k: String, +v: String) -> IO(Result<&1, &1, U32 & String, D
 def db_del(+db: Db, +k: String) -> IO(Result<&1, &1, U32 & String, Db>):
   db_write(db, Wal.Batch{Con{Wal.Del{k}, Nil{}}})
 
-# --- Closed-vector laws live in LAWS.bend (spec laws 1, 2, 3, 7) ---
+# --- Closed-vector laws live in laws/Db.bend (spec laws 1, 2, 3, 7) ---

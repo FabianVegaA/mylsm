@@ -140,14 +140,14 @@ mode must silently fall back to CPU with a visible explanation.
 - GPU detection must never affect WAL ordering, fsync, recovery, or on-disk format.
 - If native compilation fails because clang/Metal/CUDA is unavailable, the CLI
   must report the failed capability and offer the portable `bend file.bend` path.
-- Existing `bend PROOF.bend` remains the mandatory proof gate.
+- Existing `./proofs/run.sh` remains the mandatory proof gate.
 
 ## 7. Verification gates
 
 The feature is complete when:
 
 1. `bin/mylsm doctor` reports capabilities without modifying the repository.
-2. `bin/mylsm check` runs `bend PROOF.bend` successfully.
+2. `bin/mylsm check` runs `./proofs/run.sh` successfully.
 3. `bin/mylsm demo --cpu` completes and prints the expected read/delete results.
 4. `bin/mylsm demo` selects GPU only when detection and native compilation succeed.
 5. A CPU-only host completes the demo without GPU-specific errors.

@@ -1,8 +1,8 @@
 # SSTable v2, Linear Recovery, and Formalization Plan
 
 > **For agentic workers:** follow `AGENT.md`. Run `bend guide` before Bend work,
-> keep load-bearing pure rules in `LAWS.bend`, add corresponding witnesses to
-> `PROOF.bend`, run `bend PROOF.bend` before committing, parallelize only
+> keep load-bearing pure rules in `laws/*.bend`, add corresponding witnesses to
+> `proofs/*Proof.bend`, run `./proofs/run.sh` before committing, parallelize only
 > independent work with disjoint write sets, and do not use `@unsafe`.
 
 ## Goal
@@ -40,7 +40,7 @@ Measured results:
 
 Still incomplete:
 
-- the aggregate `bend PROOF.bend` gate exceeds 15 minutes without diagnostics;
+- the aggregate `./proofs/run.sh` gate exceeds 15 minutes without diagnostics;
 - not every quantified theorem in the matrix has an accepted general proof;
 - crash injection and the complete corruption/chunk-boundary matrix remain
   empirical follow-up work.
@@ -419,7 +419,7 @@ leave that matrix row incomplete.
 
 ## Formalization matrix
 
-Every row requires a law in `LAWS.bend`, a same-name witness in `PROOF.bend`, and
+Every row requires a law in `laws/*.bend`, a same-name witness in `proofs/*Proof.bend`, and
 non-vacuous fixtures where applicable.
 
 | ID | Law | Required statement |
@@ -479,7 +479,7 @@ not inference alone.
 Files:
 
 - create `src/Decimal.bend`;
-- update `LAWS.bend` and `PROOF.bend`.
+- update `laws/*.bend` and `proofs/*Proof.bend`.
 
 Tasks:
 
@@ -497,7 +497,7 @@ Files:
 
 - create `src/SstFileV2.bend`;
 - adapt `src/SstFile.bend` dispatcher;
-- update `LAWS.bend`, `PROOF.bend`, and `bench/fuzz.bend`.
+- update `laws/*.bend`, `proofs/*Proof.bend`, and `bench/fuzz.bend`.
 
 Tasks:
 
@@ -597,7 +597,7 @@ bend src/SstFileV2.bend
 bend src/SstFile.bend
 bend src/SstStream.bend
 bend src/Recover.bend
-bend PROOF.bend
+./proofs/run.sh
 bend bench/fuzz.bend
 bench/cli_smoke.sh
 MYLSM_BENCH_RESET=1 bench/compaction_regression.sh final
@@ -683,7 +683,7 @@ Update:
 - the design spec with the exact v2 grammar and limits.
 
 Do not describe the host streaming path as formally proven. Do not call the
-formalization complete while any required quantified law or `PROOF.bend` gate is
+formalization complete while any required quantified law or `proofs/*Proof.bend` gate is
 incomplete.
 
 ## Commit sequence
@@ -711,9 +711,9 @@ Do not combine a format switch with an unvalidated parser rewrite in one commit.
 - [ ] Production recovery consumes chunks without building the encoded file as one String.
 - [ ] Checksum is folded over exactly the body.
 - [ ] Sortedness, uniqueness, count, metadata, and tombstones are preserved.
-- [ ] Every matrix law has a `LAWS.bend` declaration and `PROOF.bend` witness, or
+- [ ] Every matrix law has a `laws/*.bend` declaration and `proofs/*Proof.bend` witness, or
       the milestone explicitly remains incomplete with the blocker documented.
-- [ ] `bend PROOF.bend` passes.
+- [ ] `./proofs/run.sh` passes.
 - [ ] Fuzz, smoke, corruption, differential, and crash gates pass.
 - [ ] 1M writes and post-restart samples pass within the recorded gates.
 - [ ] No `@unsafe` is introduced.

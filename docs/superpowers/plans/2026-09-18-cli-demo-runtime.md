@@ -1,7 +1,7 @@
 # CLI, Demo, and Adaptive Runtime Implementation Plan
 
 > **For agentic workers:** follow the repository `AGENT.md`; run `bend guide`,
-> keep laws in `LAWS.bend`, and run `bend PROOF.bend` before committing.
+> keep laws in `laws/*.bend`, and run `./proofs/run.sh` before committing.
 
 **Goal:** Add a safe developer CLI, a runnable mini application, and adaptive
 CPU/GPU execution without changing the MyLSM on-disk format or weakening the
@@ -16,7 +16,7 @@ proof gate.
 - No automatic dependency installation, telemetry, or network access.
 - Shell detection is advisory and fails closed to CPU.
 - GPU is used only for pure compute; filesystem/WAL/Manifest IO stays on CPU.
-- Every code change must pass `bend PROOF.bend`.
+- Every code change must pass `./proofs/run.sh`.
 - Keep the CLI POSIX `sh` compatible; use `shellcheck` when available.
 
 ---
@@ -61,7 +61,7 @@ Support:
 doctor, check, fuzz, bench, build, run, demo, --help
 ```
 
-`check` runs `bend PROOF.bend`; `fuzz` and `bench` run their existing Bend
+`check` runs `./proofs/run.sh`; `fuzz` and `bench` run their existing Bend
 programs; `build` compiles the demo to a user-local build directory; `run` runs
 the compiled artifact with selected runtime flags; `demo` builds when necessary
 and runs the demo.
@@ -97,7 +97,7 @@ git commit -m "feat: add adaptive MyLSM CLI"
 
 Implement a small uniform numeric worker and call it with Bend's `!` notation.
 The worker must be total, structurally decreasing or fuel-bounded, and have a
-closed law in `LAWS.bend` if it is exported from a source module. Keep it local
+closed law in `laws/*.bend` if it is exported from a source module. Keep it local
 to the demo if it is only presentation code.
 
 ### Step 2: Add durable storage walkthrough
@@ -131,13 +131,13 @@ Do not claim GPU execution unless the native `.gpu` artifact is built and run.
 Run:
 
 ```sh
-bend PROOF.bend
+./proofs/run.sh
 ```
 
 ### Step 5: Commit checkpoint
 
 ```sh
-git add app/mylsm_demo.bend app/README.md LAWS.bend PROOF.bend
+git add app/mylsm_demo.bend app/README.md LAWS../proofs/run.sh
  git commit -m "feat: add MyLSM demonstration app"
 ```
 
@@ -209,7 +209,7 @@ folder. Ensure cleanup happens with a trap and failures preserve useful logs.
 ### Step 2: Validate all gates
 
 ```sh
-bend PROOF.bend
+./proofs/run.sh
 sh -n bin/mylsm bench/cli_smoke.sh
 bench/cli_smoke.sh
 ```
@@ -231,7 +231,7 @@ Do not fabricate throughput, GPU, or RocksDB comparison numbers.
 
 ### Step 4: Final proof and review
 
-Run `bend PROOF.bend`, inspect `git diff --check`, and confirm that no generated
+Run `./proofs/run.sh`, inspect `git diff --check`, and confirm that no generated
 binaries/data directories are tracked.
 
 ### Step 5: Commit checkpoint
@@ -450,7 +450,7 @@ exists. Otherwise `auto` prints a fallback and runs CPU.
 
 ### G. Laws and tests for Bend additions
 
-If `app/Runtime.bend (future host-policy types)` exports pure helpers, append closed laws to `LAWS.bend`:
+If `app/Runtime.bend (future host-policy types)` exports pure helpers, append closed laws to `laws/*.bend`:
 
 ```python
 law demo_worker_zero:
@@ -463,11 +463,11 @@ law device_names:
   {Runtime.device_name(Runtime.Cpu{}) == "cpu" : String}
 ```
 
-Add the matching proof stubs to `PROOF.bend`, run `bend PROOF.bend`, and keep
+Add the matching proof stubs to `proofs/*Proof.bend`, run `./proofs/run.sh`, and keep
 all IO/host code outside the laws. The smoke suite must run:
 
 ```sh
-bend PROOF.bend
+./proofs/run.sh
 bend app/mylsm_demo.bend
 sh -n bin/mylsm
 bench/cli_smoke.sh
