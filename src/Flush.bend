@@ -7,6 +7,7 @@ import ./Wal.bend as Wal
 import ./Manifest.bend as Manifest
 import ./Fs.bend as Fs
 import ./Db.bend as Db
+import ./CrashPoint.bend as CrashPoint
 
 # Flush (Task 8): sealed memtable -> L0 SSTable file + manifest + WAL reset.
 #
@@ -21,6 +22,8 @@ import ./Db.bend as Db
 # files absent from the manifest; Task 12 sweeps orphans). A crash after
 # step 3 with a live WAL replays duplicates harmlessly (see above).
 # Empty memtable flush is a no-op (no files touched).
+# CrashPoint calls are test-only host effects. Unset or unequal checkpoints are
+# successful no-ops; signal delivery and filesystem ordering are not Bend proofs.
 
 def table_name(flushed: Nat) -> String:
   "l0-" ++ Nat.show(flushed) ++ ".tbl"
@@ -137,8 +140,10 @@ def ensure_dir(+path: String) -> IO(Result<&1, &1, U32 & String, Unit>):
 def flush_goB(+dir: String, +mpath: String, +mtmp: String, +m2: Manifest.Manifest, +tbl: Sstable.Table, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
     v1 : Unit <- IO.try(Unit, write_file(mtmp, Manifest.serialize(m2)))
+    cp1 : Unit <- IO.try(Unit, CrashPoint.hit("flush.manifest_synced"))
     v2 : Unit <- IO.try(Unit, Fs.rename(mtmp, mpath))
     v3 : Unit <- IO.try(Unit, Fs.fsync(dir))
+    cp2 : Unit <- IO.try(Unit, CrashPoint.hit("flush.manifest_published"))
     rm : Result<&1, &1, U32 & String, Unit> <- Fs.remove(Db.wal_path(dir))
     return Done{Db.Db{dir, MemTable.MT{Nil{}}, l0_add(levels, tbl), Nat.add(flushed, 1n), Manifest.serialize(m2)}}
 
@@ -153,8 +158,10 @@ def flush_goA(+dir: String, +l0dir: String, +tmp: String, +final: String, +mpath
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
     u1 : Unit <- IO.try(Unit, ensure_dir(l0dir))
     u2 : Unit <- IO.try(Unit, write_file(tmp, content))
+    cp1 : Unit <- IO.try(Unit, CrashPoint.hit("flush.table_synced"))
     u3 : Unit <- IO.try(Unit, Fs.rename(tmp, final))
     u4 : Unit <- IO.try(Unit, Fs.fsync(l0dir))
+    cp2 : Unit <- IO.try(Unit, CrashPoint.hit("flush.table_published"))
     +m : Manifest.Manifest <- IO.try(Manifest.Manifest, load_mfst(mpath))
     flush_drift(String.eq(Manifest.serialize(m), manifest_token), dir, mpath, mtmp, m, tbl, name, levels, flushed)
 

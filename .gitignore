@@ -1,4 +1,6 @@
 node_modules/
+.worktree/
+.worktrees/
 *.gpu
 bench/results/
 .mylsm/
@@ -14,3 +16,4 @@ bench/results/
 .mylsm-1m/
 .mylsm-v2-*/
 .mylsm-compaction-v2-*/
+.mylsm-crash-*/

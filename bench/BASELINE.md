@@ -101,3 +101,19 @@ Throughput remains `operations * 1000 / elapsed_ms`, calculated offline. Record
 at least three comparable runs and use the median when replacing this frozen
 observation. Also record storage device and machine power/thermal state manually
 when comparing against a future implementation or stock RocksDB.
+
+## CrashPoint unset-overhead observation
+
+The test-only crash checkpoints were measured with `MYLSM_CRASH_POINT` unset
+using Bend 2.0.24 on Darwin arm64 with 12 logical CPUs and 34% free disk. Three
+pre-instrumentation 4,096-write runs took 904, 940, and 995 ms; three
+post-refactor runs took 801, 824, and 770 ms. The medians were 940 and 801 ms
+respectively, for a measured throughput ratio of 1.1735.
+
+```sh
+bench/crash_point_overhead.sh compare .mylsm-crash-point-overhead
+```
+
+This local before/after observation passes the repository's existing 0.90
+throughput floor. It is not a portable performance guarantee or a claim that
+environment lookup has zero cost.

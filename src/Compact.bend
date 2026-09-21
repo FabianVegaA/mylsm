@@ -9,6 +9,7 @@ import ./Manifest.bend as Manifest
 import ./Flush.bend as Flush
 import ./Fs.bend as Fs
 import ./Db.bend as Db
+import ./CrashPoint.bend as CrashPoint
 
 # Tiered compaction (Task 9): L0-drain + L1 overlap-closure.
 #
@@ -24,6 +25,8 @@ import ./Db.bend as Db
 #   This conservative policy prevents resurrection without requiring zero-output
 #   publication support.
 # Trigger: L0 count > 4 (spec: backpressure stall at 8 = 2T, Task 10).
+# CrashPoint calls are test-only host effects. Unset or unequal checkpoints are
+# successful no-ops; signal delivery and filesystem ordering are not Bend proofs.
 # Soundness sketch (spec law 11): keys resolving outside the closure are
 # untouched (a key in both closure-inputs and a remainder table would put
 # it in the hull and in a hull-disjoint range — contradiction); keys inside
@@ -420,8 +423,10 @@ def remove_list(names: List<&2, String>) -> IO(Result<&1, &1, U32 & String, Unit
 def compact_goB(+dir: String, +mpath: String, +mtmp: String, +m2: Manifest.Manifest, +dels: List<&2, String>, +mem: MemTable.MemTable, +levels2: List<&2, List<&2, Sstable.Table>>, +flushed: Nat) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
     v1 : Unit <- IO.try(Unit, Flush.write_file(mtmp, Manifest.serialize(m2)))
+    cp1 : Unit <- IO.try(Unit, CrashPoint.hit("compact.manifest_synced"))
     v2 : Unit <- IO.try(Unit, Fs.rename(mtmp, mpath))
     v3 : Unit <- IO.try(Unit, Fs.fsync(dir))
+    cp2 : Unit <- IO.try(Unit, CrashPoint.hit("compact.manifest_published"))
     ign : Result<&1, &1, U32 & String, Unit> <- remove_list(dels)
     return Done{Db.Db{dir, mem, levels2, Nat.add(flushed, 1n), Manifest.serialize(m2)}}
 
@@ -446,8 +451,10 @@ def compact_goA(+dir: String, +l1dir: String, +tmp: String, +final: String, +mpa
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
     u1 : Unit <- IO.try(Unit, Flush.ensure_dir(l1dir))
     u2 : Unit <- IO.try(Unit, Flush.write_file(tmp, content))
+    cp1 : Unit <- IO.try(Unit, CrashPoint.hit("compact.output_synced"))
     u3 : Unit <- IO.try(Unit, Fs.rename(tmp, final))
     u4 : Unit <- IO.try(Unit, Fs.fsync(l1dir))
+    cp2 : Unit <- IO.try(Unit, CrashPoint.hit("compact.output_published"))
     +m : Manifest.Manifest <- IO.try(Manifest.Manifest, Flush.load_mfst(mpath))
     drift_go(String.eq(Manifest.serialize(m), manifest_token), dir, mpath, mtmp, m, oldl1, remt, outname, mem, levels2, flushed)
 
