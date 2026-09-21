@@ -298,6 +298,18 @@ only `+` (`Data`) copies; the spec additionally forbids every escape hatch:
   amendment; all proofs stay in pure Bend and never touch host code; the
   effects are validated empirically (Task 12 fuzz + fault injection), never
   by law.
+- A test-only exception is `CrashPoint.hit(name)`. Bend reads
+  `MYLSM_CRASH_POINT` through the existing `Console.get_env` effect and applies
+  the pure `CrashPoint.enabled` policy; an open theorem covers every requested
+  name when injection is unset, while closed fixtures cover mismatch and exact
+  match examples. Unset or unequal values are no-ops. Only
+  `CrashPoint.stop(name)` crosses the new C/JS
+  boundary: on Darwin/Linux it writes an unbuffered checkpoint-specific marker
+  to stderr and sends the worker `SIGSTOP`, after which the external harness
+  verifies both the marker and stopped state before sending `SIGKILL`. A stop
+  request fails explicitly elsewhere. The host operation is empirical and proves
+  nothing about signals, `fsync`, rename, process death, filesystems, or storage
+  hardware.
 - `+` (reusable) annotations appear only on `Data` values and only where the
   design says sharing is needed (iterator cursors, filter bits); the default
   everywhere else is affine.
@@ -462,10 +474,17 @@ a first-class workload.
 2. Fuzz clean: ≥1M random/mutated inputs through each of the three
    decoders (WAL, SSTable block, Manifest) with zero crashes, zero hangs,
    zero silent misparses (every rejection explicit).
-3. Fault-injection matrix green: process killed (`kill -9`) mid-WAL-append,
-   mid-flush, mid-compaction, and mid-Manifest-publish; every restart
-   recovers to exactly the acknowledged state (law 7, verified
-   empirically, not just proven).
+3. Fault-injection matrix green on Darwin/Linux: an external harness observes
+   `SIGSTOP`, sends `kill -9`, and verifies recovery twice at `wal.appended`,
+   `wal.synced`, `flush.table_synced`, `flush.table_published`,
+   `flush.manifest_synced`, `flush.manifest_published`,
+   `compact.output_synced`, `compact.output_published`,
+   `compact.manifest_synced`, and `compact.manifest_published`. Every
+   acknowledged key/value must be present; the pre-sync `wal.appended` trigger
+   may be absent or present with its exact value, while `wal.synced` requires it.
+   Flush and compaction fixtures reorganize only writes acknowledged before the
+   crash operation. This gate is empirical evidence, not a Bend proof of host or
+   filesystem behavior.
 4. Comparative benchmark recorded: write throughput and write-amp vs stock
    RocksDB, same hardware, same workloads, in `bench/BASELINE.md`, with a
    written verdict on the parity target from §5.

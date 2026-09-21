@@ -51,13 +51,11 @@ CPU.
 The modular proof suite contains witnesses for key storage transitions, codecs,
 flush, compaction, recovery, and CPU/GPU worker agreement. Run
 `./proofs/run.sh` for the bounded parallel proof gate, or target an individual
-`proofs/*Proof.bend` module while developing. During the modularization check,
-22 of 33 isolated modules passed and 11 closed SSTable/Bloom fixtures reached
-the five-minute per-module timeout; `BloomZeroEstimateProof` also remained
-inconclusive after 15 minutes in isolation. A timeout is not a passing proof.
-Closed fixtures provide concrete executable evidence, but some general
-open-input properties and all host IO behavior still require stronger proofs or
-empirical validation.
+`proofs/*Proof.bend` module while developing. The crash-injection development
+baseline passed all 34 isolated modules on Bend 2.0.24 with no failures or
+timeouts. A timeout is not a passing proof. Closed fixtures provide concrete
+executable evidence, but some general open-input properties and all host IO
+behavior still require stronger proofs or empirical validation.
 
 ## Compaction performance status
 
@@ -73,8 +71,31 @@ The SSTable v2 acceptance run completed 1,000,000 durable writes and post-restar
 first/middle/last-key verification in 1,087.20 seconds on Bend 2.0.13. Its main
 L1 table was 29,175,202 bytes versus 103,339,329 bytes for the equivalent legacy
 v1 table. MyLSM still needs block-oriented lookups, bounded multi-output
-publication, stronger general proofs, and crash injection before making
-competitive or production claims.
+publication and stronger general proofs before making competitive or production
+claims.
+
+## Crash recovery testing
+
+On Darwin and Linux, run the deterministic external-crash matrix with:
+
+```sh
+MYLSM_CRASH_RESET=1 bench/fault_inject.sh .mylsm-crash-injection
+```
+
+The default executes ten WAL, flush, compaction, and Manifest publication
+checkpoints three times. Bend owns environment lookup and activation policy;
+the proof suite includes an open unset theorem plus closed mismatch/exact fixtures.
+The minimal host effect emits a marker and sends the worker `SIGSTOP`.
+The Bash harness verifies the marker and stopped state, sends external
+`kill -9`, requires signal-derived status 137, and reopens the database twice to
+verify every acknowledged deterministic key/value and the expected level shape.
+
+The harness accepts only repository-local `.mylsm-crash-*` output roots, requires
+an ownership sentinel before reset deletion, and preserves diagnostics when a
+case fails. Darwin and Linux are supported; other platforms fail closed. This matrix
+is empirical evidence for the audited host effects, operating system, filesystem,
+and hardware used by the run. It is not a Bend proof of signal delivery,
+`fsync`, rename atomicity, process death, or storage durability.
 
 ## Roadmap
 
@@ -102,8 +123,8 @@ Exit criteria:
 
 Goal: survive corruption, crashes, and resource pressure predictably.
 
-- [ ] Replace the current fault-injection scaffold with real `kill -9` phases.
-- [ ] Test crashes during WAL append, flush, compaction, and Manifest publish.
+- [x] Replace the current fault-injection scaffold with real `kill -9` phases.
+- [x] Test crashes during WAL append, flush, compaction, and Manifest publish.
 - [ ] Run 1M+ mutated inputs through WAL, Manifest, and SSTable parsers.
 - [ ] Test truncated files, invalid checksums, missing tables, and hostile names.
 - [ ] Test disk-full and permission-denied behavior.
@@ -161,8 +182,8 @@ Exit criteria:
 
 ## Near-term priority
 
-The next highest-value work is real crash injection and randomized parser
-hardening. GPU optimization should remain secondary to
+The next highest-value work is randomized parser hardening, disk-full behavior,
+and repeated crash/recovery soak testing. GPU optimization should remain secondary to
 SSTable layout, batching, background maintenance, and IO behavior because those
 areas dominate LSM database performance.
 
@@ -173,3 +194,4 @@ areas dominate LSM database performance.
 - `docs/superpowers/plans/2026-09-17-lsm-bend.md`
 - `docs/superpowers/plans/2026-09-18-cli-demo-runtime.md`
 - `docs/superpowers/plans/2026-09-18-phase-1-developer-product.md`
+- `docs/superpowers/plans/2026-09-21-real-crash-injection.md`

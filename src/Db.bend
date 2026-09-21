@@ -5,6 +5,7 @@ import ./Sstable.bend as Sstable
 import ./Wal.bend as Wal
 import ./Fs.bend as Fs
 import ./Manifest.bend as Manifest
+import ./CrashPoint.bend as CrashPoint
 
 # Db API (Task 7): durable write path + reads.
 #
@@ -13,6 +14,8 @@ import ./Manifest.bend as Manifest
 # loses at most unacked writes (recovery replays the WAL prefix, Task 10).
 # This ordering is a code-review property (no law over IO exists); Task 12
 # fault-injection crashes between each step to verify it empirically.
+# CrashPoint calls are test-only host effects. Unset or unequal checkpoints are
+# successful no-ops; signal delivery and filesystem ordering are not Bend proofs.
 #
 # Read path: mem (newest-first) ++ L0 newest-first ++ L1 ... — first match
 # wins INCLUDING tombstones (MemTable.scan_go freezes), so deletes can never
@@ -93,8 +96,10 @@ def wal_tail(fr: (File & Result<&1, &1, U32 & String, Unit>), +dir: String) -> I
     case (f2, r):
       do IO<Result<&1, &1, U32 & String, Unit>>:
         res : Unit <- IO.try(Unit, IO.pure(Result<&1, &1, U32 & String, Unit>, r))
+        cp1 : Unit <- IO.try(Unit, CrashPoint.hit("wal.appended"))
         cls : Unit <- File.close(f2)
         syn : Unit <- IO.try(Unit, Fs.fsync(wal_path(dir)))
+        cp2 : Unit <- IO.try(Unit, CrashPoint.hit("wal.synced"))
         prm : Unit <- IO.try(Unit, Fs.chmod(wal_path(dir), U32.from_nat(384n)))
         return Done{res}
 

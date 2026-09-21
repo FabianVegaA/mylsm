@@ -6,6 +6,7 @@ When working with Bend:
 - Prefer targeted checks such as `bend proofs/KeysProof.bend` while developing.
 - Run `./proofs/run.sh` before committing. A timeout or any failed module is never a green proof result.
 - Never use `@unsafe` in laws, witnesses, or code justified by them.
+- Keep C/JS effects to the smallest irreducible host operation. Put policy, environment interpretation, branching, validation, and data transformation in Bend, and add laws plus witnesses for pure decisions when practical.
 - Parallelize code and proof checks whenever possible and semantically sound.
 - Distinguish quantified theorems over open inputs from closed regression fixtures. Closed fixtures are executable evidence for concrete cases, not general proofs.
 - Preserve trust-root comments and explicit formal limitations; do not imply that Bend Base primitives, host IO, or empirically fuzzed behavior have been proved when they have not.
