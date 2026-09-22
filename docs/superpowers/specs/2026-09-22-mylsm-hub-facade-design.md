@@ -198,7 +198,7 @@ trap.
 ## 8. Risks and mitigations
 
 - Hash churn on every inner change → accept (same as amalgamation); cut
-  releases deliberately, note hash in CHANGELOG/README per release.
+  releases deliberately, note hash in README + `pack.json` per release.
 - Accidental `IO`/`.c`/`.js` import creeping into facade → gate: `grep` for
   `IO\.|effs/|def main` on `mylsm.bend` in CI smoke.
 - Name collisions for consumers (`Parse` precedent) → canonical alias `MyLSM`
