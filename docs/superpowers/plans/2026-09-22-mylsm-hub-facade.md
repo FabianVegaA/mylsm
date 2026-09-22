@@ -417,12 +417,12 @@ Helpers (`show`) exist because Bend rejects `match` on a computed call
 The session exercises the published `Sess` end to end through a clean fetch.
 Expected: prints `0`, and `~/.bend/lib/0x<hash>/mylsm.bend` exists afterwards (re-fetched from the hub, hash-verified). Restore nothing: leave the fetched cache in place; delete `/tmp/mylsm_hub_fetch_check.bend` and `/tmp/mylsm-hub-backup-0x<hash>` only after a PASS.
 
-### Task 5: `pack.json` + README + catalog listing
+### Task 5: `pack.json` + README
 
 **Files:**
 - Create: `pack.json`
 - Modify: `README.md:10-28`
-- Test: manual URL checks + `bend-packages` issue
+- Test: manual URL checks (file-in-repo + import string + hub 200)
 
 - [ ] **Step 1: Write `pack.json` with the real hash (no placeholders)**
 
@@ -478,6 +478,4 @@ git status --short
 git commit -m "feat: publish mylsm.bend 0x<hash> with pack.json and README import"
 ```
 
-- [ ] **Step 5: File the catalog issue**
 
-Open `https://github.com/777genius/bend-packages/issues/new` (`＋Add package`): name `mylsm`, repo URL, description from `pack.json`, category `packages`, import line. The row flips to `source: hub` (default view) after the maintainer's `scan.mjs` run.
