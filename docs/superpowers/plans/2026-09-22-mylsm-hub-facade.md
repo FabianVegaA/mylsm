@@ -14,9 +14,9 @@
 
 - Create: `mylsm.bend` — the publish root and only new Bend code. Imports `Base` + 9 `./src/*.bend` modules (`Keys`, `MemTable`, `SortedRun`, `Sstable`, `SstFile`, `Wal`, `Manifest`, `MergeIter`, `Db`). Contains Level 1 (`open/put/del/batch/get/encode_batch`) + Level 2 (`mem_*/sst_*/wal_*/mfst_*/sort_newest/range_scan`, `Keys.cmp/eq` passthroughs). No `IO`, no `.c`/`.js` imports, no `def main`, no `@unsafe`.
 - Create: `pack.json` — `{"name","description","import","category":"packages"}` with the exact published import line.
-- Create (scratch, delete before commit): `/tmp/mylsm_facade_check.bend` — consumer-style verification file importing the facade by relative path.
+- Create (scratch, delete before commit): `.mylsm/build/facade_check.bend` (gitignored) — consumer-style verification file importing the facade by relative path.
 - Modify: `README.md:10-28` (Quick start section) — append `Use as a library (Bend hub)` subsection with the canonical import snippet.
-- Test via: `bend mylsm.bend --check-only`, `bend /tmp/mylsm_facade_check.bend` (native portable run), `./proofs/run.sh` (regression gate, unchanged expectations), `bend bench/fuzz.bend` (decoder smoke, unchanged).
+- Test via: `bend mylsm.bend --check-only`, `bend .mylsm/build/facade_check.bend` (portable run), `./proofs/run.sh` (regression gate, unchanged expectations), `bend bench/fuzz.bend` (decoder smoke, unchanged).
 
 ---
 
@@ -99,7 +99,7 @@ def mfst_parse(+s: String) -> Maybe<&2, Manifest.Manifest>:
 - [ ] **Step 2: Typecheck the skeleton**
 
 Run: `bend mylsm.bend --check-only`
-Expected: exit 0, no output (or `All checks passed`). If the checker reports an unused-import warning for `Keys`/`Db` (not yet referenced until Task 3), keep them: they are used in the next task. If the checker errors on unused imports, leave the file as-is and proceed to Task 3 before re-running.
+Expected: exit 0 (`All terms check.` or no output). `Keys` is already referenced by `cmp`/`eq`; `Db` is first referenced in Task 2. If the checker errors on the unused `Db` import, leave the file as-is and proceed to Task 2 before re-running.
 
 - [ ] **Step 3: Commit skeleton**
 
@@ -112,7 +112,7 @@ git commit -m "feat: add mylsm.bend facade skeleton with part-level delegates"
 
 **Files:**
 - Modify: `mylsm.bend` (append Level 1 defs)
-- Test: `/tmp/mylsm_facade_check.bend`
+- Test: `.mylsm/build/facade_check.bend` (gitignored)
 
 - [ ] **Step 1: Append Level 1 Db-handle wrappers to `mylsm.bend`**
 
@@ -368,8 +368,8 @@ After the `bin/mylsm bench` code block (`README.md:26-28`), insert:
 import 0x<hash>/mylsm.bend as MyLSM
 ```
 
-Level 1 (Db handle): `MyLSM.open/put/get/del`. Level 2 (parts):
-`MyLSM.mem_*/sst_*/wal_*/mfst_*/sort_newest/range_scan`. Pure and
+Level 1 (Db handle): `MyLSM.open/put/get/del/batch`. Level 2 (parts):
+`MyLSM.cmp/eq/mem_*/sst_*/wal_*/mfst_*/sort_newest/range_scan`. Pure and
 in-memory; durability (`bin/mylsm demo`) stays in this repo.
 ```
 
