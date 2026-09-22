@@ -204,6 +204,48 @@ Only `match` branching is used (the `if` form is untested in this codebase).
 structures; `sort_newest`, `range_scan`, `sst_*`, `wal_*`, `mfst_*`
 take/return `Entry`/`Mut`/`Batch`/`Table` values (see constructor gap below).
 
+### Session-monad ergonomics (explicit, follow-up proposal — not v1 API)
+
+Correcting §5's earlier implication: Bend's `do M<xs.., R>:` desugars to
+`M.bind`/`M.pure` for **any** type defining them (`bend guide`: "`IO`,
+`Maybe`, `Result`, or your own"), so explicit `db0..dbN` threading is a v1
+choice, not a language limit. A session monad would look like this (sketch,
+checker-spike required before committing):
+
+```bend
+type Sess<A> is Data:
+  Sess{run: Db.Db -> (Db.Db & A)}
+
+def sput(+k: String, +v: String) -> Sess<Unit>
+def sdel(+k: String) -> Sess<Unit>
+def sget(+k: String) -> Sess<Maybe<&2, String>>
+# plus Sess.bind / Sess.pure matching the do-desugar shape
+```
+
+Consumer payoff (no manual threading):
+
+```bend
+def session() -> Sess<U32>:
+  do Sess<U32>:
+    sput("hello", "world")
+    sput("answer", "42")
+    sdel("hello")
+    v : Maybe<&2, String> <- sget("answer")
+    return 1
+```
+
+Why not v1: (1) ~30-40 new lines plus `bind`/`pure` shape-matching against an
+unforgiving checker — this repo already carries "checker-tractable" scars
+(e.g. `src/Sstable.bend:48-50`, closed-proof bridges in `AGENT.md` history),
+and affine-state closures are exactly the risky shape; (2) `AGENT.md` asks for
+laws+witnesses for pure decisions, so the monad laws (`bind pure`,
+associativity) become proof work; (3) affinity doesn't vanish, it hides inside
+`bind` — the win is purely syntactic and grows with session length, while the
+README example (4 ops) is a wash once the `session`/`run` wrapper is counted.
+Decision: v1 ships explicit threading (zero new machinery, 1:1 with the
+proof-covered core); the `Sess` spike is the first v2 candidate, and if the
+checker blows up, explicit style stands with no harm done.
+
 ### Constructor gap (explicit, follow-up proposal — not v1 API)
 
 v1 has no `mk_entry`/`mk_put` helpers, so a consumer cannot write an `Entry`
