@@ -83,32 +83,56 @@ extensions.
 
 ## 4. Public API (v1, exact names verified 2026-09-22)
 
-Types (re-exported, not redefined):
+Two levels, one import: a `Db` abstraction for normal use plus granular
+part control. Both are pure and in-memory; durability stays git-only.
 
-- `MemTable.Entry{key: String, val: Maybe<&2, String>}`
-- `MemTable.MemTable` (`MT{entries}`)
-- `Sstable.Table` (`Tbl{entries, filter, nbits, smallest, largest, count}`)
-- `Sstable.Metadata` (`Meta{smallest, largest, count}`)
-- `Wal.Mut` (`Put{key, val}` / `Del{key}`), `Wal.Batch{muts}`
-- `Manifest.Manifest` (`M{...}`)
+### Level 1 — Db abstraction (high level, new thin wrappers)
 
-Functions (thin wrappers, same signatures as sources):
+`Db.bend` already splits cleanly: `open_db`, `apply_mut`, `apply_batch`,
+`all_entries`, `db_get`, `wal_frame`, `wal_path` are pure; only `wal_tail`,
+`wal_append`, `db_write`, `db_put`, `db_del` are `IO`. The facade exposes the
+pure handle plus four composing wrappers (the only new logic in v1, ~10
+lines, same read path `mem ++ L0 ++ L1...` first-match-wins incl. tombstones):
 
+- Type `Db.Db` (`Db{dir, mem, levels, flushed, manifest_token}`), used as an
+  in-memory handle. `dir` is an opaque label in v1; no filesystem is touched.
+- `open(dir: String) -> Db.Db` = `Db.open_db(dir)`
+- `put(db: Db.Db, k: String, v: String) -> Db.Db` =
+  `Db.Db{dir, Db.apply_batch(Con{Wal.Put{k, v}, Nil{}}, mem), levels, flushed, manifest_token}`
+- `del(db: Db.Db, k: String) -> Db.Db` = same with `Wal.Del{k}`
+- `batch(db: Db.Db, muts: List<&2, Wal.Mut>) -> Db.Db` =
+  `Db.Db{dir, Db.apply_batch(muts, mem), levels, flushed, manifest_token}`
+- `get(db: Db.Db, k: String) -> Maybe<&2, String>` = `Db.db_get(db, k)`
+- `encode_batch(b: Wal.Batch) -> String` = `Wal.encode(b)` (the exact bytes the
+  future VFS adapter will frame with `Db.wal_frame` + `fsync`)
+
+Consumer sketch: `open → put/put/del → get`, all pure, no `IO`.
+
+### Level 2 — Part control (granular, delegating wrappers)
+
+Prefixed so one alias (`MyLSM`) never collides; each delegates 1:1:
+
+- Types: `MemTable.Entry`, `MemTable.MemTable`, `Sstable.Table`,
+  `Sstable.Metadata`, `Wal.Mut`, `Wal.Batch`, `Manifest.Manifest`
+  (re-exported by use, not redefined).
 - Keys: `Keys.cmp(a, b) -> Cmp`, `Keys.eq(a, b) -> Bool`
-- MemTable: `MemTable.empty()`, `MemTable.put(t, k, v)`,
-  `MemTable.del(t, k)`, `MemTable.get(t, k) -> Maybe<&2, String>`
-- SortedRun: `SortedRun.sort_newest(entries)`
-- Sstable: `Sstable.build(entries, level, est_keys) -> Table`,
-  `Sstable.from_sorted_unique(entries, level) -> Table`,
-  `Sstable.build_sorted(entries, level, est_keys) -> Table`
-- Wal: `Wal.encode(b: Batch) -> String`, `Wal.decode(s: String) -> Maybe<&2, Batch>`
-- SstFile: `SstFile.serialize(entries, level) -> String`,
-  `SstFile.parse(encoded) -> Maybe<&2, Sstable.Table>` (v2 default)
-- Manifest: `Manifest.serialize(m) -> String`,
-  `Manifest.parse(s) -> Maybe<&2, Manifest>`
+- MemTable: `mem_empty()`, `mem_put(t, k, v)`, `mem_del(t, k)`,
+  `mem_get(t, k) -> Maybe<&2, String>`, `mem_count(t) -> Nat`
+- SortedRun: `sort_newest(entries)`; MergeIter: `range_scan(merged, lo, hi)`
+  = `MergeIter.scan(merged, lo, hi)`
+- Sstable: `sst_build(entries, level, est_keys) -> Table`,
+  `sst_from_sorted_unique(entries, level) -> Table`,
+  `sst_build_sorted(entries, level, est_keys) -> Table`
+- Wal: `wal_encode(b: Batch) -> String`,
+  `wal_decode(s: String) -> Maybe<&2, Batch>`
+- SstFile: `sst_serialize(entries, level) -> String`,
+  `sst_parse(encoded) -> Maybe<&2, Sstable.Table>` (v2 default)
+- Manifest: `mfst_serialize(m) -> String`,
+  `mfst_parse(s) -> Maybe<&2, Manifest>`
 
-Explicitly excluded in v1: `Db.*`, `Recover.*`, `Flush.*`, `Compact.*`,
-`SstStream.*`, `Fs.*`, `Console.get_env`, `CrashPoint.hit`, any `def main`.
+Explicitly excluded in v1: every `IO` def (`Db.db_put/db_del/db_write/wal_append`,
+`Recover.*`, `Flush.*`, `Compact.*` IO halves, `SstStream.read_table`, `Fs.*`,
+`Console.get_env`, `CrashPoint.hit`), any `def main`.
 
 Facade constraints: `import Base` + relative `./src/*.bend` imports only; no
 `import "./src/effs/*.c"` / `"./src/effs/*.js"`; no `IO.*`; no `def main`;
@@ -141,9 +165,11 @@ def main() -> U32:
 ```
 
 First run fetches into `~/.bend/lib/0x<hash>/`, verifies content hash, then
-runs offline. v1 is an in-memory library (MemTable + SSTable build + WAL/Manifest
-codecs); durable open/write/crash-recovery remain in this repo via
-`bin/mylsm demo`.
+runs offline. v1 is an in-memory library used two ways: Level 1 (`open/put/get`
+on a pure `Db` handle) for normal use, Level 2 (`mem_*/sst_*/wal_*/mfst_*`,
+`sort_newest`, `range_scan`) for part-level control (tuning Bloom bits,
+codecs, manifests directly). Durable open/write/crash-recovery remain in this
+repo via `bin/mylsm demo`.
 
 ## 6. Error handling
 
