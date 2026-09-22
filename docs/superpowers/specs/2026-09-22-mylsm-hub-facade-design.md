@@ -150,26 +150,77 @@ bend mylsm.bend --publish
 #         import 0x<hash>/mylsm.bend as MyLSM
 ```
 
-Consumer (any repo):
+First run fetches into `~/.bend/lib/0x<hash>/`, verifies content hash, then
+runs offline. Durable open/write/crash-recovery remain in this repo via
+`bin/mylsm demo`; the published bundle is pure and in-memory.
+
+### Level 1 — Db handle (normal use)
+
+One handle, threaded linearly: every `Db.Db` holds affine lists, so each
+binding is used exactly once (`+db` in every signature, mirroring
+`src/Db.bend:36-84`). The read path is newest-first across mem ++ levels,
+first match wins including tombstones — a `del` hides older versions forever.
 
 ```bend
 import Base
 import 0x<hash>/mylsm.bend as MyLSM
 
 def main() -> U32:
-  t0 = MyLSM.MemTable.empty()
-  t1 = MyLSM.MemTable.put(t0, "hello", "world")
-  match MyLSM.MemTable.get(t1, "hello"):
+  +db0 = MyLSM.open("/scratch")
+  +db1 = MyLSM.put(db0, "hello", "world")
+  +db2 = MyLSM.put(db1, "answer", "42")
+  +db3 = MyLSM.del(db2, "hello")
+  match MyLSM.get(db3, "answer"):
     case Some{v}: 1
     case None{}: 0
 ```
 
-First run fetches into `~/.bend/lib/0x<hash>/`, verifies content hash, then
-runs offline. v1 is an in-memory library used two ways: Level 1 (`open/put/get`
-on a pure `Db` handle) for normal use, Level 2 (`mem_*/sst_*/wal_*/mfst_*`,
-`sort_newest`, `range_scan`) for part-level control (tuning Bloom bits,
-codecs, manifests directly). Durable open/write/crash-recovery remain in this
-repo via `bin/mylsm demo`.
+`batch(db, muts)` folds a whole `Wal.Mut` list at once (pinned equal to
+sequential `put`/`del` by the existing `Db` laws); `encode_batch` renders the
+exact bytes the future VFS adapter will frame with `Db.wal_frame` + `fsync`.
+
+### Level 2 — part control (tuning and embedding)
+
+Same alias, prefixed functions, no handle needed. Ordered-map core plus key
+ordering, all without constructors:
+
+```bend
+import Base
+import 0x<hash>/mylsm.bend as MyLSM
+
+def main() -> U32:
+  +t = MyLSM.mem_put(MyLSM.mem_empty(), "k", "v")
+  match MyLSM.mem_get(t, "k"):
+    case Some{v}:
+      match MyLSM.eq(v, "v"):
+        case True{}: 1
+        case False{}: 0
+    case None{}:
+      0
+```
+
+Only `match` branching is used (the `if` form is untested in this codebase).
+`mem_count` returns `Nat` and `cmp/lt/le` return `Cmp`/`Bool` for custom
+structures; `sort_newest`, `range_scan`, `sst_*`, `wal_*`, `mfst_*`
+take/return `Entry`/`Mut`/`Batch`/`Table` values (see constructor gap below).
+
+### Constructor gap (explicit, follow-up proposal — not v1 API)
+
+v1 has no `mk_entry`/`mk_put` helpers, so a consumer cannot write an `Entry`
+or `Mut` literal with only the facade imports: codec/table/scan functions are
+fully callable but their inputs must come from prior facade outputs (e.g.
+`wal_decode` of a hand-written payload, or entries destructured from an
+`sst_build` result as in plan Task 2 `c6`). If demand appears, the follow-up
+is three delegating defs (no new logic, same constraints as §4):
+
+```bend
+def mk_entry(+k: String, +v: String) -> MemTable.Entry
+def mk_tombstone(+k: String) -> MemTable.Entry
+def mk_put_batch(+k: String, +v: String) -> Wal.Batch
+```
+
+This keeps v1 minimal (YAGNI) while making the limitation and its fix
+explicit instead of leaving consumers to guess.
 
 ## 6. Error handling
 
