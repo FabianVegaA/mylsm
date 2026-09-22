@@ -117,6 +117,49 @@ logical cores, and finally the portable Bend backend. GPU mode applies only to
 suitable pure compute; WAL, fsync, Manifest, SSTable IO, and recovery stay on
 CPU.
 
+## Building native binaries (per architecture)
+
+`bin/mylsm build` compiles `app/mylsm_demo.bend` with the Bend compiler to a
+native binary:
+
+```sh
+bin/mylsm doctor   # check Bend, clang, and GPU caps first
+bin/mylsm build    # → .mylsm/build/mylsm-demo (+ mylsm-demo-build.log)
+bin/mylsm run      # run the native binary, or portable fallback
+```
+
+Underneath it runs `bend app/mylsm_demo.bend -o .mylsm/build/mylsm-demo`
+(the REPL at `bin/mylsm repl` builds `app/repl.bend` the same way into
+`.mylsm/build/mylsm-repl`). Binaries are host-native: Bend emits C and
+`clang` builds it for the machine doing the build (`arm64` or `x86_64`,
+macOS or Linux). To target another architecture, build on that machine (or
+an equivalent container/VM) — there is no cross-compilation flag. GPU
+support is also decided at build time: a `.gpu` artifact is produced only
+when Bend detects a usable GPU (Metal on Apple Silicon, CUDA toolkit plus
+drivers / `nvidia-smi` on Linux). Without it the build is CPU-only and `gpu`
+mode fails closed instead of silently falling back.
+
+```sh
+# CPU-native with explicit thread count (1..256, default: logical CPUs)
+MYLSM_DEVICE=cpu MYLSM_THREADS=8 bin/mylsm demo
+
+# GPU (requires detected GPU + .gpu artifact, else exit 3)
+MYLSM_DEVICE=gpu MYLSM_GPU_MEMORY=4GB bin/mylsm demo
+```
+
+`bin/mylsm` maps `MYLSM_THREADS`/`MYLSM_GPU_MEMORY` onto the binary flags
+`--threads N` / `--gpu SIZE`. Two invariants hold on every architecture:
+storage IO (WAL, `fsync`, Manifest, SSTable access, flush, compaction,
+recovery) always runs on CPU, and only pure workers invoked with Bend's `!`
+notation are GPU-eligible.
+
+Troubleshooting: if `build` fails, read
+`.mylsm/build/mylsm-demo-build.log`. One known host issue: Homebrew
+`llvm@19` `clang` against a newer macOS SDK fails compiling Bend's Metal GPU
+prelude (`could not build module 'Metal'`, `float.h` /
+`_c_standard_library_obsolete` errors). Pure code still builds fine, and
+`demo`/`repl` fall back to the portable backend automatically.
+
 ## Correctness status
 
 The modular proof suite contains witnesses for key storage transitions, codecs,
