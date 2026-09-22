@@ -134,9 +134,19 @@ target machine, there is no cross-compile flag. GPU (Metal / CUDA +
 pure `!` workers are GPU-eligible.
 
 If `build` fails, read `.mylsm/build/mylsm-demo-build.log`. Known host
-issue: Homebrew `llvm@19` `clang` vs newer macOS SDK breaks Bend's Metal
-prelude (`could not build module 'Metal'`); pure code still builds, and
-`demo`/`repl` fall back to portable automatically.
+issue on macOS: Homebrew `llvm@19` `clang` vs newer SDKs breaks Bend's Metal
+prelude (`could not build module 'Metal'`). Fix: point Bend at Apple clang,
+which it respects via `CC` — verified `MYLSM DEMO OK` on Apple clang 21:
+
+```sh
+export CC=/usr/bin/clang
+bin/mylsm build
+```
+
+Without a native binary, `demo`/`repl` fall back to portable automatically —
+but note the portable backend currently dies opening a fresh database
+(`No such file or directory` in `open_db`; native `.c` twins handle it
+fine), so a working native build is effectively required for now.
 
 ## Correctness status
 
