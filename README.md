@@ -33,18 +33,63 @@ on the CPU. See `app/README.md` for details.
 
 ## Use as a library (Bend hub)
 
-```sh
-# Paste the import; the compiler fetches and verifies the hash.
-```
+Paste the import; the compiler fetches the package from the hub into
+`~/.bend/lib`, verifies it against its hash, and runs offline afterwards:
 
 ```bend
 import 0x05fa0e42448e8e221df592b204de523d/mylsm.bend as MyLSM
 ```
 
-Level 1 (Sess session, primary): `do MyLSM.Sess<…>:` with
-`MyLSM.sput/sdel/sbatch/sget`, run via `MyLSM.run_sess` over `MyLSM.open`.
-Level 2 (parts): `MyLSM.cmp/eq/mem_*/sst_*/wal_*/mfst_*/sort_newest/range_scan`.
-Pure and in-memory; durability (`bin/mylsm demo`) stays in this repo.
+Level 1 is a session monad — no manual handle threading. Steps share one
+quantity (`&2`); `v : T <- …` binds a result, bare `sput(…)` is a Unit step,
+`return` wraps the answer:
+
+```bend
+import Base
+import 0x05fa0e42448e8e221df592b204de523d/mylsm.bend as MyLSM
+
+def show(m: Maybe<&2, String>) -> U32:
+  match m:
+    case Some{v}: 1
+    case None{}: 0
+
+def session() -> MyLSM.Sess<&2, Maybe<&2, String>>:
+  do MyLSM.Sess<&2, Maybe<&2, String>>:
+    MyLSM.sput("hello", "world")
+    MyLSM.sput("answer", "42")
+    MyLSM.sdel("hello")
+    v : Maybe<&2, String> <- MyLSM.sget("answer")
+    return v
+
+def main() -> U32:
+  show(MyLSM.value_of(&2, Maybe<&2, String>, MyLSM.run_sess(&2, Maybe<&2, String>, MyLSM.open("/scratch"), session())))
+```
+
+Level 2 exposes the parts directly (ordered-map core, key ordering, codecs,
+tables, manifests) without a session:
+
+```bend
+import Base
+import 0x05fa0e42448e8e221df592b204de523d/mylsm.bend as MyLSM
+
+def bit(b: Bool) -> U32:
+  match b:
+    case True{}: 1
+    case False{}: 0
+
+def check_mem(m: Maybe<&2, String>) -> U32:
+  match m:
+    case Some{v}: bit(MyLSM.eq(v, "v"))
+    case None{}: 0
+
+def main() -> U32:
+  t = MyLSM.mem_put(MyLSM.mem_empty(), "k", "v")
+  check_mem(MyLSM.mem_get(t, "k"))
+```
+
+Pure and in-memory; durability (`bin/mylsm demo`) stays in this repo. See
+`docs/superpowers/specs/2026-09-22-mylsm-hub-facade-design.md` for the full
+API (both levels, error policy, fetch semantics).
 
 ## Runtime modes
 
