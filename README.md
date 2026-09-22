@@ -48,11 +48,15 @@ quantity (`&2`); `v : T <- …` binds a result, bare `sput(…)` is a Unit step,
 import Base
 import 0x05fa0e42448e8e221df592b204de523d/mylsm.bend as MyLSM
 
+# Turn a lookup result into a number so `main` can report it:
+# 1 means the key was found, 0 means it is missing.
 def show(m: Maybe<&2, String>) -> U32:
   match m:
     case Some{v}: 1
     case None{}: 0
 
+# A session is just a value describing database steps.
+# Nothing touches data until `run_sess` executes it.
 def session() -> MyLSM.Sess<&2, Maybe<&2, String>>:
   do MyLSM.Sess<&2, Maybe<&2, String>>:
     MyLSM.sput("hello", "world")
@@ -62,7 +66,15 @@ def session() -> MyLSM.Sess<&2, Maybe<&2, String>>:
     return v
 
 def main() -> U32:
-  show(MyLSM.value_of(&2, Maybe<&2, String>, MyLSM.run_sess(&2, Maybe<&2, String>, MyLSM.open("/scratch"), session())))
+  # 1. Open an in-memory handle (the label is only an identifier).
+  db = MyLSM.open("/scratch")
+  # 2. Run the session against it; you get the handle back next
+  #    to the session's answer.
+  result = MyLSM.run_sess(&2, Maybe<&2, String>, db, session())
+  # 3. Keep the answer, drop the handle.
+  answer = MyLSM.value_of(&2, Maybe<&2, String>, result)
+  # 4. Report it.
+  show(answer)
 ```
 
 Level 2 exposes the parts directly (ordered-map core, key ordering, codecs,
