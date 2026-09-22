@@ -165,15 +165,24 @@ first match wins including tombstones — a `del` hides older versions forever.
 import Base
 import 0x<hash>/mylsm.bend as MyLSM
 
+def show(+m: Maybe<&2, String>) -> U32:
+  match m:
+    case Some{v}: 1
+    case None{}: 0
+
 def main() -> U32:
   +db0 = MyLSM.open("/scratch")
   +db1 = MyLSM.put(db0, "hello", "world")
   +db2 = MyLSM.put(db1, "answer", "42")
   +db3 = MyLSM.del(db2, "hello")
-  match MyLSM.get(db3, "answer"):
-    case Some{v}: 1
-    case None{}: 0
+  show(MyLSM.get(db3, "answer"))
 ```
+
+The helper is load-bearing, not style: Bend rejects `match` on a computed
+call (`bend guide`: "a match cannot scrutinize a computed value"; the checker
+says "a parameter or field scrutinee"), so computed results are passed as
+arguments to defs that match on their parameters. Verified against
+`bend --check-only` on 2026-09-22.
 
 `batch(db, muts)` folds a whole `Wal.Mut` list at once (pinned equal to
 sequential `put`/`del` by the existing `Db` laws); `encode_batch` renders the
@@ -188,21 +197,26 @@ ordering, all without constructors:
 import Base
 import 0x<hash>/mylsm.bend as MyLSM
 
+def bit(b: Bool) -> U32:
+  match b:
+    case True{}: 1
+    case False{}: 0
+
+def check_mem(+m: Maybe<&2, String>) -> U32:
+  match m:
+    case Some{v}: bit(MyLSM.eq(v, "v"))
+    case None{}: 0
+
 def main() -> U32:
   +t = MyLSM.mem_put(MyLSM.mem_empty(), "k", "v")
-  match MyLSM.mem_get(t, "k"):
-    case Some{v}:
-      match MyLSM.eq(v, "v"):
-        case True{}: 1
-        case False{}: 0
-    case None{}:
-      0
+  check_mem(MyLSM.mem_get(t, "k"))
 ```
 
-Only `match` branching is used (the `if` form is untested in this codebase).
-`mem_count` returns `Nat` and `cmp/lt/le` return `Cmp`/`Bool` for custom
-structures; `sort_newest`, `range_scan`, `sst_*`, `wal_*`, `mfst_*`
-take/return `Entry`/`Mut`/`Batch`/`Table` values (see constructor gap below).
+Same helper rule as Level 1 (no `match` on computed calls, no `if` —
+`bend guide` has no `if` syntax yet). `mem_count` returns `Nat` and
+`cmp/lt/le` return `Cmp`/`Bool` for custom structures; `sort_newest`,
+`range_scan`, `sst_*`, `wal_*`, `mfst_*` take/return `Entry`/`Mut`/`Batch`/
+`Table` values (see constructor gap below).
 
 ### Session-monad ergonomics (explicit, follow-up proposal — not v1 API)
 

@@ -149,7 +149,13 @@ Linearity notes (do not change): `+mem` in the `case` pattern mirrors the proven
 
 Each check builds its own handle because `Db.Db` holds affine lists: a handle
 is consumed by `get`, so sharing one handle across assertions would violate
-linearity. Only `match` branching is used (no `if`). Save as
+linearity. Two checker rules shape this file (both verified against
+`bend --check-only` on 2026-09-22): no `match` on a computed call or a
+`let`-bound variable (the checker rejects both: "a parameter or field
+scrutinee" — corroborated by the comment at `src/Keys.bend:3-5`), so computed
+results travel as arguments to helpers that match on parameters; and no `if`
+(`bend guide` has none yet). `main` therefore delegates to `run_all` instead
+of matching on `c1()..c6()` directly. Save as
 `.mylsm/build/facade_check.bend` (`.mylsm/` is gitignored, so it never leaks
 into the publish or a commit):
 
@@ -158,11 +164,33 @@ import Base
 import ../../mylsm.bend as MyLSM
 import ../../src/Wal.bend as Wal
 import ../../src/Sstable.bend as Sstable
+import ../../src/MemTable.bend as MemTable
 
 def check_get_eq(got: Maybe<&2, String>, want: String) -> Bool:
   match got:
     case Some{v}:
       String.eq(v, want)
+    case None{}:
+      False{}
+
+def is_missing(+m: Maybe<&2, String>) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{_}:
+      False{}
+
+def is_some_batch(+m: Maybe<&2, Wal.Batch>) -> Bool:
+  match m:
+    case Some{_}:
+      True{}
+    case None{}:
+      False{}
+
+def is_some_table(+m: Maybe<&2, Sstable.Table>) -> Bool:
+  match m:
+    case Some{_}:
+      True{}
     case None{}:
       False{}
 
@@ -176,60 +204,52 @@ def c2() -> Bool:
 
 def c3() -> Bool:
   +db = MyLSM.del(MyLSM.put(MyLSM.open("/s"), "hello", "world"), "hello")
-  match MyLSM.get(db, "hello"):
-    case None{}:
-      True{}
-    case Some{_}:
-      False{}
+  is_missing(MyLSM.get(db, "hello"))
 
 def c4() -> Bool:
-  +t1 = MyLSM.mem_put(MyLSM.mem_empty(), "k", "v")
-  check_get_eq(MyLSM.mem_get(t1, "k"), "v")
+  +t = MyLSM.mem_put(MyLSM.mem_empty(), "k", "v")
+  check_get_eq(MyLSM.mem_get(t, "k"), "v")
 
 def c5() -> Bool:
-  +round = MyLSM.wal_decode(MyLSM.wal_encode(Wal.Batch{Con{Wal.Put{"a", "b"}, Nil{}}}))
-  match round:
-    case Some{_}:
-      True{}
-    case None{}:
-      False{}
+  is_some_batch(MyLSM.wal_decode(MyLSM.wal_encode(Wal.Batch{Con{Wal.Put{"a", "b"}, Nil{}}})))
+
+def c6_go(+t: Sstable.Table) -> Bool:
+  match t:
+    case Sstable.Tbl{entries, filter, nbits, smallest, largest, count}:
+      is_some_table(MyLSM.sst_parse(MyLSM.sst_serialize(MyLSM.sort_newest(entries), 0n)))
 
 def c6() -> Bool:
-  +tbl = MyLSM.sst_build(Con{MemTable.Entry{"k", Some{"v"}}, Nil{}}, 0n, 1n)
-  match tbl:
-    case Sstable.Tbl{entries, filter, nbits, smallest, largest, count}:
-      match MyLSM.sst_parse(MyLSM.sst_serialize(MyLSM.sort_newest(entries), 0n)):
-        case Some{_}:
-          True{}
-        case None{}:
-          False{}
+  c6_go(MyLSM.sst_build(Con{MemTable.Entry{"k", Some{"v"}}, Nil{}}, 0n, 1n))
 
-def main() -> U32:
-  match c1():
+def run_all(a: Bool, b: Bool, c: Bool, d: Bool, e: Bool, f: Bool) -> U32:
+  match a:
     case False{}:
       1
     case True{}:
-      match c2():
+      match b:
         case False{}:
           2
         case True{}:
-          match c3():
+          match c:
             case False{}:
               3
             case True{}:
-              match c4():
+              match d:
                 case False{}:
                   4
                 case True{}:
-                  match c5():
+                  match e:
                     case False{}:
                       5
                     case True{}:
-                      match c6():
+                      match f:
                         case False{}:
                           6
                         case True{}:
                           0
+
+def main() -> U32:
+  run_all(c1(), c2(), c3(), c4(), c5(), c6())
 ```
 
 `c6` exercises Level 2 end to end: `sst_build` construction → destructure →
@@ -305,9 +325,12 @@ Expected: `200`. A non-200 within 5 minutes means propagation delay: wait, retry
 Run:
 ```bash
 mv ~/.bend/lib/0x<hash> /tmp/mylsm-hub-backup-0x<hash> 2>/dev/null || true
-printf 'import Base\nimport 0x<hash>/mylsm.bend as MyLSM\ndef main() -> U32:\n  db = MyLSM.put(MyLSM.open("/v"), "k", "v")\n  match MyLSM.get(db, "k"):\n    case Some{v}: 0\n    case None{}: 1\n' > /tmp/mylsm_hub_fetch_check.bend
+printf 'import Base\nimport 0x<hash>/mylsm.bend as MyLSM\ndef fetch_ok(+m: Maybe<&2, String>) -> U32:\n  match m:\n    case Some{v}: 0\n    case None{}: 1\ndef main() -> U32:\n  +db = MyLSM.put(MyLSM.open("/v"), "k", "v")\n  fetch_ok(MyLSM.get(db, "k"))\n' > /tmp/mylsm_hub_fetch_check.bend
 bend /tmp/mylsm_hub_fetch_check.bend
 ```
+
+The `fetch_ok` helper exists because Bend rejects `match` on a computed call
+("a parameter or field scrutinee"); the computed `get` travels as an argument.
 Expected: prints `0`, and `~/.bend/lib/0x<hash>/mylsm.bend` exists afterwards (re-fetched from the hub, hash-verified). Restore nothing: leave the fetched cache in place; delete `/tmp/mylsm_hub_fetch_check.bend` and `/tmp/mylsm-hub-backup-0x<hash>` only after a PASS.
 
 ### Task 5: `pack.json` + README + catalog listing
