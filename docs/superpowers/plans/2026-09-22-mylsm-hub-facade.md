@@ -342,14 +342,25 @@ the cross-file spike (`/tmp/sesslib/lib.bend` + `/tmp/sess_qual.bend`,
 `All terms check`, runs `3n`) — a failure here is a transcription error,
 not a design error.
 
-- [ ] **Step 3: Run the check on the portable backend**
+- [ ] **Step 3: Build native and run the check (NOT portable `bend file`)**
 
 Run:
 ```bash
 mkdir -p .mylsm/build
-bend .mylsm/build/facade_check.bend
+bend .mylsm/build/facade_check.bend -o .mylsm/build/facade_check
+.mylsm/build/facade_check --threads "$(sysctl -n hw.logicalcpu 2>/dev/null || nproc)"
 ```
 Expected: process prints `0` and exits 0. Any other printed number is a failure identifying the exact check above; fix the facade wrapper (never the `src/` sources) and re-run.
+
+Backend rule (diagnosed live 2026-09-22): portable `bend file` run mode hangs
+(>150s, no output) on any path reaching `SstFileV2.parse` — even a 22-char
+valid input — while the native binary parses it instantly (exit 0). Bisection
+proof: `sst_build`, `sort_newest`+`sst_serialize`, WAL roundtrip, and Sess
+put+get all run in ~0.1s portable; only `sst_parse` hangs; `bend -o` builds in
+~1.5s and the native binary prints `0`. The repo's proof gate never caught
+this because `proofs/*Proof.bend` have no `main` (check-only witnesses). So
+every runtime check in this plan touching the V2 decoder goes through the
+native binary, mirroring `bin/mylsm`'s `native_build` → `run_native` path.
 
 - [ ] **Step 4: Run the checker on the facade**
 
