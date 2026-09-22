@@ -63,3 +63,64 @@ def mfst_serialize(m: Manifest.Manifest) -> String:
 
 def mfst_parse(+s: String) -> Maybe<&2, Manifest.Manifest>:
   Manifest.parse(s)
+
+# --- Level 1: Sess session monad (primary API) ---
+type Sess<a, -A: Kind(a)> is Kind(a <&> &1):
+  Sess{run: Db.Db -> (Db.Db & A)}
+
+def Sess.pure(a, -A: Kind(a), x: A) -> Sess<a, A>:
+  Sess{db => (db, x)}
+
+def Sess.run_go(b, -B: Kind(b), s: Sess<b, B>, st: Db.Db) -> Db.Db & B:
+  match s:
+    case Sess{run}: run(st)
+
+def Sess.apply(a, -A: Kind(a), b, -B: Kind(b), p: Db.Db & A, f: A -> Sess<b, B>) -> Db.Db & B:
+  match p:
+    case (st, x): Sess.run_go(b, B, f(x), st)
+
+def Sess.bind(a, -A: Kind(a), -B: Kind(a), m: Sess<a, A>, f: A -> Sess<a, B>) -> Sess<a, B>:
+  Sess{st => Sess.apply(a, A, a, B, Sess.run_go(a, A, m, st), f)}
+
+def open(+dir: String) -> Db.Db:
+  Db.open_db(dir)
+
+def put_go(+db: Db.Db, +k: String, +v: String) -> Db.Db:
+  match db:
+    case Db.Db{dir, mem, levels, flushed, manifest_token}:
+      Db.Db{dir, Db.apply_batch(Con{Wal.Put{k, v}, Nil{}}, mem), levels, flushed, manifest_token}
+
+def del_go(+db: Db.Db, +k: String) -> Db.Db:
+  match db:
+    case Db.Db{dir, mem, levels, flushed, manifest_token}:
+      Db.Db{dir, Db.apply_batch(Con{Wal.Del{k}, Nil{}}, mem), levels, flushed, manifest_token}
+
+def batch_go(+db: Db.Db, +muts: List<&2, Wal.Mut>) -> Db.Db:
+  match db:
+    case Db.Db{dir, mem, levels, flushed, manifest_token}:
+      Db.Db{dir, Db.apply_batch(muts, mem), levels, flushed, manifest_token}
+
+def sget_go(+db: Db.Db, +k: String) -> Db.Db & Maybe<&2, String>:
+  (db, Db.db_get(db, k))
+
+def sput(+k: String, +v: String) -> Sess<&2, Unit>:
+  Sess{db => (put_go(db, k, v), Unit{})}
+
+def sdel(+k: String) -> Sess<&2, Unit>:
+  Sess{db => (del_go(db, k), Unit{})}
+
+def sbatch(+muts: List<&2, Wal.Mut>) -> Sess<&2, Unit>:
+  Sess{db => (batch_go(db, muts), Unit{})}
+
+def sget(+k: String) -> Sess<&2, Maybe<&2, String>>:
+  Sess{db => sget_go(db, k)}
+
+def run_sess(a, -A: Kind(a), st: Db.Db, s: Sess<a, A>) -> Db.Db & A:
+  Sess.run_go(a, A, s, st)
+
+def value_of(a, -A: Kind(a), p: Db.Db & A) -> A:
+  match p:
+    case (db, x): x
+
+def encode_batch(b: Wal.Batch) -> String:
+  Wal.encode(b)
