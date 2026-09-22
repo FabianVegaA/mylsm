@@ -83,30 +83,82 @@ extensions.
 
 ## 4. Public API (v1, exact names verified 2026-09-22)
 
-Two levels, one import: a `Db` abstraction for normal use plus granular
-part control. Both are pure and in-memory; durability stays git-only.
+Two levels, one import: a `Sess` session monad for normal use (primary API,
+`do`-notation, no manual handle threading) plus granular part control. Both
+are pure and in-memory; durability stays git-only.
 
-### Level 1 — Db abstraction (high level, new thin wrappers)
+### Level 1 — Sess session monad (primary API, `do`-notation)
 
 `Db.bend` already splits cleanly: `open_db`, `apply_mut`, `apply_batch`,
-`all_entries`, `db_get`, `wal_frame`, `wal_path` are pure; only `wal_tail`,
-`wal_append`, `db_write`, `db_put`, `db_del` are `IO`. The facade exposes the
-pure handle plus four composing wrappers (the only new logic in v1, ~10
-lines, same read path `mem ++ L0 ++ L1...` first-match-wins incl. tombstones):
+`all_entries`, `db_get` are pure; only `wal_tail`, `wal_append`, `db_write`,
+`db_put`, `db_del` are `IO`. Level 1 threads the pure `Db.Db` handle
+(`Db{dir, mem, levels, flushed, manifest_token}`, `dir` an opaque label, no
+filesystem touched) through a state monad, so consumers never write
+`db0..dbN`. Read path unchanged: newest-first across mem ++ levels,
+first-match-wins including tombstones.
 
-- Type `Db.Db` (`Db{dir, mem, levels, flushed, manifest_token}`), used as an
-  in-memory handle. `dir` is an opaque label in v1; no filesystem is touched.
-- `open(dir: String) -> Db.Db` = `Db.open_db(dir)`
-- `put(db: Db.Db, k: String, v: String) -> Db.Db` =
-  `Db.Db{dir, Db.apply_batch(Con{Wal.Put{k, v}, Nil{}}, mem), levels, flushed, manifest_token}`
-- `del(db: Db.Db, k: String) -> Db.Db` = same with `Wal.Del{k}`
-- `batch(db: Db.Db, muts: List<&2, Wal.Mut>) -> Db.Db` =
-  `Db.Db{dir, Db.apply_batch(muts, mem), levels, flushed, manifest_token}`
-- `get(db: Db.Db, k: String) -> Maybe<&2, String>` = `Db.db_get(db, k)`
-- `encode_batch(b: Wal.Batch) -> String` = `Wal.encode(b)` (the exact bytes the
-  future VFS adapter will frame with `Db.wal_frame` + `fsync`)
+Shapes proven by toy spike 2026-09-22 (compiles `All terms check`, runs
+correct — `/tmp/sess_spike.bend`): quantity-mirroring `Maybe` exactly,
+single shared quantity in `bind` (the `do` desugar calls
+`M.bind(xs.., A, R, m, k)`, so separate `a`/`b` misaligns — diagnosed live),
+all bindings affine (no `+`: `Sess` is `Kind(a <&> &1)`, and `+` demands
+`Data`), fields extracted only via `case Sess{run}` patterns (there is no
+`m.run` projection expression), direct calls passing quantity+type args
+explicitly (`Sess.run_go(b, B, …)`), closures match-free with all logic in
+named `*_go` defs on def-param binders:
 
-Consumer sketch: `open → put/put/del → get`, all pure, no `IO`.
+```bend
+type Sess<a, -A: Kind(a)> is Kind(a <&> &1):
+  Sess{run: Db.Db -> (Db.Db & A)}
+
+def Sess.pure(a, -A: Kind(a), x: A) -> Sess<a, A>:
+  Sess{db => (db, x)}
+
+def Sess.run_go(b, -B: Kind(b), s: Sess<b, B>, st: Db.Db) -> Db.Db & B:
+  match s:
+    case Sess{run}: run(st)
+
+def Sess.apply(a, -A: Kind(a), b, -B: Kind(b), p: Db.Db & A, f: A -> Sess<b, B>) -> Db.Db & B:
+  match p:
+    case (st, x): Sess.run_go(b, B, f(x), st)
+
+def Sess.bind(a, -A: Kind(a), -B: Kind(a), m: Sess<a, A>, f: A -> Sess<a, B>) -> Sess<a, B>:
+  Sess{st => Sess.apply(a, A, a, B, Sess.run_go(a, A, m, st), f)}
+```
+
+State transitions reuse the covered core via `*_go` helpers (match only on
+def params, the `src/Recover.bend:514` precedent; double-use of the `Db`
+handle goes through `+` def-params, legal because `Db` `is Data` — the
+`guide` `replicate` precedent):
+
+```bend
+def open(+dir: String) -> Db.Db:
+  Db.open_db(dir)
+
+def put_go(+db: Db.Db, +k: String, +v: String) -> Db.Db  # +db: Data, reusable
+def del_go(+db: Db.Db, +k: String) -> Db.Db
+def batch_go(+db: Db.Db, +muts: List<&2, Wal.Mut>) -> Db.Db
+def sget_go(+db: Db.Db, +k: String) -> Db.Db & Maybe<&2, String>
+
+def sput(+k: String, +v: String) -> Sess<&2, Unit>
+def sdel(+k: String) -> Sess<&2, Unit>
+def sbatch(+muts: List<&2, Wal.Mut>) -> Sess<&2, Unit>
+def sget(+k: String) -> Sess<&2, Maybe<&2, String>>
+
+def run_sess(a, -A: Kind(a), st: Db.Db, s: Sess<a, A>) -> Db.Db & A:
+  Sess.run_go(a, A, s, st)  # s plain affine (Sess is NOT Data: +s is rejected)
+def value_of(a, -A: Kind(a), p: Db.Db & A) -> A:
+  match p:
+    case (db, x): x  # dropping the affine handle is free (guide, Quantities)
+def encode_batch(b: Wal.Batch) -> String  # VFS bridge: exact bytes for Db.wal_frame + fsync
+```
+
+Consumer sketch: `open → run_sess(session)` where `session` is a `do
+Sess<…>:` block of `sput/sdel/sbatch` steps and `v : T <- sget(k)` binds —
+all pure, no `IO`, no manual threading. No new laws: `Sess` is sequencing
+only; the transition semantics stay covered by the existing `Db` laws, and
+adding law blocks would force witnesses through the proof name-gate for zero
+semantic gain.
 
 ### Level 2 — Part control (granular, delegating wrappers)
 
@@ -154,12 +206,13 @@ First run fetches into `~/.bend/lib/0x<hash>/`, verifies content hash, then
 runs offline. Durable open/write/crash-recovery remain in this repo via
 `bin/mylsm demo`; the published bundle is pure and in-memory.
 
-### Level 1 — Db handle (normal use)
+### Level 1 — Sess session (normal use, primary API)
 
-One handle, threaded linearly: every `Db.Db` holds affine lists, so each
-binding is used exactly once (`+db` in every signature, mirroring
-`src/Db.bend:36-84`). The read path is newest-first across mem ++ levels,
-first match wins including tombstones — a `del` hides older versions forever.
+No manual `db0..dbN` threading: Bend's `do` desugars to `Sess.bind`/`Sess.pure`
+for any type defining them (`bend guide`, Monads), so the session reads
+linearly while the monad threads the affine handle underneath. Each
+`run_sess` consumes its `Db` (affine use-once), so checks open a fresh handle
+per run:
 
 ```bend
 import Base
@@ -170,23 +223,28 @@ def show(+m: Maybe<&2, String>) -> U32:
     case Some{v}: 1
     case None{}: 0
 
+def session() -> MyLSM.Sess<&2, Maybe<&2, String>>:
+  do MyLSM.Sess<&2, Maybe<&2, String>>:
+    MyLSM.sput("hello", "world")
+    MyLSM.sput("answer", "42")
+    MyLSM.sdel("hello")
+    v : Maybe<&2, String> <- MyLSM.sget("answer")
+    return v
+
 def main() -> U32:
-  +db0 = MyLSM.open("/scratch")
-  +db1 = MyLSM.put(db0, "hello", "world")
-  +db2 = MyLSM.put(db1, "answer", "42")
-  +db3 = MyLSM.del(db2, "hello")
-  show(MyLSM.get(db3, "answer"))
+  show(MyLSM.value_of(&2, Maybe<&2, String>, MyLSM.run_sess(&2, Maybe<&2, String>, MyLSM.open("/scratch"), session())))
 ```
 
-The helper is load-bearing, not style: Bend rejects `match` on a computed
-call (`bend guide`: "a match cannot scrutinize a computed value"; the checker
-says "a parameter or field scrutinee"), so computed results are passed as
-arguments to defs that match on their parameters. Verified against
-`bend --check-only` on 2026-09-22.
+(`value_of` unwraps the runner pair; `show` matches on its parameter — the
+helper rule still holds: Bend rejects `match` on computed calls, verified
+`bend --check-only` 2026-09-22. Steps share the block quantity `&2`;
+`v : T <- …` binds, bare `sput(…)` is a Unit step, `return` wraps via
+`Sess.pure`.)
 
-`batch(db, muts)` folds a whole `Wal.Mut` list at once (pinned equal to
-sequential `put`/`del` by the existing `Db` laws); `encode_batch` renders the
-exact bytes the future VFS adapter will frame with `Db.wal_frame` + `fsync`.
+`sbatch(muts)` folds a whole `Wal.Mut` list at once (pinned equal to
+sequential `sput`/`sdel` by the existing `Db` laws); `encode_batch` renders
+the exact bytes the future VFS adapter will frame with `Db.wal_frame` +
+`fsync`.
 
 ### Level 2 — part control (tuning and embedding)
 
@@ -218,47 +276,33 @@ Same helper rule as Level 1 (no `match` on computed calls, no `if` —
 `range_scan`, `sst_*`, `wal_*`, `mfst_*` take/return `Entry`/`Mut`/`Batch`/
 `Table` values (see constructor gap below).
 
-### Session-monad ergonomics (explicit, follow-up proposal — not v1 API)
+### Sess checker rules (proven 2026-09-22, normative for implementation)
 
-Correcting §5's earlier implication: Bend's `do M<xs.., R>:` desugars to
-`M.bind`/`M.pure` for **any** type defining them (`bend guide`: "`IO`,
-`Maybe`, `Result`, or your own"), so explicit `db0..dbN` threading is a v1
-choice, not a language limit. A session monad would look like this (sketch,
-checker-spike required before committing):
+`Sess` is v1 (promoted from follow-up) after a toy spike compiled
+`All terms check` and ran correct, plus a qualified-alias spike
+(`do L.Sess<…>` across files). Six rules, each diagnosed live against the
+checker — violating any one fails `--check-only`:
 
-```bend
-type Sess<A> is Data:
-  Sess{run: Db.Db -> (Db.Db & A)}
-
-def sput(+k: String, +v: String) -> Sess<Unit>
-def sdel(+k: String) -> Sess<Unit>
-def sget(+k: String) -> Sess<Maybe<&2, String>>
-# plus Sess.bind / Sess.pure matching the do-desugar shape
-```
-
-Consumer payoff (no manual threading):
-
-```bend
-def session() -> Sess<U32>:
-  do Sess<U32>:
-    sput("hello", "world")
-    sput("answer", "42")
-    sdel("hello")
-    v : Maybe<&2, String> <- sget("answer")
-    return 1
-```
-
-Why not v1: (1) ~30-40 new lines plus `bind`/`pure` shape-matching against an
-unforgiving checker — this repo already carries "checker-tractable" scars
-(e.g. `src/Sstable.bend:48-50`, closed-proof bridges in `AGENT.md` history),
-and affine-state closures are exactly the risky shape; (2) `AGENT.md` asks for
-laws+witnesses for pure decisions, so the monad laws (`bind pure`,
-associativity) become proof work; (3) affinity doesn't vanish, it hides inside
-`bind` — the win is purely syntactic and grows with session length, while the
-README example (4 ops) is a wash once the `session`/`run` wrapper is counted.
-Decision: v1 ships explicit threading (zero new machinery, 1:1 with the
-proof-covered core); the `Sess` spike is the first v2 candidate, and if the
-checker blows up, explicit style stands with no harm done.
+1. Single shared quantity in `bind`: the desugar calls `M.bind(xs.., A, R,
+   m, k)`, so separate `a`/`b` misaligns (`expected Quant, observed Data`).
+   Mirror `Maybe.bind` exactly: `(a, -A: Kind(a), -B: Kind(a), m, f)`.
+2. No `+` on `Sess` bindings: `Sess` is `Kind(a <&> &1)`, and `+` demands
+   `Data` (`expected Data, observed Kind`). All bindings plain affine,
+   used exactly once.
+3. No `m.run` projection expressions (`expected a defined name`): fields
+   leave the wrapper only via `case Sess{run}` patterns. Route everything
+   through `Sess.run_go`.
+4. Direct calls pass quantity+type args explicitly (`Sess.run_go(b, B, …)`,
+   the `Maybe.is_some(a, A, m)` precedent); only the `do` desugar inserts
+   them automatically.
+5. Closures are match-free and `+`-free: all logic lives in named `*_go`
+   defs on def-param binders; double-use of the `Db` handle goes through
+   `+` def-params (legal because `Db` `is Data` — the guide `replicate`
+   precedent), never `+` lambda binders (untested shape, not needed).
+6. Def order is load-bearing (backward references only): machinery
+   (`type`, `pure`, `run_go`, `apply`, `bind`) → `*_go` helpers → actions
+   → `run_sess`/`value_of` → sessions → `main` last. A forward reference
+   fails with `expected a defined name` (diagnosed live).
 
 ### Constructor gap (explicit, follow-up proposal — not v1 API)
 
@@ -290,7 +334,10 @@ trap.
 
 ## 7. Testing and acceptance gates
 
-1. `bend mylsm.bend --check-only` passes (Bend 2.0.x, same as CI).
+1. `bend mylsm.bend --check-only` passes (Bend 2.0.x, same as CI). The
+   `Sess` shapes are pre-validated: toy spike plus qualified-alias spike
+   both compile and run 2026-09-22, so a Task 2 failure points at a
+   transcription error against §4, not at the design.
 2. `bend guide` sanity unaffected; `./proofs/run.sh` still green (facade adds no
    laws; existing `laws/*.bend` + `proofs/*Proof.bend` untouched).
 3. Publish prints a hash + import line; `https://hub.bend-lang.com/0xHASH/mylsm.bend`
@@ -310,5 +357,9 @@ trap.
   `IO\.|effs/|def main` on `mylsm.bend` in CI smoke.
 - Name collisions for consumers (`Parse` precedent) → canonical alias `MyLSM`
   documented everywhere; facade re-exports keep `Module.fn` qualification.
-- Catalog scanner mismatch (README names чужой hash) → `pack.json` is
-  authoritative; verify file-in-repo + hub-200 before filing the issue.
+- Catalog scanner mismatch (README names someone else's hash) → `pack.json`
+  is authoritative; verify file-in-repo + hub-200 before filing the issue.
+- `Sess` transcription drift (the six §5 rules) → any `--check-only` failure
+  in Task 2 is diffed against the proven toy (`/tmp/sess_spike.bend`,
+  `/tmp/sesslib/lib.bend` + `/tmp/sess_qual.bend` shapes) before touching
+  the design.

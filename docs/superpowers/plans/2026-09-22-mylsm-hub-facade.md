@@ -4,7 +4,7 @@
 
 **Goal:** Publish `mylsm.bend` (pure Db abstraction + part-level control, no IO) to the Bend hub and list it on bend-packages as `source: hub`.
 
-**Architecture:** Single-file facade at repo root importing `./src/*.bend` and delegating 1:1 (approach C1); four new pure `Db`-handle wrappers compose verified `Db.open_db/apply_batch/db_get`; everything else delegates with identical signatures.
+**Architecture:** Single-file facade at repo root importing `./src/*.bend` and delegating 1:1 (approach C1); Level 1 is a `Sess` state monad (`bind`/`pure`/`run_go`/`apply` + `sput/sdel/sbatch/sget` actions over `*_go` helpers composing verified `Db.open_db/apply_batch/db_get`); everything else delegates with identical signatures.
 
 **Tech Stack:** Bend 2.0.x (`bend --check-only`, `bend --publish`), existing `src/*.bend` pure modules, `pack.json` catalog manifest, `bend-packages` `scan.mjs` conventions.
 
@@ -12,7 +12,7 @@
 
 ## File structure
 
-- Create: `mylsm.bend` — the publish root and only new Bend code. Imports `Base` + 9 `./src/*.bend` modules (`Keys`, `MemTable`, `SortedRun`, `Sstable`, `SstFile`, `Wal`, `Manifest`, `MergeIter`, `Db`). Contains Level 1 (`open/put/del/batch/get/encode_batch`) + Level 2 (`mem_*/sst_*/wal_*/mfst_*/sort_newest/range_scan`, `Keys.cmp/eq` passthroughs). No `IO`, no `.c`/`.js` imports, no `def main`, no `@unsafe`.
+- Create: `mylsm.bend` — the publish root and only new Bend code. Imports `Base` + 9 `./src/*.bend` modules (`Keys`, `MemTable`, `SortedRun`, `Sstable`, `SstFile`, `Wal`, `Manifest`, `MergeIter`, `Db`). Contains Level 1 (`Sess` type + `pure`/`run_go`/`apply`/`bind`, `open`, `put_go/del_go/batch_go/sget_go`, `sput/sdel/sbatch/sget`, `run_sess`, `value_of`, `encode_batch`) + Level 2 (`mem_*/sst_*/wal_*/mfst_*/sort_newest/range_scan`, `cmp/eq` passthroughs). No `IO`, no `.c`/`.js` imports, no `def main`, no `@unsafe`, no `law` blocks.
 - Create: `pack.json` — `{"name","description","import","category":"packages"}` with the exact published import line.
 - Create (scratch, delete before commit): `.mylsm/build/facade_check.bend` (gitignored) — consumer-style verification file importing the facade by relative path.
 - Modify: `README.md:10-28` (Quick start section) — append `Use as a library (Bend hub)` subsection with the canonical import snippet.
@@ -108,54 +108,111 @@ git add mylsm.bend
 git commit -m "feat: add mylsm.bend facade skeleton with part-level delegates"
 ```
 
-### Task 2: Level 1 Db abstraction wrappers
+### Task 2: Level 1 Sess session monad
 
 **Files:**
 - Modify: `mylsm.bend` (append Level 1 defs)
 - Test: `.mylsm/build/facade_check.bend` (gitignored)
 
-- [ ] **Step 1: Append Level 1 Db-handle wrappers to `mylsm.bend`**
+- [ ] **Step 1: Append Level 1 Sess machinery + actions to `mylsm.bend`**
+
+Order matters (backward references only): type → `pure` → `run_go` →
+`apply` → `bind` → `open` → `*_go` helpers → actions → `run_sess` →
+`value_of` → `encode_batch`. Every shape below is transcribed from the toy
+spike that compiled `All terms check` and ran correct on 2026-09-22
+(`/tmp/sess_spike.bend`, Nat state) plus the qualified-alias spike
+(`/tmp/sesslib/lib.bend` + `/tmp/sess_qual.bend`); only the state type
+changes (Nat → `Db.Db`). Do not innovate on annotations: single shared
+quantity in `bind`, no `+` on any `Sess` binding, fields out only via
+`case Sess{run}`, explicit quantity+type args on direct calls, closures
+match-free.
 
 ```bend
-# --- Level 1: Db abstraction (pure in-memory handle; dir is an opaque label) ---
+# --- Level 1: Sess session monad (primary API) ---
+type Sess<a, -A: Kind(a)> is Kind(a <&> &1):
+  Sess{run: Db.Db -> (Db.Db & A)}
+
+def Sess.pure(a, -A: Kind(a), x: A) -> Sess<a, A>:
+  Sess{db => (db, x)}
+
+def Sess.run_go(b, -B: Kind(b), s: Sess<b, B>, st: Db.Db) -> Db.Db & B:
+  match s:
+    case Sess{run}: run(st)
+
+def Sess.apply(a, -A: Kind(a), b, -B: Kind(b), p: Db.Db & A, f: A -> Sess<b, B>) -> Db.Db & B:
+  match p:
+    case (st, x): Sess.run_go(b, B, f(x), st)
+
+def Sess.bind(a, -A: Kind(a), -B: Kind(a), m: Sess<a, A>, f: A -> Sess<a, B>) -> Sess<a, B>:
+  Sess{st => Sess.apply(a, A, a, B, Sess.run_go(a, A, m, st), f)}
+
 def open(+dir: String) -> Db.Db:
   Db.open_db(dir)
 
-def put(+db: Db.Db, +k: String, +v: String) -> Db.Db:
+def put_go(+db: Db.Db, +k: String, +v: String) -> Db.Db:
   match db:
-    case Db.Db{dir, +mem, levels, flushed, manifest_token}:
+    case Db.Db{dir, mem, levels, flushed, manifest_token}:
       Db.Db{dir, Db.apply_batch(Con{Wal.Put{k, v}, Nil{}}, mem), levels, flushed, manifest_token}
 
-def del(+db: Db.Db, +k: String) -> Db.Db:
+def del_go(+db: Db.Db, +k: String) -> Db.Db:
   match db:
-    case Db.Db{dir, +mem, levels, flushed, manifest_token}:
+    case Db.Db{dir, mem, levels, flushed, manifest_token}:
       Db.Db{dir, Db.apply_batch(Con{Wal.Del{k}, Nil{}}, mem), levels, flushed, manifest_token}
 
-def batch(+db: Db.Db, +muts: List<&2, Wal.Mut>) -> Db.Db:
+def batch_go(+db: Db.Db, +muts: List<&2, Wal.Mut>) -> Db.Db:
   match db:
-    case Db.Db{dir, +mem, levels, flushed, manifest_token}:
+    case Db.Db{dir, mem, levels, flushed, manifest_token}:
       Db.Db{dir, Db.apply_batch(muts, mem), levels, flushed, manifest_token}
 
-def get(+db: Db.Db, +k: String) -> Maybe<&2, String>:
-  Db.db_get(db, k)
+def sget_go(+db: Db.Db, +k: String) -> Db.Db & Maybe<&2, String>:
+  (db, Db.db_get(db, k))
+
+def sput(+k: String, +v: String) -> Sess<&2, Unit>:
+  Sess{db => (put_go(db, k, v), Unit{})}
+
+def sdel(+k: String) -> Sess<&2, Unit>:
+  Sess{db => (del_go(db, k), Unit{})}
+
+def sbatch(+muts: List<&2, Wal.Mut>) -> Sess<&2, Unit>:
+  Sess{db => (batch_go(db, muts), Unit{})}
+
+def sget(+k: String) -> Sess<&2, Maybe<&2, String>>:
+  Sess{db => sget_go(db, k)}
+
+def run_sess(a, -A: Kind(a), st: Db.Db, s: Sess<a, A>) -> Db.Db & A:
+  Sess.run_go(a, A, s, st)
+
+def value_of(a, -A: Kind(a), p: Db.Db & A) -> A:
+  match p:
+    case (db, x): x
 
 def encode_batch(b: Wal.Batch) -> String:
   Wal.encode(b)
 ```
 
-Linearity notes (do not change): `+mem` in the `case` pattern mirrors the proven pattern at `src/Recover.bend:514`; each bound field (`dir`, `levels`, `flushed`, `manifest_token`) is used exactly once in the rebuilt `Db.Db{...}` (same as `src/Db.bend:112-119`).
+Notes (do not change without re-running the toy spike first): `mem` is a
+plain (not `+`) pattern binding because it is used exactly once — contrast
+`src/Recover.bend:514`, where `+mem` is needed for double use; passing that
+plain `mem` into `+mem`-parameter `Db.apply_batch` mirrors
+`src/Db.bend:112-119` exactly. `+db` double-use inside `sget_go` is legal
+because `Db` `is Data` (guide `replicate` precedent). `value_of` drops the
+handle (dropping affine is free, guide Quantities). `encode_batch` stays a
+plain delegate: it is the VFS bridge, not session state.
 
 - [ ] **Step 2: Write the consumer-style check file**
 
-Each check builds its own handle because `Db.Db` holds affine lists: a handle
-is consumed by `get`, so sharing one handle across assertions would violate
-linearity. Two checker rules shape this file (both verified against
-`bend --check-only` on 2026-09-22): no `match` on a computed call or a
-`let`-bound variable (the checker rejects both: "a parameter or field
-scrutinee" — corroborated by the comment at `src/Keys.bend:3-5`), so computed
-results travel as arguments to helpers that match on parameters; and no `if`
-(`bend guide` has none yet). `main` therefore delegates to `run_all` instead
-of matching on `c1()..c6()` directly. Save as
+Seven checks: `c1/c2/c3/c7` are `Sess` programs (Level 1: put+get, two puts,
+del-tombstone, batch-put+del), `c4/c5/c6` stay explicit pure checks (Level 2:
+MemTable, WAL roundtrip, SSTable v2 roundtrip). Each `Sess` check runs on a
+fresh `open` because `run_sess` consumes its handle (affine use-once).
+Checker rules shaping this file (all verified against `bend --check-only` on
+2026-09-22): no `match` on a computed call or a `let`-bound variable (the
+checker rejects both: "a parameter or field scrutinee" — corroborated by the
+comment at `src/Keys.bend:3-5`), so computed results travel as arguments to
+helpers that match on parameters; no `if` (`bend guide` has none yet);
+`main` delegates to `run_all` instead of matching on calls directly; every
+helper binding is plain affine (used exactly once — no `+`, which would
+demand `Data` kinds this file does not need to assume). Save as
 `.mylsm/build/facade_check.bend` (`.mylsm/` is gitignored, so it never leaks
 into the publish or a commit):
 
@@ -173,47 +230,61 @@ def check_get_eq(got: Maybe<&2, String>, want: String) -> Bool:
     case None{}:
       False{}
 
-def is_missing(+m: Maybe<&2, String>) -> Bool:
+def is_missing(m: Maybe<&2, String>) -> Bool:
   match m:
     case None{}:
       True{}
     case Some{_}:
       False{}
 
-def is_some_batch(+m: Maybe<&2, Wal.Batch>) -> Bool:
+def is_some_batch(m: Maybe<&2, Wal.Batch>) -> Bool:
   match m:
     case Some{_}:
       True{}
     case None{}:
       False{}
 
-def is_some_table(+m: Maybe<&2, Sstable.Table>) -> Bool:
+def is_some_table(m: Maybe<&2, Sstable.Table>) -> Bool:
   match m:
     case Some{_}:
       True{}
     case None{}:
       False{}
 
-def c1() -> Bool:
-  +db = MyLSM.put(MyLSM.open("/s"), "hello", "world")
-  check_get_eq(MyLSM.get(db, "hello"), "world")
+def c1() -> MyLSM.Sess<&2, Bool>:
+  do MyLSM.Sess<&2, Bool>:
+    MyLSM.sput("hello", "world")
+    v : Maybe<&2, String> <- MyLSM.sget("hello")
+    return check_get_eq(v, "world")
 
-def c2() -> Bool:
-  +db = MyLSM.put(MyLSM.put(MyLSM.open("/s"), "hello", "world"), "answer", "42")
-  check_get_eq(MyLSM.get(db, "answer"), "42")
+def c2() -> MyLSM.Sess<&2, Bool>:
+  do MyLSM.Sess<&2, Bool>:
+    MyLSM.sput("hello", "world")
+    MyLSM.sput("answer", "42")
+    v : Maybe<&2, String> <- MyLSM.sget("answer")
+    return check_get_eq(v, "42")
 
-def c3() -> Bool:
-  +db = MyLSM.del(MyLSM.put(MyLSM.open("/s"), "hello", "world"), "hello")
-  is_missing(MyLSM.get(db, "hello"))
+def c3() -> MyLSM.Sess<&2, Bool>:
+  do MyLSM.Sess<&2, Bool>:
+    MyLSM.sput("hello", "world")
+    MyLSM.sdel("hello")
+    v : Maybe<&2, String> <- MyLSM.sget("hello")
+    return is_missing(v)
+
+def c7() -> MyLSM.Sess<&2, Bool>:
+  do MyLSM.Sess<&2, Bool>:
+    MyLSM.sbatch(Con{Wal.Put{"a", "b"}, Con{Wal.Del{"a"}, Nil{}}})
+    v : Maybe<&2, String> <- MyLSM.sget("a")
+    return is_missing(v)
 
 def c4() -> Bool:
-  +t = MyLSM.mem_put(MyLSM.mem_empty(), "k", "v")
+  t = MyLSM.mem_put(MyLSM.mem_empty(), "k", "v")
   check_get_eq(MyLSM.mem_get(t, "k"), "v")
 
 def c5() -> Bool:
   is_some_batch(MyLSM.wal_decode(MyLSM.wal_encode(Wal.Batch{Con{Wal.Put{"a", "b"}, Nil{}}})))
 
-def c6_go(+t: Sstable.Table) -> Bool:
+def c6_go(t: Sstable.Table) -> Bool:
   match t:
     case Sstable.Tbl{entries, filter, nbits, smallest, largest, count}:
       is_some_table(MyLSM.sst_parse(MyLSM.sst_serialize(MyLSM.sort_newest(entries), 0n)))
@@ -221,7 +292,10 @@ def c6_go(+t: Sstable.Table) -> Bool:
 def c6() -> Bool:
   c6_go(MyLSM.sst_build(Con{MemTable.Entry{"k", Some{"v"}}, Nil{}}, 0n, 1n))
 
-def run_all(a: Bool, b: Bool, c: Bool, d: Bool, e: Bool, f: Bool) -> U32:
+def run_bool(s: MyLSM.Sess<&2, Bool>) -> Bool:
+  MyLSM.value_of(&2, Bool, MyLSM.run_sess(&2, Bool, MyLSM.open("/s"), s))
+
+def run_all(a: Bool, b: Bool, c: Bool, d: Bool, e: Bool, f: Bool, g: Bool) -> U32:
   match a:
     case False{}:
       1
@@ -246,18 +320,27 @@ def run_all(a: Bool, b: Bool, c: Bool, d: Bool, e: Bool, f: Bool) -> U32:
                         case False{}:
                           6
                         case True{}:
-                          0
+                          match g:
+                            case False{}:
+                              7
+                            case True{}:
+                              0
 
 def main() -> U32:
-  run_all(c1(), c2(), c3(), c4(), c5(), c6())
+  run_all(run_bool(c1()), run_bool(c2()), run_bool(c3()), c4(), c5(), c6(), run_bool(c7()))
 ```
 
 `c6` exercises Level 2 end to end: `sst_build` construction → destructure →
 sort → serialize (v2) → parse roundtrip. Unused field bindings (`filter`,
 `nbits`, `smallest`, `largest`, `count`) follow the proven precedent of
 `Db.all_entries` (`src/Db.bend:76-81`), which binds `dir`/`flushed`/
-`manifest_token` without using them. Exit code `0` means all six assertions
-held; any nonzero value names the failing check.
+`manifest_token` without using them. `run_bool` extracts each session result
+through `run_sess` + `value_of` on a fresh handle. Exit code `0` means all
+seven assertions held; any nonzero value names the failing check. The
+`do`-over-qualified-alias shape (`do MyLSM.Sess<…>:`) was pre-validated by
+the cross-file spike (`/tmp/sesslib/lib.bend` + `/tmp/sess_qual.bend`,
+`All terms check`, runs `3n`) — a failure here is a transcription error,
+not a design error.
 
 - [ ] **Step 3: Run the check on the portable backend**
 
@@ -277,7 +360,7 @@ Expected: PASS. A failure here with a passing Step 3 means a linearity (`+`) ann
 
 ```bash
 git add mylsm.bend
-git commit -m "feat: add pure Db-handle abstraction to mylsm.bend facade"
+git commit -m "feat: add Sess session monad as Level 1 of mylsm.bend facade"
 ```
 
 ### Task 3: Regression gates (proofs + fuzz, no new laws)
@@ -288,7 +371,7 @@ git commit -m "feat: add pure Db-handle abstraction to mylsm.bend facade"
 - [ ] **Step 1: Run the modular proof gate**
 
 Run: `bin/mylsm check`
-Expected: `SUMMARY PASS=<total> FAIL=0 TIMEOUT=0 TOTAL=<total>` (baseline: 34 modules green on Bend 2.0.24). The facade adds no `laws/*.bend` and no `proofs/*Proof.bend`, so the name-gate (`check_names`) must pass untouched. Any FAIL/TIMEOUT is a pre-existing issue, not caused by this plan: record it, do not modify proofs here.
+Expected: `SUMMARY PASS=<total> FAIL=0 TIMEOUT=0 TOTAL=<total>` (baseline: 34 modules green on Bend 2.0.24). The facade adds no `laws/*.bend` and no `proofs/*Proof.bend`, so the name-gate (`check_names`) must pass untouched — deliberately: `Sess` is sequencing only over the already-law-covered `Db` core, and any new law block would force witnesses through the gate for zero semantic gain. Any FAIL/TIMEOUT is a pre-existing issue, not caused by this plan: record it, do not modify proofs here.
 
 - [ ] **Step 2: Run the decoder smoke corpus**
 
@@ -325,12 +408,13 @@ Expected: `200`. A non-200 within 5 minutes means propagation delay: wait, retry
 Run:
 ```bash
 mv ~/.bend/lib/0x<hash> /tmp/mylsm-hub-backup-0x<hash> 2>/dev/null || true
-printf 'import Base\nimport 0x<hash>/mylsm.bend as MyLSM\ndef fetch_ok(+m: Maybe<&2, String>) -> U32:\n  match m:\n    case Some{v}: 0\n    case None{}: 1\ndef main() -> U32:\n  +db = MyLSM.put(MyLSM.open("/v"), "k", "v")\n  fetch_ok(MyLSM.get(db, "k"))\n' > /tmp/mylsm_hub_fetch_check.bend
+printf 'import Base\nimport 0x<hash>/mylsm.bend as MyLSM\ndef show(m: Maybe<&2, String>) -> U32:\n  match m:\n    case Some{v}: 0\n    case None{}: 1\ndef session() -> MyLSM.Sess<&2, Maybe<&2, String>>:\n  do MyLSM.Sess<&2, Maybe<&2, String>>:\n    MyLSM.sput("k", "v")\n    v : Maybe<&2, String> <- MyLSM.sget("k")\n    return v\ndef main() -> U32:\n  show(MyLSM.value_of(&2, Maybe<&2, String>, MyLSM.run_sess(&2, Maybe<&2, String>, MyLSM.open("/v"), session())))\n' > /tmp/mylsm_hub_fetch_check.bend
 bend /tmp/mylsm_hub_fetch_check.bend
 ```
 
-The `fetch_ok` helper exists because Bend rejects `match` on a computed call
-("a parameter or field scrutinee"); the computed `get` travels as an argument.
+Helpers (`show`) exist because Bend rejects `match` on a computed call
+("a parameter or field scrutinee"); the computed value travels as an argument.
+The session exercises the published `Sess` end to end through a clean fetch.
 Expected: prints `0`, and `~/.bend/lib/0x<hash>/mylsm.bend` exists afterwards (re-fetched from the hub, hash-verified). Restore nothing: leave the fetched cache in place; delete `/tmp/mylsm_hub_fetch_check.bend` and `/tmp/mylsm-hub-backup-0x<hash>` only after a PASS.
 
 ### Task 5: `pack.json` + README + catalog listing
@@ -368,9 +452,10 @@ After the `bin/mylsm bench` code block (`README.md:26-28`), insert:
 import 0x<hash>/mylsm.bend as MyLSM
 ```
 
-Level 1 (Db handle): `MyLSM.open/put/get/del/batch`. Level 2 (parts):
-`MyLSM.cmp/eq/mem_*/sst_*/wal_*/mfst_*/sort_newest/range_scan`. Pure and
-in-memory; durability (`bin/mylsm demo`) stays in this repo.
+Level 1 (Sess session, primary): `do MyLSM.Sess<…>:` with
+`MyLSM.sput/sdel/sbatch/sget`, run via `MyLSM.run_sess` over `MyLSM.open`.
+Level 2 (parts): `MyLSM.cmp/eq/mem_*/sst_*/wal_*/mfst_*/sort_newest/range_scan`.
+Pure and in-memory; durability (`bin/mylsm demo`) stays in this repo.
 ```
 
 - [ ] **Step 3: Verify the three scanner conditions locally**
