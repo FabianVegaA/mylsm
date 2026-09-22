@@ -31,6 +31,21 @@ The demo writes and reads two keys, deletes one key, verifies the tombstone, and
 runs a small pure worker using Bend's GPU-call syntax. Storage IO always remains
 on the CPU. See `app/README.md` for details.
 
+## Use as a library (Bend hub)
+
+```sh
+# Paste the import; the compiler fetches and verifies the hash.
+```
+
+```bend
+import 0x05fa0e42448e8e221df592b204de523d/mylsm.bend as MyLSM
+```
+
+Level 1 (Sess session, primary): `do MyLSM.Sess<…>:` with
+`MyLSM.sput/sdel/sbatch/sget`, run via `MyLSM.run_sess` over `MyLSM.open`.
+Level 2 (parts): `MyLSM.cmp/eq/mem_*/sst_*/wal_*/mfst_*/sort_newest/range_scan`.
+Pure and in-memory; durability (`bin/mylsm demo`) stays in this repo.
+
 ## Runtime modes
 
 Select execution with environment variables:
