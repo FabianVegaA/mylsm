@@ -69,7 +69,9 @@ def main() -> U32:
 ```
 
 Level 2 exposes the parts directly (ordered-map core, key ordering, codecs,
-tables, manifests) without a session:
+tables, manifests) without a session. Reads are newest-first with
+tombstones included, so the newest write wins and a delete hides every older
+version — this snippet proves both in one run:
 
 ```bend
 import Base
@@ -80,14 +82,20 @@ def bit(b: Bool) -> U32:
     case True{}: 1
     case False{}: 0
 
-def check_mem(m: Maybe<&2, String>) -> U32:
+def is_present(m: Maybe<&2, String>) -> Bool:
   match m:
-    case Some{v}: bit(MyLSM.eq(v, "v"))
-    case None{}: 0
+    case Some{v}: True{}
+    case None{}: False{}
+
+def is_missing(m: Maybe<&2, String>) -> Bool:
+  match m:
+    case None{}: True{}
+    case Some{v}: False{}
 
 def main() -> U32:
-  t = MyLSM.mem_put(MyLSM.mem_empty(), "k", "v")
-  check_mem(MyLSM.mem_get(t, "k"))
+  live = MyLSM.mem_put(MyLSM.mem_put(MyLSM.mem_empty(), "k", "v1"), "k", "v2")
+  gone = MyLSM.mem_del(MyLSM.mem_empty(), "k")
+  bit(Bool.and(is_present(MyLSM.mem_get(live, "k")), is_missing(MyLSM.mem_get(gone, "k"))))
 ```
 
 Pure and in-memory; durability (`bin/mylsm demo`) stays in this repo. See
