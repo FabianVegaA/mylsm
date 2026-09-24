@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace MyLSM core internals with pinned `bend-collections` hub modules across 5 layers (crypto → bits → MemTable/math → sort/merge → SSTable blocks/WAL batching), keeping the `mylsm.bend` facade signatures stable, and publish the result as a new hub version.
+**Goal:** Delete the V1 SSTable legacy surface, then replace MyLSM core internals with pinned `bend-collections` hub modules across 5 layers (crypto → bits → MemTable/math → sort/merge → SSTable blocks/WAL batching), keeping the `mylsm.bend` facade signatures stable, and publish the result as a new hub version.
 
 **Architecture:** Each layer turns one `src/*.bend` module into a thin adapter (~10–30 lines) over a hash-pinned hub import (`0x9ee2e9a299991dcc089fe22c7f3ceb5f`, verified in Task 0); only LSM-glue laws in `laws/` are kept/rewritten, hub `PROOF.bend` files are trusted as-is; every layer ends with `bend --check-only` + targeted proof + `./proofs/run.sh` + `bin/mylsm bench` before commit, with bench regression → revert.
 
@@ -13,11 +13,11 @@
 ## File structure
 
 - Create: `tools/toolchain.json` — pins `{"bend": "2.0.25"}` (minimum Bend for `bend-collections`).
-- Create (Task 1): `src/SstChecksum.bend` — adapter over hub `sha256.bend`; sole checksum used by `SstFileV2` serialize/parse. `Manifest.mhash` stays untouched for Manifest framing.
-- Modify per layer: `src/SstFileV2.bend` (Task 1), `src/BitTree.bend` (Task 2), `src/MemTable.bend` + `src/Decimal.bend` (Task 3), `src/SortedRun.bend` + `src/MergeIter.bend` + `src/Compact.bend` (Task 4), `src/Sstable.bend` + `src/Wal.bend` (Task 5).
+- Create (Task 2): `src/SstChecksum.bend` — adapter over hub `sha256.bend`; sole checksum used by `SstFileV2` serialize/parse. `Manifest.mhash` stays untouched for Manifest framing.
+- Modify per layer: `src/SstFileV2.bend` (Task 2), `src/BitTree.bend` (Task 3), `src/MemTable.bend` + `src/Decimal.bend` (Task 4), `src/SortedRun.bend` + `src/MergeIter.bend` + `src/Compact.bend` (Task 5), `src/Sstable.bend` + `src/Wal.bend` (Task 6).
 - Modify per layer (same task, same commit): matching `laws/<Domain>.bend` glue laws + `proofs/<Domain>Proof.bend` witnesses that cite changed behavior (checksum fixtures, scan lemmas, sort/merge properties).
-- Modify (Task 6): `mylsm.bend` (header comment with new hub pin only if facade bodies change; signatures unchanged), `pack.json` (new `import` line), `README.md` (new import snippet).
-- Untouched: `src/SstFileV1Fast.bend` (legacy read path + its proofs stay green), `src/Db.bend` orchestration, `src/Fs.bend`, `src/Console.bend`, `src/CrashPoint.bend`, `src/effs/`, `app/`, `laws/Db.bend`, `laws/Recover.bend` (unless a layer forces a glue change, then it is amended in that layer's task).
+- Modify (Task 7): `mylsm.bend` (header comment with new hub pin only if facade bodies change; signatures unchanged), `pack.json` (new `import` line), `README.md` (new import snippet).
+- Untouched: `src/Db.bend` orchestration, `src/Fs.bend`, `src/Console.bend`, `src/CrashPoint.bend`, `src/effs/`, `app/`, `laws/Db.bend` (unless a layer forces a glue change, then it is amended in that layer's task). `src/SstFile.bend`, `src/SstStream.bend`, `src/Recover.bend` and the V1 laws/proofs are modified or deleted in Task 1, not preserved.
 - Test via: `bend <file> --check-only`, `bend proofs/<X>Proof.bend` (targeted), `./proofs/run.sh` (gate), `bin/mylsm bench` + `bench/BASELINE.md` (perf gate), `grep -rn "0x" src/ mylsm.bend` (single-pin gate).
 
 ---
@@ -64,7 +64,227 @@ git commit -m "chore: pin bend-collections 0x9ee2e9 and Bend 2.0.25 floor" -m "H
 
 ---
 
-### Task 1: Crypto layer — SstFileV2 checksum via hub SHA-256
+### Task 1: Delete the V1 legacy surface (no retrocompat, no dead code)
+
+**Files:**
+- Delete: `src/SstFileV1Fast.bend`, `laws/SstFileV1Parser.bend`, `laws/SstFileV1Equivalence.bend`, `laws/SstFileDispatchV1.bend`, `proofs/SstFileV1ParserProof.bend`, `proofs/SstFileV1EquivalenceProof.bend`, `proofs/SstFileDispatchV1Proof.bend`
+- Rewrite: `src/SstFile.bend` (v2-only), `src/SstStream.bend` (drop `Legacy` mode), `laws/SstFileRoundtrip.bend` (v2-only), `laws/SstFileDispatchV2.bend` (drop `parse_version` law), `laws/SstStream.bend` (drop v1-route law)
+- Modify: `proofs/SstFileRoundtripProof.bend`, `proofs/SstFileDispatchV2Proof.bend`, `proofs/SstStreamProof.bend` (witnesses renamed to the new law names), `src/Recover.bend` + `laws/Recover.bend` + `proofs/RecoverProof.bend` (drop legacy-generation branch)
+- Test: `bend proofs/SstFileRoundtripProof.bend`, `./proofs/run.sh`
+
+- [ ] **Step 1: Confirm the V1 blast radius is contained**
+
+Run: `grep -rn "SstFileV1\|serialize_v1\|serialize_v2\|parse_v1\|parse_version\|feed_v1\|Legacy\|muts_of_entries" src/ app/ bench/ laws/ proofs/ mylsm.bend | cut -d: -f1 | sort | uniq -c`
+Expected: matches only in `src/SstFile.bend`, `src/SstStream.bend`, `src/SstFileV1Fast.bend`, `laws/SstFileV1Parser.bend`, `laws/SstFileV1Equivalence.bend`, `laws/SstFileDispatchV1.bend`, `laws/SstFileRoundtrip.bend`, `laws/SstFileDispatchV2.bend`, `laws/SstStream.bend`, and the four matching `proofs/` files. If any other file references these names, stop and extend the file lists in this task before deleting anything. (`mylsm.bend` uses only `SstFile.serialize`/`SstFile.parse`, which keep their names.)
+
+- [ ] **Step 2: Rewrite `src/SstFile.bend` as v2-only**
+
+Write `src/SstFile.bend` with exactly:
+```bend
+import Base
+import ./MemTable.bend as MemTable
+import ./Sstable.bend as Sstable
+import ./SstFileV2.bend as SstFileV2
+
+# Sole SSTable codec boundary: compact v2. The legacy v1 representation was
+# removed (no retrocompat); every file on disk is v2.
+
+def serialize(+entries: List<&2, MemTable.Entry>, +level: Nat) -> String:
+  SstFileV2.serialize(entries, level)
+
+
+def parse(+encoded: String) -> Maybe<&2, Sstable.Table>:
+  SstFileV2.parse(encoded)
+
+
+# Total-parser witness used by the hardening law.
+def is_decided(+result: Maybe<&2, Sstable.Table>) -> Bool:
+  True{}
+```
+(`muts_of_entries` goes away with `serialize_v1`; Step 1 proved nothing else uses it. The `Wal`/`Manifest` imports go away with it.)
+Then run: `bend src/SstFile.bend --check-only`
+Expected: exit 0.
+
+- [ ] **Step 3: Rewrite `src/SstStream.bend` without the `Legacy` mode**
+
+Write `src/SstStream.bend` with exactly:
+```bend
+import Base
+import ./Decimal.bend as Decimal
+import ./Fs.bend as Fs
+import ./Sstable.bend as Sstable
+import ./SstFileV2.bend as V2
+
+# Chunked table recovery. The host effect returns UTF-8-safe positional chunks;
+# the pure one-character v2 decoder transitions run per chunk.
+
+type Chunk is Data:
+  Ch{bytes: Nat, text: String}
+
+type Mode is Data:
+  Unknown{}
+  Current{decoder: V2.Decoder}
+
+
+def chunk_parse(p: Decimal.Parse) -> Result<&1, &1, U32 & String, Chunk>:
+  match p:
+    case Decimal.Rejected{error}:
+      Fail{(U32.from_nat(8n), "bad UTF-8 chunk envelope")}
+    case Decimal.Accepted{Decimal.Dec{value, rest}}:
+      Done{Ch{value, rest}}
+
+
+def feed_v2(rest: String, decoder: V2.Decoder) -> V2.Decoder:
+  match rest:
+    case SNil{}:
+      decoder
+    case SCon{c, tail}:
+      feed_v2(tail, V2.decoder_step(decoder, c))
+
+
+def unknown_v2(is_v2: Bool, +text: String) -> Mode:
+  match is_v2:
+    case True{}:
+      Current{feed_v2(text, V2.Dec{V2.NeedS{}, 0n, None{}, Nil{}, 0n, 0n, 7, 0n})}
+    case False{}:
+      Unknown{}
+
+
+def feed_mode(mode: Mode, +text: String) -> Mode:
+  match mode:
+    case Unknown{}:
+      unknown_v2(String.starts_with(text, "S2;"), text)
+    case Current{decoder}:
+      Current{feed_v2(text, decoder)}
+
+
+def finish_v2(result: V2.ParseResult) -> Result<&1, &1, U32 & String, Sstable.Table>:
+  match result:
+    case V2.ParseRejected{error}:
+      Fail{(U32.from_nat(3n), "bad v2 table")}
+    case V2.Parsed{table}:
+      Done{table}
+
+
+def finish_mode(mode: Mode) -> Result<&1, &1, U32 & String, Sstable.Table>:
+  match mode:
+    case Unknown{}:
+      Fail{(U32.from_nat(3n), "unknown table version")}
+    case Current{decoder}:
+      finish_v2(V2.finish_decoder(decoder))
+
+
+
+def stream_loop(fuel: Nat, +path: String, +offset: Nat, mode: Mode, pending: Maybe<&2, Chunk>) -> IO(Result<&1, &1, U32 & String, Sstable.Table>):
+  match fuel pending:
+    case 0n _:
+      IO.pure(Result<&1, &1, U32 & String, Sstable.Table>, Fail{(U32.from_nat(7n), "table exceeds streaming read limit")})
+    case 1n+rest None{}:
+      do IO<Result<&1, &1, U32 & String, Sstable.Table>>:
+        raw : String <- IO.try(String, Fs.read_utf8_chunk(path, offset, V2.read_chunk_chars()))
+        chunk : Chunk <- IO.try(Chunk, IO.pure(Result<&1, &1, U32 & String, Chunk>, chunk_parse(Decimal.parse_semicolon(raw, V2.read_chunk_chars()))))
+        stream_loop(rest, path, offset, mode, Some{chunk})
+    case 1n+rest Some{Ch{bytes, text}}:
+      match bytes:
+        case 0n:
+          IO.pure(Result<&1, &1, U32 & String, Sstable.Table>, finish_mode(mode))
+        case 1n+more:
+          stream_loop(rest, path, Nat.add(offset, 1n+more), feed_mode(mode, text), None{})
+
+
+def read_table(+path: String) -> IO(Result<&1, &1, U32 & String, Sstable.Table>):
+  stream_loop(8192n, path, 0n, Unknown{}, None{})
+```
+(A `"T..."` chunk now stays `Unknown{}` and fails closed at finish. `feed_v1`, `finish_v1`, `unknown_v1`, and the `V1` import are gone.)
+Then run: `bend src/SstStream.bend --check-only`
+Expected: exit 0.
+
+- [ ] **Step 4: Rewrite the three affected law files v2-only**
+
+Write `laws/SstFileRoundtrip.bend` with exactly:
+```bend
+import Base
+import ../src/MemTable.bend as MemTable
+import ../src/Sstable.bend as Sstable
+import ../src/SstFile.bend as SstFile
+
+# V2 framing kernel, tested without the byte stream (same checker
+# limitation documented in SstFileV2Checksum: end-to-end `{==}` over a
+# hashed stream diverges).
+
+law sstfile_v2_tag:
+  {String.starts_with(SstFile.serialize(Con{MemTable.Entry{"a", Some{"1"}}, Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}}, 0n), "S2;") == True{} : Bool}
+
+law sstfile_v2_reject:
+  {SstFile.parse("X") == None{} : Maybe<&2, Sstable.Table>}
+```
+(Entries pre-sorted `a` < `b`; the v2 header opens with `S2;` and garbage fails closed.)
+
+Write `laws/SstFileDispatchV2.bend` with exactly:
+```bend
+import Base
+import ../src/Sstable.bend as Sstable
+import ../src/SstFile.bend as SstFile
+import ../src/SstFileV2.bend as SstFileV2
+
+# Single-version routing: SstFile.parse is SstFileV2.parse.
+
+law sst2_dispatch_v2_tag:
+  {SstFile.parse("S2;X") == SstFileV2.parse("S2;X") : Maybe<&2, Sstable.Table>}
+```
+
+Write `laws/SstStream.bend` with exactly:
+```bend
+import Base
+import ../src/MemTable.bend as MemTable
+import ../src/Sstable.bend as Sstable
+import ../src/SstFileV2.bend as SstFileV2
+import ../src/SstStream.bend as SstStream
+
+# Chunk-dispatch kernel, tested on short inputs (no hash accumulation
+# reaches the checker-critical length; U32-only chains stay shared).
+# End-to-end chunk agreement is covered at runtime (bench smoke).
+
+law sst2_feed_routes_v2:
+  {SstStream.feed_mode(SstStream.Unknown{}, "S2;") == SstStream.Current{SstStream.feed_v2("S2;", SstFileV2.Dec{SstFileV2.NeedS{}, 0n, None{}, Nil{}, 0n, 0n, 7, 0n})} : SstStream.Mode}
+
+law sst2_finish_unknown:
+  {SstStream.finish_mode(SstStream.Unknown{}) == Fail{(U32.from_nat(3n), "unknown table version")} : Result<&1, &1, U32 & String, Sstable.Table>}
+```
+
+- [ ] **Step 5: Adapt the three matching proof files + delete the V1 pairs**
+
+In `proofs/SstFileRoundtripProof.bend`, replace the five v1 witnesses with:
+```bend
+def Laws.sstfile_v2_tag():
+  {==}
+
+def Laws.sstfile_v2_reject():
+  {==}
+```
+(keeping the file's existing `import ../laws/SstFileRoundtrip.bend as Laws` header line). In `proofs/SstFileDispatchV2Proof.bend`, keep only `def Laws.sst2_dispatch_v2_tag():` with its existing body. In `proofs/SstStreamProof.bend`, keep the `sst2_feed_routes_v2` and `sst2_finish_unknown` witnesses with existing bodies and delete the `sst2_feed_routes_v1` witness. Then delete the V1 pairs:
+```bash
+git rm src/SstFileV1Fast.bend laws/SstFileV1Parser.bend laws/SstFileV1Equivalence.bend laws/SstFileDispatchV1.bend proofs/SstFileV1ParserProof.bend proofs/SstFileV1EquivalenceProof.bend proofs/SstFileDispatchV1Proof.bend
+```
+Then run: `bend proofs/SstFileRoundtripProof.bend && bend proofs/SstFileDispatchV2Proof.bend && bend proofs/SstStreamProof.bend`
+Expected: all three exit 0. If a closed `{==}` diverges in the checker, delete that law and its witness from the pair of files (never weaken to a non-assertion) and re-run.
+
+- [ ] **Step 6: Drop the Recover legacy-generation branch**
+
+Read `src/Recover.bend` around line 171, `laws/Recover.bend` law `generation_legacy_branch` (line 46), and `proofs/RecoverProof.bend` witness `Laws.generation_legacy_branch` (line 25). Delete the unary-dash legacy arm (keeping the compact-decimal generation path), delete the law and its witness. Then run: `bend proofs/RecoverProof.bend`
+Expected: exit 0.
+
+- [ ] **Step 7: Gate + commit the deletion**
+
+Run: `./proofs/run.sh`
+Expected: green with 3 fewer modules (the name gate enforces the 1:1 `laws/` ↔ `proofs/` pairing, so the deletions are self-checking). Then:
+```bash
+git add src/SstFile.bend src/SstStream.bend src/Recover.bend laws/SstFileRoundtrip.bend laws/SstFileDispatchV2.bend laws/SstStream.bend laws/Recover.bend proofs/SstFileRoundtripProof.bend proofs/SstFileDispatchV2Proof.bend proofs/SstStreamProof.bend proofs/RecoverProof.bend
+git commit -m "chore: delete v1 sstable legacy surface, v2-only codec"
+```
+(`git rm` in Step 5 already staged the deletions; `git status --short` first and stage only actually-changed paths.)
+
+### Task 2: Crypto layer — SstFileV2 checksum via hub SHA-256
 
 **Files:**
 - Create: `src/SstChecksum.bend`
@@ -98,7 +318,7 @@ Expected: exit 0. If the checker rejects the hub call shapes, fix the call sites
 
 - [ ] **Step 3: Switch SstFileV2 serialize/parse to the adapter**
 
-In `src/SstFileV2.bend`: add `import ./SstChecksum.bend as SstChecksum`; replace the `Manifest.mhash(body, 7)` computation in the serialize path with `SstChecksum.digest(body)` and the parse-side `U32.is_eq(v, mhash(content, 7))` comparison with `SstChecksum.verify(content, claimed)` (keep the `ChecksumMismatch{}` error arm and position — only the digest computation changes). Leave `src/SstFileV1Fast.bend` and `Manifest.mhash` untouched.
+In `src/SstFileV2.bend`: add `import ./SstChecksum.bend as SstChecksum`; replace the `Manifest.mhash(body, 7)` computation in the serialize path with `SstChecksum.digest(body)` and the parse-side `U32.is_eq(v, mhash(content, 7))` comparison with   `SstChecksum.verify(content, claimed)` (keep the `ChecksumMismatch{}` error arm and position — only the digest computation changes). `Manifest.mhash` stays untouched for Manifest framing (V1 is gone as of Task 1).
 
 - [ ] **Step 4: Update checksum fixtures + witnesses**
 
@@ -121,7 +341,7 @@ If the bench regresses vs baseline on the SSTable workload, revert the `src/SstF
 
 ---
 
-### Task 2: Bits layer — BitTree Bloom over hub bitset/bitlist
+### Task 3: Bits layer — BitTree Bloom over hub bitset/bitlist
 
 **Files:**
 - Modify: `src/BitTree.bend` (packed-words backend only; Bloom policy API unchanged)
@@ -150,7 +370,7 @@ Stage only the files that actually changed (`git status --short` first; drop unc
 
 ---
 
-### Task 3: MemTable on hub hash_table + Decimal on hub math
+### Task 4: MemTable on hub hash_table + Decimal on hub math
 
 **Files:**
 - Modify: `src/MemTable.bend` (map backend; public API unchanged)
@@ -212,7 +432,7 @@ git commit -m "feat: memtable on hub hash map, decimal on hub math"
 
 ---
 
-### Task 4: Sort/merge layer — SortedRun on tree+array, MergeIter/Compact on heap
+### Task 5: Sort/merge layer — SortedRun on tree+array, MergeIter/Compact on heap
 
 **Files:**
 - Modify: `src/SortedRun.bend`, `src/MergeIter.bend`, `src/Compact.bend` (public `def` names/signatures unchanged)
@@ -242,7 +462,7 @@ Bench regression on the compaction workload → revert that layer's `src/` chang
 
 ---
 
-### Task 5: SSTable blocks + WAL batching (+ optional LRU block cache)
+### Task 6: SSTable blocks + WAL batching (+ optional LRU block cache)
 
 **Files:**
 - Modify: `src/Sstable.bend` (`build`/`from_sorted_unique`/`build_sorted` emit block index; add block-scoped lookup, keep old whole-table lookup name as delegate), `src/Wal.bend` (`encode`/`decode` unchanged; batching via hub queue/deque)
@@ -272,7 +492,7 @@ Stage only changed paths (`git status --short` first).
 
 ---
 
-### Task 6: Facade check, republish, catalog update
+### Task 7: Facade check, republish, catalog update
 
 **Files:**
 - Modify: `mylsm.bend` (header pin comment only; no signature changes), `pack.json`, `README.md`
@@ -288,7 +508,7 @@ Expected: `IO-CLEAN` (no host-effect creep in the published facade, per the 2026
 - [ ] **Step 2: Regression sweep before publish**
 
 Run: `./proofs/run.sh && bin/mylsm bench && bin/mylsm fuzz`
-Expected: proofs green; bench meets `bench/BASELINE.md` bars recorded in Tasks 1–5; fuzz completes without crashes. Any failure blocks the publish.
+Expected: proofs green; bench meets `bench/BASELINE.md` bars recorded in Tasks 2–6; fuzz completes without crashes. Any failure blocks the publish.
 
 - [ ] **Step 3: Publish the new hub version**
 

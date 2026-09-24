@@ -36,6 +36,27 @@ No-objetivos: orquestación `Db` / `Recover` / `Flush`, host effects
 (`Fs` / `Console` / `CrashPoint` / `src/effs/*.c|*.js`), formato exacto de
 bytes (se permite romper, sin migración).
 
+## 2b. Eliminaciones legacy (decisión 2026-09-24: sin retrocompat, sin dead code)
+
+Se elimina la superficie V1 de SSTable antes de adaptar nada (Task 1 del plan):
+
+- Delete: `src/SstFileV1Fast.bend` (462 líneas), `laws/SstFileV1Parser.bend`,
+  `laws/SstFileV1Equivalence.bend`, `laws/SstFileDispatchV1.bend` y sus tres
+  `proofs/*Proof.bend` (el gate `proofs/run.sh` auto-descubre pares
+  `laws/<M>` ↔ `proofs/<M>Proof`, así que borrar en parejas lo mantiene verde).
+- `src/SstFile.bend` pasa a v2-only (`serialize`/`parse` delegan a
+  `SstFileV2`; caen `serialize_v1`, `serialize_v2`, `parse_v1`,
+  `parse_version`, `muts_of_entries` si nada más lo usa).
+- `src/SstStream.bend` pierde el modo `Legacy` (`feed_v1`, `finish_v1`,
+  `unknown_v1`); un chunk `"T..."` queda `Unknown{}` y `finish_mode`
+  falla cerrado (`"unknown table version"`).
+- `laws/SstFileRoundtrip.bend` se reescribe a v2-only (dos leyes cerradas:
+  tag `"S2;"` + reject de `"X"`); `laws/SstFileDispatchV2.bend` pierde la ley
+  de `parse_version`; `laws/SstStream.bend` pierde la ley de ruta v1.
+- Rama legacy de `Recover` (generaciones unary-dash, `src/Recover.bend:171`,
+  ley `generation_legacy_branch`, su witness): se elimina con la misma
+  disciplina, quedando solo generaciones decimal compactas.
+
 ## 3. Pins + layout de imports
 
 - Un solo pin por release del hub. Todos los
