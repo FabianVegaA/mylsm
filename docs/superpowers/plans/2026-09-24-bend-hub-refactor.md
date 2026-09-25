@@ -380,31 +380,31 @@ Stage only the files that actually changed (`git status --short` first; drop unc
 
 ---
 
-### Task 4: Decimal on hub math (MemTable stays prepend-log)
+### Task 4: Hub math adoption (MemTable + Decimal stay)
 
 **Files:**
-- Modify: `src/Decimal.bend` (delegate words/powers to `src/math/`, pure fns only)
-- Modify: `laws/Decimal.bend` (fixtures only), `proofs/DecimalProof.bend`
-- Explicitly unchanged: `src/MemTable.bend`, `laws/MemTable.bend`, `proofs/MemTableProof.bend`
-- Test: `bend proofs/DecimalProof.bend`, `./proofs/run.sh`
+- Modify: `src/BitTree.bend` (one line: `Nat.pow(2n, height)` → hub tail-recursive `pow2t`)
+- Explicitly unchanged: `src/MemTable.bend`, `laws/MemTable.bend`, `proofs/MemTableProof.bend`, `src/Decimal.bend`, `laws/Decimal.bend`, `proofs/DecimalProof.bend`
+- Test: `bend proofs/BitTreeProof.bend`, `bend proofs/DecimalProof.bend` (regression)
 
 MemTable-on-HashMap is rejected by the affinity rule (proven Task 0): `HashMap.get` hands the map back so reads would have to thread it, and storing the map would de-`Data` `MT` → `Db` → the `Sess` `+db` threading the whole facade depends on. The prepend log stays: puts are already O(1) with zero comparisons and reads scan at most the 4096-entry cap under proven laws — it was never the bottleneck.
 
-- [ ] **Step 1: Delegate Decimal words/powers to hub math**
+`Decimal.bend` likewise has nothing to delegate: it is a pure decimal digit scanner over `Nat`/`Char` with no 64-bit words or power tables (the plan's assumption was wrong; verified against `src/math/{u64,pow2,hash}.bend`). The one real `src/math/` adoption is hub `pow2t` (tail-recursive 2^d, proven `pow2t(d) == 2^d`, compiles to a flat native loop) for `BitTree.nonempty_metadata_ok`, done in Step 1 below.
 
-In `src/Decimal.bend`: add the hub `src/math/` import (exact path from the Task 0 Step 2 listing), replace hand-rolled 64-bit word ops and powers-of-two tables with the hub defs, keeping all public `def` names/signatures. Check: `bend src/Decimal.bend --check-only`, expected exit 0.
+- [ ] **Step 1: Adopt hub `pow2t` in BitTree capacity check**
 
-- [ ] **Step 2: Fixture-only witness pass for Decimal**
+In `src/BitTree.bend`: add `import 0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/math/pow2.bend as Pow2`, replace `Nat.pow(2n, height)` with `Pow2.pow2t(height)` in `nonempty_metadata_ok` (only `Nat.pow` site in `src/`, verified by grep). No law mentions `Nat.pow`, so no fixture changes. Check: `bend src/BitTree.bend --check-only`, expected exit 0.
 
-Same fixture-only treatment for `laws/Decimal.bend` + `proofs/DecimalProof.bend` (literals only if computed values change; no statement changes).
+- [ ] **Step 2: Regression pass (MemTable + Decimal untouched)**
 
-- [ ] **Step 3: Gate + bench + commit**
+Run: `bend proofs/BitTreeProof.bend && bend proofs/DecimalProof.bend && bend proofs/MemTableProof.bend`
+Expected: all green (Decimal/MemTable run as regression — untouched).
 
-Run: `bend proofs/DecimalProof.bend && bend proofs/MemTableProof.bend && ./proofs/run.sh`
-Expected: green throughout (MemTable proofs run as regression — untouched). Then `bin/mylsm bench` vs `bench/BASELINE.md`.
+- [ ] **Step 3: Commit**
+
 ```bash
-git add src/Decimal.bend laws/Decimal.bend proofs/DecimalProof.bend
-git commit -m "feat: decimal on hub math, memtable stays prepend-log"
+git add src/BitTree.bend docs/superpowers/plans/2026-09-24-bend-hub-refactor.md
+git commit -m "feat: bittree capacity on hub pow2t, memtable+decimal stay"
 ```
 
 ---

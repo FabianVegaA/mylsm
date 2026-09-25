@@ -1,5 +1,6 @@
 import Base
 import 0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/containers/bitset.bend as BitWords
+import 0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/math/pow2.bend as Pow2
 
 # Pure indexed bit tree.
 #
@@ -224,7 +225,7 @@ def nonempty_metadata_ok(root: WordTree, +words: Nat, +capacity: Nat, +height: N
     Bool.and(
       Nat.is_le(words, capacity),
       Bool.and(
-        Nat.is_eq(capacity, Nat.pow(2n, height)),
+        Nat.is_eq(capacity, Pow2.pow2t(height)),
         shape_ok(height, root))))
 
 # Checks zero canonicality, logical bounds, power-of-two capacity, height, and
