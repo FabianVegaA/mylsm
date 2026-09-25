@@ -429,36 +429,27 @@ git commit -m "docs: task 5 sort-merge evaluated, no rewrite" -m "sort_newest al
 
 ---
 
-### Task 6: SSTable blocks as Data index + WAL batching evaluation
+### Task 6: Read-path analysis — EVALUATED, deferred to Phase 3 (findings)
 
-**Files:**
-- Modify: `src/Sstable.bend` (`build`/`from_sorted_unique`/`build_sorted` emit block index; add block-scoped lookup, keep `lookup` as delegate)
-- Modify: `src/Wal.bend` only if the queue evaluation (Step 2) finds a clean ephemeral shape; otherwise untouched
-- Modify: `laws/Sstable.bend`, `laws/Wal.bend` + matching proofs (block-index lookup equivalence, batch fold equivalence)
-- Test: targeted proofs, `./proofs/run.sh`, million-write acceptance if time permits
+**Findings (2026-09-24, read-only analysis, no code changes):**
 
-Per the affinity rule, `Table is Data` cannot hold hub `DynArray`/`lru` state, so blocks stay `List`-stored with a `Data` index on top. A hub `lru.bend` block-cache would need a threaded-cache redesign (cache handed back on every read, like `HashMap.get`) — explicitly deferred, not attempted here.
+1. Block index on `Sstable.lookup`: REJECTED as theater. `lookup` (`src/Sstable.bend:230`) is called only by one law (`laws/Sstable.bend:20`); production reads never touch it. The real read path is `Db.db_get` (`src/Db.bend:83`) → `all_entries` (concats mem + every table into one giant list) → `MemTable.get` linear scan — O(total entries) String compares per read. Indexing `lookup` would optimize a dead path.
+2. The genuine fix — per-table newest-first search in `db_get` with `maybe_present` Bloom prefilter (which would make both `lookup` and the currently-unused Bloom filter live) — is a `Db` read-path redesign, not a hub adoption: no hub module fits (affinity rule), it touches `Db`/`Flush`/`Compact`/`Recover` laws, and the bench cannot validate it (portable backend has no storage IO; `bin/mylsm bench` fails pre-existing, Task 2). Per the bench gate ("sin mejora medida, la capa se revierte" — unmeasurable here), this is deferred to Phase 3 where it already lives ("block-oriented reads", "measured Bloom-filter tuning").
+3. WAL queue: REJECTED by the affinity rule (`Batch is Data` cannot hold the linear hub queue; List fold stays). LRU cache: deferred (needs threaded-cache redesign).
 
-- [ ] **Step 1: Sparse block index + binary search in Sstable**
+- [ ] **Step 1: Verify the dead-path claim (done, read-only)**
 
-In `src/Sstable.bend`: keep `List`-stored entries; `build`/`build_sorted`/`from_sorted_unique` additionally record a sparse block index as plain `Data` (first key per N-entry block; N as a named `def block_entries() -> Nat` returning `64n`); add `block_get(table, k)` doing binary search over the index then a bounded intra-block scan; keep the existing whole-table `lookup` (`src/Sstable.bend:230`) as a one-line delegate to `block_get` so callers and laws keep working. `DynArray` may be used ephemerally inside `build` only if it is fully consumed there (same bar as Task 5 Step 0); otherwise skip it. Check: `bend src/Sstable.bend --check-only`, expected exit 0.
+Run: `grep -rn "Sstable.lookup\|maybe_present" src/ app/ bench/ mylsm.bend | grep -v "def lookup\|def maybe_present\|laws/"`
+Expected: no production callers (only def sites). Confirmed 2026-09-24.
 
-- [ ] **Step 2: WAL grouped commits — evaluate hub queue, adopt only if clean**
+- [ ] **Step 2: Regression pass + commit the findings**
 
-In `src/Wal.bend`: `Batch is Data` cannot hold a hub queue, so adoption is possible only as ephemeral accumulation inside a pure function that fully consumes the queue. Inspect `queue.bend`/`deque.bend` (same `grep` command shape as Task 0 Step 3); if no clean ephemeral shape exists, leave `src/Wal.bend` untouched and record that in the commit message. No `IO` changes either way; batching stays pure (grouped-commit policy in Bend, host append stays in `src/effs/`). Check if touched: `bend src/Wal.bend --check-only`, expected exit 0.
-
-- [ ] **Step 3: Block-index equivalence laws**
-
-In `laws/Sstable.bend` add: `block_get(t,k) == lookup(t,k)` for all fixture tables (closed fixtures) plus the open-input statement the checker admits. Witness in `proofs/SstableProof.bend`. In `laws/Wal.bend` keep batch-fold equivalence (`sbatch` == sequential `sput`/`sdel`); witness in `proofs/` — this property already exists via `Db` laws, so prefer citing over re-proving. No `cached_get` law: the LRU cache is deferred (see header).
-
-- [ ] **Step 4: Gate + bench + commit**
-
-Run: `bend proofs/SstableProof.bend && bend proofs/WalProof.bend`, then `./proofs/run.sh` (expected green), then `bin/mylsm bench` vs `bench/BASELINE.md` (block reads must beat whole-file reads on a dataset exceeding RAM to count as the Phase 3 win).
+Run: `bend proofs/SstableProof.bend && bend proofs/WalProof.bend`
+Expected: green (untouched).
 ```bash
-git add src/Sstable.bend src/Wal.bend laws/Sstable.bend laws/Wal.bend proofs/SstableProof.bend
-git commit -m "feat: sstable block index over list storage"
+git add docs/superpowers/plans/2026-09-24-bend-hub-refactor.md
+git commit -m "docs: task 6 read-path analyzed, block index deferred" -m "Sstable.lookup is a dead path (only a law calls it); real bottleneck is db_get concat-then-scan, a Db redesign needing measurable bench. Deferred to Phase 3."
 ```
-Stage only changed paths (`git status --short` first; drop `src/Wal.bend` from the command if Step 2 left it untouched).
 
 ---
 
