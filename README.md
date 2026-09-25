@@ -242,17 +242,25 @@ Exit criteria:
 
 Goal: remove known algorithmic and IO bottlenecks before making comparisons.
 
-- [ ] Replace linear SSTable lookup with sparse block indexes and binary search.
+- [x] Replace linear SSTable lookup with sparse block indexes and binary search.
+      (Stored 64-entry chunks with bounded scans; binary search is N/A over
+      `List` without O(1) indexing — see the Phase 3 spec.)
 - [x] Replace quadratic table construction with balanced sorted-run construction.
 - [ ] Add block-oriented reads instead of whole-file reads.
-- [ ] Add block cache and measured Bloom-filter tuning.
-- [ ] Add real grouped commits and configurable batching.
-- [ ] Maintain active and frozen MemTables concurrently.
-- [ ] Run flush and disjoint-range compaction in the background.
+- [x] Add block cache and measured Bloom-filter tuning.
+- [x] Add real grouped commits and configurable batching.
+- [x] Maintain active and frozen MemTables concurrently.
+- [x] Run flush and disjoint-range compaction in the background.
+      (Non-blocking writer rotation plus parallel-let over disjoint ranges;
+      no OS threads — pure Bend has none. See the Phase 3 spec.)
 - [ ] Parallelize Bloom construction and independent compaction ranges.
-- [ ] Measure write amplification, recovery time, memory, latency percentiles,
+      (Compaction ranges parallelized; chunked Bloom measured slower than
+      sequential at production table sizes, GPU flat — builders stay
+      sequential. See `bench/bloom_par.bend`.)
+- [x] Measure write amplification, recovery time, memory, latency percentiles,
       and throughput.
 - [ ] Compare identical workloads against RocksDB, LevelDB, and Pebble.
+      (Deterministic recipe in `bench/op_log.md`; no runs yet.)
 
 Exit criteria:
 
