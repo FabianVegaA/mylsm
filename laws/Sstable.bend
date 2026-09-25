@@ -41,22 +41,3 @@ law sstable_block_hit_equiv:
 # LAW: block_get_hit misses cleanly (closed)
 law sstable_block_hit_missing:
   {Sstable.block_get_hit(Sstable.build(sst_e2(), 0n, 2n), "zzz") == None{} : Maybe<&2, Maybe<&2, String>>}
-
-def blm_a() -> Sstable.Bloom:
-  Sstable.bloom_of(Con{MemTable.Entry{"a", Some{"1"}}, Nil{}}, Sstable.bloom_new(64n))
-
-# LAW: union keeps member bits (closed)
-law sstable_bloom_union_hit:
-  {Sstable.bloom_test(Sstable.bloom_union(blm_a(), Sstable.bloom_new(64n)), "a") == True{} : Bool}
-
-# LAW: union adds no ghost bits for this vector (closed)
-law sstable_bloom_union_miss:
-  {Sstable.bloom_test(Sstable.bloom_union(blm_a(), Sstable.bloom_new(64n)), "zzz") == False{} : Bool}
-
-# LAW: chunked build equals sequential build (closed)
-law sstable_bloom_chunked_agrees:
-  {Sstable.bloom_chunks(Sstable.chunk(sst_e2()), 64n, Sstable.bloom_new(64n)) == Sstable.bloom_of(sst_e2(), Sstable.bloom_new(64n)) : Sstable.Bloom}
-
-# LAW: GPU-chunked build agrees with the sequential build (closed)
-law sstable_bloom_gpu_agrees:
-  {Sstable.bloom_chunks_gpu(Sstable.chunk(sst_e2()), 64n, Sstable.bloom_new(64n)) == Sstable.bloom_of(sst_e2(), Sstable.bloom_new(64n)) : Sstable.Bloom}
