@@ -50,7 +50,17 @@ One commit fixing every A+B interface; all bodies delegate to current logic; gat
 - `merge_round` stays CPU: divergent `String.cmp` branching, guide-backed (`bend guide`: divergent work stays faster on CPU). No `!` there, documented why.
 - `!` never changes semantics: every GPU call site ships a CPU-agreement law. Artifact gating follows `bin/mylsm` (`--gpu` fails closed without a `.gpu` artifact).
 
-## 7. Gates and risks
+## 8. Community packages (robust ones first, spike-gated)
+
+Already adopted (2026-09-24 refactor): `sha256` (v2 checksum), `bitset` word fns (`word_get`/`word_put`), `math/pow2t`. The affinity rule governs everything below (`Type`-sorted hub state can only be used ephemerally inside functions or via pure fns — never stored in our `Data` types, never dropped). Each candidate gets a spike gate: no clean shape or no measured win → documented no-op, same as refactor Tasks 5–6.
+
+- **Phase A: `lru.bend` block cache — evaluate.** The spec's §3 `BEntry` assoc-list is the fallback. LRU proper needs the threaded-cache redesign (cache handed back on every read, like `HashMap.get`): `db_get` would return `Db & Maybe`, rippling to `sget_go`, facade, app, and agreement laws. Spike first: if the threading ripple exceeds the measured gain over the assoc-list, keep the assoc-list and record why.
+- **Phase B: `priority_queue.bend` run selection — evaluate, ephemeral.** Compaction picks which runs to merge (few tables, tiny N): build the queue, drain fully inside the picker, no stored state. Expect small win; keep only with bench evidence. `queue`/`deque` for batch staging: rejected upfront — a pure `List` fold is equivalent and storable in `Data`.
+- **Phase C2: `keccak`/`blake3` as tree-hash leaves — spike options.** If the SHA tree-hash spike proceeds, these are alternative leaf digests (both FIPS/RFC-proven upstream); pick by measured digest throughput on the target GPU, not by preference.
+- **Phase D: none.** The metrics harness and op-log export are bespoke; no community package fits.
+- **Rejected upfront:** `hash_table` (MemTable stays prepend-log, affinity), `Bitset` as Bloom storage (affinity), `balanced_search_tree`/`binary_heap` for sort/merge (same complexity class, Task-5 finding), `dynamic_array` as `Table` storage (affinity).
+
+## 9. Gates and risks
 
 - Per-phase gate (same as the refactor): `bend --check-only`, targeted `bend proofs/<X>Proof.bend`, `./proofs/run.sh` green (31 modules baseline; count grows only with new law files), `bench/fuzz.bend` clean, bench before/after vs `bench/BASELINE.md`, commit per phase. Regression → revert the phase.
 - No `@unsafe` in laws/witnesses/adapted code; C/JS effects stay minimal host ops; open theorems vs closed fixtures distinguished (AGENT.md, unchanged).
