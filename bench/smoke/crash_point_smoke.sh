@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 BUILD="$ROOT/.mylsm/build/crash-point-smoke"
 JS_BUILD="$ROOT/.mylsm/build/crash-point-smoke.js"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/mylsm-crash-smoke.XXXXXX")
@@ -42,13 +42,13 @@ esac
 mkdir -p -- "$ROOT/.mylsm/build"
 
 unset MYLSM_CRASH_POINT
-bend "$ROOT/bench/crash_point_smoke.bend" >"$WORK/unset.log"
+bend "$ROOT/bench/smoke/crash_point.bend" >"$WORK/unset.log"
 grep -q '^crash_point_smoke_program=complete$' "$WORK/unset.log"
 
-MYLSM_CRASH_POINT=other.point bend "$ROOT/bench/crash_point_smoke.bend" >"$WORK/mismatch.log"
+MYLSM_CRASH_POINT=other.point bend "$ROOT/bench/smoke/crash_point.bend" >"$WORK/mismatch.log"
 grep -q '^crash_point_smoke_program=complete$' "$WORK/mismatch.log"
 
-bend "$ROOT/bench/crash_point_smoke.bend" -o "$JS_BUILD"
+bend "$ROOT/bench/smoke/crash_point.bend" -o "$JS_BUILD"
 MYLSM_CRASH_POINT=smoke.stop node "$JS_BUILD" >"$WORK/js-match.log" 2>&1 &
 PID=$!
 wait_for_stop "$PID"
@@ -62,7 +62,7 @@ PID=
 [[ "$js_status" -eq 137 ]]
 ! grep -q '^crash_point_smoke_program=complete$' "$WORK/js-match.log"
 
-bend "$ROOT/bench/crash_point_smoke.bend" -o "$BUILD"
+bend "$ROOT/bench/smoke/crash_point.bend" -o "$BUILD"
 MYLSM_CRASH_POINT=smoke.stop "$BUILD" --threads 1 >"$WORK/native-match.log" 2>&1 &
 PID=$!
 wait_for_stop "$PID"

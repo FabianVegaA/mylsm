@@ -1,29 +1,20 @@
 import Base
-import ../src/Console.bend as Console
-import ../src/Compact.bend as Compact
-import ../src/BitTree.bend as BitTree
-import ../src/Db.bend as Db
-import ../src/Flush.bend as Flush
-import ../src/Fs.bend as Fs
-import ../src/Manifest.bend as Manifest
-import ../src/MemTable.bend as MemTable
-import ../src/SstFile.bend as SstFile
-import ../src/Sstable.bend as Sstable
-import ../src/SortedRun.bend as SortedRun
+import ../../src/Console.bend as Console
+import ../../src/Compact.bend as Compact
+import ../../src/BitTree.bend as BitTree
+import ../../src/Db.bend as Db
+import ../../src/Flush.bend as Flush
+import ../../src/Fs.bend as Fs
+import ../../src/Manifest.bend as Manifest
+import ../../src/MemTable.bend as MemTable
+import ../../src/SstFile.bend as SstFile
+import ../../src/Sstable.bend as Sstable
+import ../../src/SortedRun.bend as SortedRun
+import ../lib/common.bend as Common
 
 # Compaction phase benchmark. Fixture construction is outside every measured
 # phase. Each fixture preserves sorted SSTable run boundaries and run_merge uses
 # the same stable newest-first merge primitive as production compaction.
-
-def env_default(value: String, fallback: String) -> String:
-  match value:
-    case SNil{}: fallback
-    case SCon{h, t}: SCon{h, t}
-
-def nat_default(value: Maybe<&2, Nat>, fallback: Nat) -> Nat:
-  match value:
-    case None{}: fallback
-    case Some{n}: n
 
 def zeros(num: Nat) -> String:
   match num:
@@ -50,20 +41,10 @@ def make_fixture(+runs: Nat, +entries: Nat) -> List<&2, List<&2, MemTable.Entry>
     case 1n+rest:
       Con{make_run(entries, 0n, Nat.show(runs)), make_fixture(rest, entries)}
 
-def bool_text(ok: Bool) -> String:
-  match ok:
-    case True{}: "pass"
-    case False{}: "fail"
-
 def bool_and(lhs: Bool, rhs: Bool) -> Bool:
   match lhs:
     case True{}: rhs
     case False{}: False{}
-
-def maybe_value_eq(got: Maybe<&2, String>, +expected: String) -> Bool:
-  match got:
-    case None{}: False{}
-    case Some{value}: String.eq(value, expected)
 
 def table_get(tab: Sstable.Table, +key: String) -> Maybe<&2, String>:
   MemTable.get(MemTable.MT{Db.table_entries(tab)}, key)
@@ -73,8 +54,8 @@ def merged_ok(+merged: List<&2, MemTable.Entry>, +entries: Nat, +runs: Nat) -> B
   bool_and(
     Nat.is_eq(List.length(&2, MemTable.Entry, merged), entries),
     bool_and(
-      maybe_value_eq(MemTable.get(MemTable.MT{merged}, "key-" ++ padded(0n)), "value-" ++ Nat.show(runs) ++ "-0"),
-      maybe_value_eq(MemTable.get(MemTable.MT{merged}, "key-" ++ padded(last)), "value-" ++ Nat.show(runs) ++ "-" ++ Nat.show(last))))
+      Common.maybe_value_eq(MemTable.get(MemTable.MT{merged}, "key-" ++ padded(0n)), "value-" ++ Nat.show(runs) ++ "-0"),
+      Common.maybe_value_eq(MemTable.get(MemTable.MT{merged}, "key-" ++ padded(last)), "value-" ++ Nat.show(runs) ++ "-" ++ Nat.show(last))))
 
 def parsed_ok(parsed: Maybe<&2, Sstable.Table>, +entries: Nat, +runs: Nat) -> Bool:
   match parsed:
@@ -86,10 +67,10 @@ def parsed_ok(parsed: Maybe<&2, Sstable.Table>, +entries: Nat, +runs: Nat) -> Bo
       bool_and(
         Nat.is_eq(Sstable.table_count(table), entries),
         bool_and(
-          maybe_value_eq(table_get(table, "key-" ++ padded(0n)), "value-" ++ Nat.show(runs) ++ "-0"),
+          Common.maybe_value_eq(table_get(table, "key-" ++ padded(0n)), "value-" ++ Nat.show(runs) ++ "-0"),
           bool_and(
-            maybe_value_eq(table_get(table, "key-" ++ padded(middle)), "value-" ++ Nat.show(runs) ++ "-" ++ Nat.show(middle)),
-            maybe_value_eq(table_get(table, "key-" ++ padded(last)), "value-" ++ Nat.show(runs) ++ "-" ++ Nat.show(last)))))
+            Common.maybe_value_eq(table_get(table, "key-" ++ padded(middle)), "value-" ++ Nat.show(runs) ++ "-" ++ Nat.show(middle)),
+            Common.maybe_value_eq(table_get(table, "key-" ++ padded(last)), "value-" ++ Nat.show(runs) ++ "-" ++ Nat.show(last)))))
 
 def tombstone_shape(xs: List<&2, MemTable.Entry>) -> Bool:
   match xs:
@@ -116,10 +97,10 @@ def odd_disjoint_ok() -> Bool:
   bool_and(
     Nat.is_eq(List.length(&2, MemTable.Entry, merged), 5n),
     bool_and(
-      maybe_value_eq(MemTable.get(MemTable.MT{merged}, "a"), "a"),
+      Common.maybe_value_eq(MemTable.get(MemTable.MT{merged}, "a"), "a"),
       bool_and(
-        maybe_value_eq(MemTable.get(MemTable.MT{merged}, "d"), "d"),
-        maybe_value_eq(MemTable.get(MemTable.MT{merged}, "e"), "e"))))
+        Common.maybe_value_eq(MemTable.get(MemTable.MT{merged}, "d"), "d"),
+        Common.maybe_value_eq(MemTable.get(MemTable.MT{merged}, "e"), "e"))))
 
 def force_bloom(rhs: Sstable.Bloom) -> Nat:
   match rhs:
@@ -185,15 +166,15 @@ def run_case(+dir: String, +entries_per_run: Nat, +runs: Nat) -> IO(Unit):
     publish_stop : Nat <- IO.now()
     _p7 : Unit <- print_phase(case_name, "manifest_publication", publish_start, publish_stop)
     correctness : Bool <- IO.pure(Bool, bool_and(merge_correct, bool_and(Nat.is_eq(kept_count, entries_per_run), bool_and(parse_correct, bool_and(tombstone_ok(), odd_disjoint_ok())))))
-    _p8 : Unit <- IO.print("case=" ++ case_name ++ " correctness=" ++ bool_text(correctness) ++ " newest_wins=" ++ bool_text(merge_correct) ++ " tombstone=" ++ bool_text(tombstone_ok()) ++ " odd_disjoint_runs=" ++ bool_text(odd_disjoint_ok()) ++ " output_parse=" ++ bool_text(parse_correct))
+     _p8 : Unit <- IO.print("case=" ++ case_name ++ " correctness=" ++ Common.bool_text(correctness) ++ " newest_wins=" ++ Common.bool_text(merge_correct) ++ " tombstone=" ++ Common.bool_text(tombstone_ok()) ++ " odd_disjoint_runs=" ++ Common.bool_text(odd_disjoint_ok()) ++ " output_parse=" ++ Common.bool_text(parse_correct))
     IO.print("case=" ++ case_name ++ " status=complete merged_entries=" ++ Nat.show(merged_count) ++ " kept_entries=" ++ Nat.show(kept_count) ++ " bloom_force=" ++ Nat.show(bloom_forced) ++ " serialized_bytes=" ++ Nat.show(serialized_bytes))
 
 def main() -> IO(Unit):
   do IO<Unit>:
     entries_env : String <- IO.try(String, Console.get_env("MYLSM_BENCH_ENTRIES"))
     dir_env : String <- IO.try(String, Console.get_env("MYLSM_BENCH_DIR"))
-    +entries : Nat <- IO.pure(Nat, nat_default(Nat.read(entries_env), 4097n))
-    +dir : String <- IO.pure(String, env_default(dir_env, ".mylsm-compaction-bench-data"))
+    +entries : Nat <- IO.pure(Nat, Common.nat_default(Nat.read(entries_env), 4097n))
+    +dir : String <- IO.pure(String, Common.env_default(dir_env, ".mylsm-compaction-bench-data"))
     _h0 : Unit <- IO.print("benchmark=compaction bend_version=2.0.9 entries_per_run=" ++ Nat.show(entries))
     _h1 : Unit <- IO.print("output_directory=" ++ dir)
     _c1 : Unit <- run_case(dir, entries, 1n)

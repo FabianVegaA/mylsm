@@ -1,6 +1,6 @@
 import Base
-import ../src/MemTable.bend as MemTable
-import ../src/Sstable.bend as Sstable
+import ../../src/MemTable.bend as MemTable
+import ../../src/Sstable.bend as Sstable
 
 # Bloom tuning harness (Phase A3): builds one table at the current Monkey
 # schedule and one at double bits over the same keys, then counts observed

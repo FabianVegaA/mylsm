@@ -1,5 +1,5 @@
 import Base
-import ../src/Console.bend as Console
+import ../../src/Console.bend as Console
 
 def main() -> IO(Unit):
   do IO<Unit>:

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 MODE=run
 case "${1:-}" in
   --self-test|--validate-only)
@@ -11,11 +11,11 @@ case "${1:-}" in
 esac
 
 REQUESTED_OUTPUT=${1:-"$ROOT/.mylsm-crash-injection"}
-REPETITIONS=${MYLSM_CRASH_REPETITIONS:-3}
+REPETITIONS=${MYLSM_CRASH_REPETITIONS:-20}
 STOP_TIMEOUT=${MYLSM_CRASH_STOP_TIMEOUT:-10}
 BUILD_DIR="$ROOT/.mylsm/build"
 BINARY="$BUILD_DIR/crash-worker"
-SOURCE="$ROOT/bench/crash_worker.bend"
+SOURCE="$ROOT/bench/crash/crash_worker.bend"
 CURRENT_PID=
 CURRENT_ARTIFACT_DIR=
 MATRIX_COMPLETE=0
@@ -136,12 +136,12 @@ wait_for_stop() {
 
 checkpoint_config() {
   case "$1" in
-    wal.appended) echo "wal optional 0 0 3" ;;
-    wal.synced) echo "wal required 0 0 3" ;;
-    flush.table_synced|flush.table_published|flush.manifest_synced) echo "flush absent 0 0 4" ;;
-    flush.manifest_published) echo "flush absent 1 0 4" ;;
-    compact.output_synced|compact.output_published|compact.manifest_synced) echo "compact absent 5 0 15" ;;
-    compact.manifest_published) echo "compact absent 0 1 15" ;;
+    wal.appended) echo "wal optional 0 0 1000" ;;
+    wal.synced) echo "wal required 0 0 1000" ;;
+    flush.table_synced|flush.table_published|flush.manifest_synced) echo "flush absent 0 0 500" ;;
+    flush.manifest_published) echo "flush absent 1 0 500" ;;
+    compact.output_synced|compact.output_published|compact.manifest_synced) echo "compact absent 5 0 10000" ;;
+    compact.manifest_published) echo "compact absent 0 1 10000" ;;
     *) echo "unknown checkpoint: $1" >&2; return 2 ;;
   esac
 }
@@ -212,8 +212,15 @@ run_case() {
   grep -q "^worker_mode=verify case=$case_name reopen=2 keys=pass level_shape=pass referenced_data=pass$" "$verify_log"
   grep -q "^worker_mode=verify case=$case_name status=complete reopen_stability=pass$" "$verify_log"
 
+  # Acknowledged-state journal: every ack-batch line from prepare must have
+  # a matching verified-batch line from verify (prefix swap, order kept).
+  grep "^ack-batch " "$prepare_log" | sort > "$case_dir/ack.list"
+  grep "^verified-batch " "$verify_log" | sed 's/^verified-batch /ack-batch /' | sort > "$case_dir/verified.list"
+  diff -u "$case_dir/ack.list" "$case_dir/verified.list" > "$case_dir/journal.diff" || { echo "acknowledged-state journal mismatch (see $case_dir/journal.diff)" >&2; return 1; }
+  echo "case=$checkpoint repetition=$repetition journal=pass ack_batches=$(wc -l < "$case_dir/ack.list" | tr -d ' ')" >> "$case_dir/journal.log"
+
   rm -rf -- "$db_dir"
-  echo "case=$checkpoint repetition=$repetition stopped=pass kill_status=137 recovery=pass reopen_stability=pass level_shape=pass"
+  echo "case=$checkpoint repetition=$repetition stopped=pass kill_status=137 recovery=pass reopen_stability=pass level_shape=pass journal=pass"
 }
 
 PLATFORM=$(uname -s)

@@ -9,6 +9,8 @@ import ../src/Wal.bend as Wal
 # and its full proof is deferred: open-key/open-length joint induction is not
 # currently accepted by the Bend 2.0.9 checker (syntactic P-matching over pump
 # states with stuck-open tails). See spec §3.2.
+# Open concat-merges attempted 2026-09-25 (Phase 2D): `{==}` rejected, needs
+# the same deferred induction. Closed wal_concat_merges plus 1M fuzz stand.
 
 # Batch fixtures (named defs: the parser rejects nested Con inside Some).
 def batch_empty() -> Wal.Batch:
@@ -39,3 +41,8 @@ law wal_rt_multi:
 law wal_fail_closed:
   for +s: String
   {Wal.is_decided(Wal.decode(s)) == True{} : Bool}
+
+# LAW: concatenated encodings decode as one merged batch (closed; sequence
+# semantics — the framing layer owns boundaries, decode consumes sequences).
+law wal_concat_merges:
+  {Wal.decode(Wal.encode(batch_put1()) ++ Wal.encode(batch_del1())) == Some{Wal.Batch{Con{Wal.Put{"k", "v"}, Con{Wal.Del{"k"}, Nil{}}}}} : Maybe<&2, Wal.Batch>}

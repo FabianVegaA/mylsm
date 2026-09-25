@@ -1,5 +1,5 @@
 import Base
-import ../src/Fs.bend as Fs
+import ../../src/Fs.bend as Fs
 
 def print_all(xs: List<String>) -> IO(Unit):
   match xs:

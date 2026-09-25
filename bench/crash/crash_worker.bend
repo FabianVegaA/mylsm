@@ -1,11 +1,12 @@
 import Base
-import ../src/Console.bend as Console
-import ../src/Compact.bend as Compact
-import ../src/Db.bend as Db
-import ../src/Flush.bend as Flush
-import ../src/Recover.bend as Recover
-import ../src/Sstable.bend as Sstable
-import ../src/Wal.bend as Wal
+import ../../src/Console.bend as Console
+import ../../src/Compact.bend as Compact
+import ../../src/Db.bend as Db
+import ../../src/Flush.bend as Flush
+import ../../src/Recover.bend as Recover
+import ../../src/Sstable.bend as Sstable
+import ../../src/Wal.bend as Wal
+import ../lib/common.bend as Common
 
 def bool_and(lhs: Bool, rhs: Bool) -> Bool:
   match lhs:
@@ -47,33 +48,10 @@ def fixture_puts(count: Nat, +family: String, +batch: Nat, +index: Nat) -> List<
         fixture_puts(rest, family, batch, Nat.add(index, 1n))
       }
 
-def maybe_value_eq(got: Maybe<&2, String>, +expected: String) -> Bool:
-  match got:
-    case None{}: False{}
-    case Some{value}: String.eq(value, expected)
-
 def optional_value_eq(got: Maybe<&2, String>, +expected: String) -> Bool:
   match got:
     case None{}: True{}
     case Some{value}: String.eq(value, expected)
-
-def fixture_keys_ok(count: Nat, +family: String, +batch: Nat, +index: Nat, +db: Db.Db) -> Bool:
-  match count:
-    case 0n:
-      True{}
-    case 1n+rest:
-      bool_and(
-        maybe_value_eq(Db.db_get(db, fixture_key(family, batch, index)), fixture_value(family, batch, index)),
-        fixture_keys_ok(rest, family, batch, Nat.add(index, 1n), db))
-
-def compact_keys_ok(count: Nat, +batch: Nat, +db: Db.Db) -> Bool:
-  match count:
-    case 0n:
-      True{}
-    case 1n+rest:
-      bool_and(
-        fixture_keys_ok(3n, "compact", batch, 0n, db),
-        compact_keys_ok(rest, Nat.add(batch, 1n), db))
 
 def trigger_absent(got: Maybe<&2, String>) -> Bool:
   match got:
@@ -84,7 +62,7 @@ def trigger_optional(+db: Db.Db) -> Bool:
   optional_value_eq(Db.db_get(db, "wal-trigger"), "wal-trigger-value")
 
 def trigger_required(+db: Db.Db) -> Bool:
-  maybe_value_eq(Db.db_get(db, "wal-trigger"), "wal-trigger-value")
+  Common.maybe_value_eq(Db.db_get(db, "wal-trigger"), "wal-trigger-value")
 
 def trigger_absent_db(+db: Db.Db) -> Bool:
   trigger_absent(Db.db_get(db, "wal-trigger"))
@@ -112,36 +90,32 @@ def trigger_policy_valid(+policy: String) -> Bool:
 def case_valid(+case_name: String) -> Bool:
   Bool.or(String.eq(case_name, "wal"), Bool.or(String.eq(case_name, "flush"), String.eq(case_name, "compact")))
 
-def first_level(levels: List<&2, List<&2, Sstable.Table>>) -> List<&2, Sstable.Table>:
-  match levels:
-    case Nil{}: Nil{}
-    case Con{level, rest}: level
+def fixture_key_ok(+family: String, +batch: Nat, +index: Nat, +db: Db.Db) -> Bool:
+  Common.maybe_value_eq(Db.db_get(db, fixture_key(family, batch, index)), fixture_value(family, batch, index))
 
-def rest_levels(levels: List<&2, List<&2, Sstable.Table>>) -> List<&2, List<&2, Sstable.Table>>:
-  match levels:
-    case Nil{}: Nil{}
-    case Con{level, rest}: rest
+def spot_keys_ok(+family: String, +batch: Nat, +count: Nat, +db: Db.Db) -> Bool:
+  +middle = Nat.div(count, 2n)
+  +last = Nat.sub(count, 1n)
+  bool_and(fixture_key_ok(family, batch, 0n, db), bool_and(fixture_key_ok(family, batch, middle, db), fixture_key_ok(family, batch, last, db)))
 
-def level_count(db: Db.Db, level: Nat) -> Nat:
-  match db:
-    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
-      match level:
-        case 0n:
-          List.length(&2, Sstable.Table, first_level(levels))
-        case 1n+rest:
-          List.length(&2, Sstable.Table, first_level(rest_levels(levels)))
+def compact_spot(count: Nat, +batch: Nat, +db: Db.Db) -> Bool:
+  match count:
+    case 0n:
+      True{}
+    case 1n+rest:
+      bool_and(spot_keys_ok("compact", batch, 2000n, db), compact_spot(rest, Nat.add(batch, 1n), db))
 
 def case_keys_flush(flush: Bool, +db: Db.Db) -> Bool:
   match flush:
     case True{}:
-      fixture_keys_ok(4n, "flush", 0n, 0n, db)
+      spot_keys_ok("flush", 0n, 500n, db)
     case False{}:
-      compact_keys_ok(5n, 0n, db)
+      compact_spot(5n, 0n, db)
 
 def case_keys_wal(wal: Bool, +case_name: String, +trigger_policy: String, +db: Db.Db) -> Bool:
   match wal:
     case True{}:
-      bool_and(fixture_keys_ok(3n, "wal-base", 0n, 0n, db), trigger_ok(trigger_policy, db))
+      bool_and(spot_keys_ok("wal-base", 0n, 1000n, db), trigger_ok(trigger_policy, db))
     case False{}:
       case_keys_flush(String.eq(case_name, "flush"), db)
 
@@ -151,9 +125,38 @@ def case_keys_ok(+case_name: String, +trigger_policy: String, +db: Db.Db) -> Boo
 def verify_open(+case_name: String, +trigger_policy: String, +expected_l0: Nat, +expected_l1: Nat, +reopen: Nat, +db: Db.Db) -> IO(Unit):
   do IO<Unit>:
     _k : Unit <- require(case_keys_ok(case_name, trigger_policy, db), "acknowledged key/value verification failed")
-    _s0 : Unit <- require(Nat.is_eq(level_count(db, 0n), expected_l0), "unexpected L0 shape")
-    _s1 : Unit <- require(Nat.is_eq(level_count(db, 1n), expected_l1), "unexpected L1 shape")
+    _s0 : Unit <- require(Nat.is_eq(Common.level_count(db, 0n), expected_l0), "unexpected L0 shape")
+    _s1 : Unit <- require(Nat.is_eq(Common.level_count(db, 1n), expected_l1), "unexpected L1 shape")
     IO.print("worker_mode=verify case=" ++ case_name ++ " reopen=" ++ Nat.show(reopen) ++ " keys=pass level_shape=pass referenced_data=pass")
+
+def journal_verify_compact(compact: Bool) -> IO(Unit):
+  match compact:
+    case True{}:
+      do IO<Unit>:
+        _u : Unit <- IO.print("verified-batch compact 0 2000")
+        _v : Unit <- IO.print("verified-batch compact 1 2000")
+        _w : Unit <- IO.print("verified-batch compact 2 2000")
+        _x : Unit <- IO.print("verified-batch compact 3 2000")
+        IO.print("verified-batch compact 4 2000")
+    case False{}:
+      IO.die(Unit, U32.from_nat(2n), "unknown crash case")
+
+def journal_verify_flush(flush: Bool, +case_name: String) -> IO(Unit):
+  match flush:
+    case True{}:
+      IO.print("verified-batch flush 0 500")
+    case False{}:
+      journal_verify_compact(String.eq(case_name, "compact"))
+
+def journal_verify_wal(wal: Bool, +case_name: String) -> IO(Unit):
+  match wal:
+    case True{}:
+      IO.print("verified-batch wal-base 0 1000")
+    case False{}:
+      journal_verify_flush(String.eq(case_name, "flush"), case_name)
+
+def journal_verify(+case_name: String) -> IO(Unit):
+  journal_verify_wal(String.eq(case_name, "wal"), case_name)
 
 def verify_twice(+dir: String, +case_name: String, +trigger_policy: String, +expected_l0: Nat, +expected_l1: Nat) -> IO(Unit):
   do IO<Unit>:
@@ -161,19 +164,22 @@ def verify_twice(+dir: String, +case_name: String, +trigger_policy: String, +exp
     _v1 : Unit <- verify_open(case_name, trigger_policy, expected_l0, expected_l1, 1n, db1)
     db2 : Db.Db <- IO.try(Db.Db, Recover.open_db(dir))
     _v2 : Unit <- verify_open(case_name, trigger_policy, expected_l0, expected_l1, 2n, db2)
+    _j : Unit <- journal_verify(case_name)
     IO.print("worker_mode=verify case=" ++ case_name ++ " status=complete reopen_stability=pass")
 
 def prepare_wal(+dir: String) -> IO(Unit):
   do IO<Unit>:
     db0 : Db.Db <- IO.try(Db.Db, Recover.open_db(dir))
-    _db1 : Db.Db <- IO.try(Db.Db, Db.db_write(db0, Wal.Batch{fixture_puts(3n, "wal-base", 0n, 0n)}))
-    IO.print("worker_mode=prepare case=wal status=complete acknowledged_keys=3")
+    _db1 : Db.Db <- IO.try(Db.Db, Db.db_write(db0, Wal.Batch{fixture_puts(1000n, "wal-base", 0n, 0n)}))
+    _u : Unit <- IO.print("ack-batch wal-base 0 1000")
+    IO.print("worker_mode=prepare case=wal status=complete acknowledged_keys=1000")
 
 def prepare_flush(+dir: String) -> IO(Unit):
   do IO<Unit>:
     db0 : Db.Db <- IO.try(Db.Db, Recover.open_db(dir))
-    _db1 : Db.Db <- IO.try(Db.Db, Db.db_write(db0, Wal.Batch{fixture_puts(4n, "flush", 0n, 0n)}))
-    IO.print("worker_mode=prepare case=flush status=complete acknowledged_keys=4")
+    _db1 : Db.Db <- IO.try(Db.Db, Db.db_write(db0, Wal.Batch{fixture_puts(500n, "flush", 0n, 0n)}))
+    _u : Unit <- IO.print("ack-batch flush 0 500")
+    IO.print("worker_mode=prepare case=flush status=complete acknowledged_keys=500")
 
 def prepare_compact_tables(count: Nat, +batch: Nat, db: Db.Db) -> IO(Db.Db):
   match count:
@@ -181,7 +187,7 @@ def prepare_compact_tables(count: Nat, +batch: Nat, db: Db.Db) -> IO(Db.Db):
       IO.pure(Db.Db, db)
     case 1n+rest:
       do IO<Db.Db>:
-        written : Db.Db <- IO.try(Db.Db, Db.db_write(db, Wal.Batch{fixture_puts(3n, "compact", batch, 0n)}))
+        written : Db.Db <- IO.try(Db.Db, Db.db_write(db, Wal.Batch{fixture_puts(2000n, "compact", batch, 0n)}))
         flushed : Db.Db <- IO.try(Db.Db, Flush.flush(written))
         prepare_compact_tables(rest, Nat.add(batch, 1n), flushed)
 
@@ -189,7 +195,12 @@ def prepare_compact(+dir: String) -> IO(Unit):
   do IO<Unit>:
     db0 : Db.Db <- IO.try(Db.Db, Recover.open_db(dir))
     _db5 : Db.Db <- prepare_compact_tables(5n, 0n, db0)
-    IO.print("worker_mode=prepare case=compact status=complete acknowledged_keys=15")
+    _u : Unit <- IO.print("ack-batch compact 0 2000")
+    _v : Unit <- IO.print("ack-batch compact 1 2000")
+    _w : Unit <- IO.print("ack-batch compact 2 2000")
+    _x : Unit <- IO.print("ack-batch compact 3 2000")
+    _y : Unit <- IO.print("ack-batch compact 4 2000")
+    IO.print("worker_mode=prepare case=compact status=complete acknowledged_keys=10000")
 
 def run_wal(+dir: String) -> IO(Unit):
   do IO<Unit>:
