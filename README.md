@@ -37,7 +37,7 @@ Paste the import; the compiler fetches the package from the hub into
 `~/.bend/lib`, verifies it against its hash, and runs offline afterwards:
 
 ```bend
-import 0x7279d7e59732e720723bbd4a452d447a/mylsm.bend as MyLSM
+import mylsm-lsm-store@0.2.0.0/mylsm.bend as MyLSM
 ```
 
 Level 1 is a session monad — no manual handle threading. Steps share one
@@ -46,7 +46,7 @@ quantity (`&2`); `v : T <- …` binds a result, bare `sput(…)` is a Unit step,
 
 ```bend
 import Base
-import 0x7279d7e59732e720723bbd4a452d447a/mylsm.bend as MyLSM
+import mylsm-lsm-store@0.2.0.0/mylsm.bend as MyLSM
 
 def show(m: Maybe<&2, String>) -> U32:
   match m:
@@ -75,7 +75,7 @@ version — this snippet proves both in one run:
 
 ```bend
 import Base
-import 0x7279d7e59732e720723bbd4a452d447a/mylsm.bend as MyLSM
+import mylsm-lsm-store@0.2.0.0/mylsm.bend as MyLSM
 
 def bit(b: Bool) -> U32:
   match b:
