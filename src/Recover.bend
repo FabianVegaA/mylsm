@@ -158,24 +158,17 @@ def mid_and(a: Bool, b: Bool) -> Bool:
     case False{}:
       False{}
 
-def all_dash_mid(s: String) -> Bool:
-  match s:
-    case SNil{}:
-      True{}
-    case SCon{h, t}:
-      mid_and(Char.is_eq(h, Char.from_u32(45)), all_dash_mid(t))
-
 def shape_mid(a: Bool, b: Bool, c: Bool) -> Bool:
   mid_and(a, mid_and(b, c))
 
-# New names use compact decimal generations. Legacy unary-dash generations
-# remain readable so existing databases migrate without renaming table files.
+# Table generations are compact decimal only. Unparsable middles are invalid
+# (no unary-dash legacy reads: no retrocompat).
 def gen_valid_read(parsed: Maybe<&2, Nat>, +middle: String) -> Bool:
   match parsed:
     case Some{n}:
       True{}
     case None{}:
-      all_dash_mid(middle)
+      False{}
 
 def gen_valid(+middle: String) -> Bool:
   gen_valid_read(Nat.read(middle), middle)
@@ -209,7 +202,7 @@ def gen_value_read(parsed: Maybe<&2, Nat>, +middle: String) -> Nat:
     case Some{n}:
       n
     case None{}:
-      String.length(middle)
+      0n
 
 def gen_value(+middle: String) -> Nat:
   gen_value_read(Nat.read(middle), middle)

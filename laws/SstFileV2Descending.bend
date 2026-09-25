@@ -7,4 +7,4 @@ import ../src/SstFileV2.bend as SstFileV2
 # Strict-order kernel: descending keys reject (same no-stream discipline).
 
 law sst2_descending_reject:
-  {SstFileV2.order_decision(Keys.cmp("b", "a"), MemTable.Entry{"a", Some{"1"}}, 1n, Some{"b"}, Nil{}, 1n, 1n, 0, 0n) == SstFileV2.DecoderRejected{SstFileV2.UnsortedOrDuplicate{}} : SstFileV2.Decoder}
+  {SstFileV2.order_decision(Keys.cmp("b", "a"), MemTable.Entry{"a", Some{"1"}}, 1n, Some{"b"}, Nil{}, 1n, 1n, "", 0n) == SstFileV2.DecoderRejected{SstFileV2.UnsortedOrDuplicate{}} : SstFileV2.Decoder}

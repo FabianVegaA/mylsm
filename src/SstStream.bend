@@ -2,18 +2,16 @@ import Base
 import ./Decimal.bend as Decimal
 import ./Fs.bend as Fs
 import ./Sstable.bend as Sstable
-import ./SstFileV1Fast.bend as V1
 import ./SstFileV2.bend as V2
 
 # Chunked table recovery. The host effect returns UTF-8-safe positional chunks;
-# both format versions reuse their pure one-character decoder transitions.
+# the pure one-character v2 decoder transitions run per chunk.
 
 type Chunk is Data:
   Ch{bytes: Nat, text: String}
 
 type Mode is Data:
   Unknown{}
-  Legacy{decoder: V1.Decoder}
   Current{decoder: V2.Decoder}
 
 
@@ -25,14 +23,6 @@ def chunk_parse(p: Decimal.Parse) -> Result<&1, &1, U32 & String, Chunk>:
       Done{Ch{value, rest}}
 
 
-def feed_v1(rest: String, decoder: V1.Decoder) -> V1.Decoder:
-  match rest:
-    case SNil{}:
-      decoder
-    case SCon{c, tail}:
-      feed_v1(tail, V1.decoder_step(decoder, c))
-
-
 def feed_v2(rest: String, decoder: V2.Decoder) -> V2.Decoder:
   match rest:
     case SNil{}:
@@ -41,38 +31,20 @@ def feed_v2(rest: String, decoder: V2.Decoder) -> V2.Decoder:
       feed_v2(tail, V2.decoder_step(decoder, c))
 
 
-def unknown_v1(is_v1: Bool, text: String) -> Mode:
-  match is_v1:
-    case False{}:
-      Unknown{}
-    case True{}:
-      Legacy{feed_v1(text, V1.Dec{V1.NeedT{}, 0n, None{}, True{}, Nil{}, 0n, 0n, 7})}
-
-
 def unknown_v2(is_v2: Bool, +text: String) -> Mode:
   match is_v2:
     case True{}:
-      Current{feed_v2(text, V2.Dec{V2.NeedS{}, 0n, None{}, Nil{}, 0n, 0n, 7, 0n})}
+      Current{feed_v2(text, V2.Dec{V2.NeedS{}, 0n, None{}, Nil{}, 0n, 0n, "", 0n})}
     case False{}:
-      unknown_v1(String.starts_with(text, "T"), text)
+      Unknown{}
 
 
 def feed_mode(mode: Mode, +text: String) -> Mode:
   match mode:
     case Unknown{}:
       unknown_v2(String.starts_with(text, "S2;"), text)
-    case Legacy{decoder}:
-      Legacy{feed_v1(text, decoder)}
     case Current{decoder}:
       Current{feed_v2(text, decoder)}
-
-
-def finish_v1(result: V1.ParseResult) -> Result<&1, &1, U32 & String, Sstable.Table>:
-  match result:
-    case V1.ParseRejected{error}:
-      Fail{(U32.from_nat(3n), "bad legacy table")}
-    case V1.Parsed{table}:
-      Done{table}
 
 
 def finish_v2(result: V2.ParseResult) -> Result<&1, &1, U32 & String, Sstable.Table>:
@@ -87,8 +59,6 @@ def finish_mode(mode: Mode) -> Result<&1, &1, U32 & String, Sstable.Table>:
   match mode:
     case Unknown{}:
       Fail{(U32.from_nat(3n), "unknown table version")}
-    case Legacy{decoder}:
-      finish_v1(V1.finish_decoder(decoder))
     case Current{decoder}:
       finish_v2(V2.finish_decoder(decoder))
 

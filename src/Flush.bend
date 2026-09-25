@@ -169,7 +169,7 @@ def flush_pre(+dir: String, +entries: List<&2, MemTable.Entry>, +levels: List<&2
   +tbl = Sstable.build(entries, 0n, List.length(&2, MemTable.Entry, entries))
   +name = table_name(flushed)
   +l0dir = dir ++ "/l0"
-  flush_goA(dir, l0dir, l0dir ++ "/" ++ name ++ ".tmp", l0dir ++ "/" ++ name, dir ++ "/MANIFEST", dir ++ "/MANIFEST.tmp", SstFile.serialize_v2(Db.table_entries(tbl), 0n), tbl, name, levels, flushed, manifest_token)
+  flush_goA(dir, l0dir, l0dir ++ "/" ++ name ++ ".tmp", l0dir ++ "/" ++ name, dir ++ "/MANIFEST", dir ++ "/MANIFEST.tmp", SstFile.serialize(Db.table_entries(tbl), 0n), tbl, name, levels, flushed, manifest_token)
 
 def flush(+db: Db.Db) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match db:

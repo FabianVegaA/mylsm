@@ -2,9 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Delete the V1 SSTable legacy surface, then replace MyLSM core internals with pinned `bend-collections` hub modules across 5 layers (crypto → bits → MemTable/math → sort/merge → SSTable blocks/WAL batching), keeping the `mylsm.bend` facade signatures stable, and publish the result as a new hub version.
+**Goal:** Delete the V1 SSTable legacy surface, then replace MyLSM core internals with pinned `bend-collections` hub modules across 5 layers (crypto → bit-word fns → math → ephemeral sort/merge → SSTable block index), keeping the `mylsm.bend` facade signatures stable, and publish the result as a new hub version.
 
-**Architecture:** Each layer turns one `src/*.bend` module into a thin adapter (~10–30 lines) over a hash-pinned hub import (`0x9ee2e9a299991dcc089fe22c7f3ceb5f`, verified in Task 0); only LSM-glue laws in `laws/` are kept/rewritten, hub `PROOF.bend` files are trusted as-is; every layer ends with `bend --check-only` + targeted proof + `./proofs/run.sh` + `bin/mylsm bench` before commit, with bench regression → revert.
+**Architecture:** Task 1 deletes the V1 legacy surface. Each subsequent layer adapts one `src/*.bend` module against a hash-pinned hub import (`0x9ee2e9a299991dcc089fe22c7f3ceb5f`, verified in Task 0); only LSM-glue laws in `laws/` are kept/rewritten, hub `PROOF.bend` files are trusted as-is; every layer ends with `bend --check-only` + targeted proof + `./proofs/run.sh` + `bin/mylsm bench` before commit, with bench regression → revert.
+
+**Affinity rule (proven by checker experiments, Task 0):** hub containers (`HashMap`, `Bitset`, trees, heaps, queues) are `Type`-sorted (linear): reads hand state back and dropping it fails (`expected Data, observed Quant`), and no `is Data` type may hold them (`expected Data, observed Type` — this includes `Array` fields). Our `MemTable`/`Db`/`Sstable`/`Wal`/`BitTree` types are `Data` and `Db`/`Sess` threading depends on it. Therefore: hub containers are used **ephemerally inside functions only** (threaded, fully consumed, never stored in `Data`, never dropped); pure hub functions (`SHA.*`, `math.*`, `word_get`/`word_put`) are unrestricted. Full-backend swaps that would require storing hub state in `Data` (MemTable-on-HashMap, Bloom-on-Bitset, Table-on-DynArray, Batch-on-queue) are **rejected** — the tasks below implement the ephemeral/pure-fn form instead.
 
 **Tech Stack:** Bend 2.0.25+ (`bend --check-only`, `bend --publish`), `bend-collections` hub package (containers + math + crypto), existing `src/` + `laws/` + `proofs/` + `bench/` harness, `pack.json` catalog manifest.
 
@@ -14,7 +16,7 @@
 
 - Create: `tools/toolchain.json` — pins `{"bend": "2.0.25"}` (minimum Bend for `bend-collections`).
 - Create (Task 2): `src/SstChecksum.bend` — adapter over hub `sha256.bend`; sole checksum used by `SstFileV2` serialize/parse. `Manifest.mhash` stays untouched for Manifest framing.
-- Modify per layer: `src/SstFileV2.bend` (Task 2), `src/BitTree.bend` (Task 3), `src/MemTable.bend` + `src/Decimal.bend` (Task 4), `src/SortedRun.bend` + `src/MergeIter.bend` + `src/Compact.bend` (Task 5), `src/Sstable.bend` + `src/Wal.bend` (Task 6).
+- Modify per layer: `src/SstFileV2.bend` (Task 2), `src/BitTree.bend` (Task 3), `src/Decimal.bend` (Task 4; MemTable stays), `src/SortedRun.bend` + `src/MergeIter.bend` + `src/Compact.bend` (Task 5), `src/Sstable.bend` + `src/Wal.bend` (Task 6).
 - Modify per layer (same task, same commit): matching `laws/<Domain>.bend` glue laws + `proofs/<Domain>Proof.bend` witnesses that cite changed behavior (checksum fixtures, scan lemmas, sort/merge properties).
 - Modify (Task 7): `mylsm.bend` (header comment with new hub pin only if facade bodies change; signatures unchanged), `pack.json` (new `import` line), `README.md` (new import snippet).
 - Untouched: `src/Db.bend` orchestration, `src/Fs.bend`, `src/Console.bend`, `src/CrashPoint.bend`, `src/effs/`, `app/`, `laws/Db.bend` (unless a layer forces a glue change, then it is amended in that layer's task). `src/SstFile.bend`, `src/SstStream.bend`, `src/Recover.bend` and the V1 laws/proofs are modified or deleted in Task 1, not preserved.
@@ -75,7 +77,13 @@ git commit -m "chore: pin bend-collections 0x9ee2e9 and Bend 2.0.25 floor" -m "H
 - [ ] **Step 1: Confirm the V1 blast radius is contained**
 
 Run: `grep -rn "SstFileV1\|serialize_v1\|serialize_v2\|parse_v1\|parse_version\|feed_v1\|Legacy\|muts_of_entries" src/ app/ bench/ laws/ proofs/ mylsm.bend | cut -d: -f1 | sort | uniq -c`
-Expected: matches only in `src/SstFile.bend`, `src/SstStream.bend`, `src/SstFileV1Fast.bend`, `laws/SstFileV1Parser.bend`, `laws/SstFileV1Equivalence.bend`, `laws/SstFileDispatchV1.bend`, `laws/SstFileRoundtrip.bend`, `laws/SstFileDispatchV2.bend`, `laws/SstStream.bend`, and the four matching `proofs/` files. If any other file references these names, stop and extend the file lists in this task before deleting anything. (`mylsm.bend` uses only `SstFile.serialize`/`SstFile.parse`, which keep their names.)
+Expected: matches only in `src/SstFile.bend`, `src/SstStream.bend`, `src/SstFileV1Fast.bend`, `laws/SstFileV1Parser.bend`, `laws/SstFileV1Equivalence.bend`, `laws/SstFileDispatchV1.bend`, `laws/SstFileRoundtrip.bend`, `laws/SstFileDispatchV2.bend`, `laws/SstStream.bend`, the four matching `proofs/` files, plus: `app/interchange.bend` (its OWN unrelated `muts_of_entries` Entry→Mut helper — keep), and `SstFile.serialize_v2` call sites in `src/Compact.bend`, `src/Flush.bend`, `bench/compaction_bench.bend` (handled in Step 1b). If any file beyond these references the names, stop and extend this task before deleting anything. (`mylsm.bend` uses only `SstFile.serialize`/`SstFile.parse`, which keep their names.)
+
+- [ ] **Step 1b: Repoint `serialize_v2` callers at `serialize`**
+
+`SstFile.serialize` is already `serialize_v2` under its final name, so repoint the three production call sites mechanically (no behavior change):
+Run: `sed -i '' 's/SstFile\.serialize_v2(/SstFile.serialize(/' src/Compact.bend src/Flush.bend bench/compaction_bench.bend && grep -rn "serialize_v2" src/ app/ bench/ laws/ proofs/ || echo NO-V2-REFS`
+Expected: `NO-V2-REFS`. (On Linux use `sed -i` without `''`; this repo supports Darwin + Linux per the crash-matrix docs — pick the flag matching `uname`.)
 
 - [ ] **Step 2: Rewrite `src/SstFile.bend` as v2-only**
 
@@ -295,7 +303,7 @@ git commit -m "chore: delete v1 sstable legacy surface, v2-only codec"
 
 - [ ] **Step 1: Write the checksum adapter**
 
-Create `src/SstChecksum.bend` with exactly (module alias `SHA` uses the Task 0 pin):
+Create `src/SstChecksum.bend` with exactly (recorded SHA API, Task 0: `ascii`, `sha256`, `hex` all over `List<&2, U32>`):
 ```bend
 import Base
 import 0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/crypto/sha/sha256.bend as SHA
@@ -304,12 +312,12 @@ import 0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/crypto/sha/sha256.bend as SHA
 # (its own PROOF.bend proves it against the executable FIPS 180-4 spec);
 # our laws only cover framing (digest placed after '#', verified on parse).
 def digest(+body: String) -> String:
-  SHA.hex(SHA.hash(body))
+  SHA.hex(SHA.sha256(SHA.ascii(body)))
 
 def verify(+body: String, +claimed: String) -> Bool:
   String.eq(digest(body), claimed)
 ```
-If the Step 0-recorded SHA API names differ (`hash`/`hex` may be named differently in the fetched source), use the recorded names instead and note the rename in the commit message. The adapter must expose exactly `digest` and `verify` with these shapes regardless.
+The adapter exposes exactly `digest` and `verify` with these shapes.
 
 - [ ] **Step 2: Check the adapter in isolation**
 
@@ -341,17 +349,19 @@ If the bench regresses vs baseline on the SSTable workload, revert the `src/SstF
 
 ---
 
-### Task 3: Bits layer — BitTree Bloom over hub bitset/bitlist
+### Task 3: Bits layer — BitTree bit-twiddling on hub word primitives
 
 **Files:**
-- Modify: `src/BitTree.bend` (packed-words backend only; Bloom policy API unchanged)
-- Modify: `laws/BloomSafe.bend`, `laws/BloomTree.bend`, `laws/BloomSchedule.bend`, `laws/BloomZeroEstimate.bend` (only if bit-layout literals change)
-- Modify: matching `proofs/BloomSafeProof.bend`, `proofs/BloomTreeProof.bend`, `proofs/BloomScheduleProof.bend`, `proofs/BloomZeroEstimateProof.bend` (fixtures only)
+- Modify: `src/BitTree.bend` (pure-fn delegates only; `WordTree`/`BitTree`/`Plan` stay `Data` with current storage)
+- Modify: `laws/BloomSafe.bend`, `laws/BloomTree.bend`, `laws/BloomSchedule.bend`, `laws/BloomZeroEstimate.bend` (only if computed literals change)
+- Modify: matching proofs (fixtures only)
 - Test: `bend proofs/BloomTreeProof.bend`, `./proofs/run.sh`
 
-- [ ] **Step 1: Reimplement the BitTree backend on hub bitset**
+Full `Bitset` adoption is rejected by the affinity rule (`BitTree is Data` cannot hold the `Type`-sorted `Bitset`, proven Task 0). Instead adopt the hub's pure word functions, which have no affinity cost.
 
-In `src/BitTree.bend`: add `import 0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/containers/bitset.bend as BitSet` (exact def names per Task 0 records; check `~/.bend/lib/0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/containers/bitset.bend` first with the same `grep -n "^def "` command from Task 0 Step 3). Keep every public `def` name and signature in `BitTree.bend` identical; only the backing-words representation and the get/set internals delegate to `BitSet`. Bloom estimation/schedule/policy defs stay hand-written.
+- [ ] **Step 1: Delegate bit-twiddling to hub word primitives**
+
+In `src/BitTree.bend`: add `import 0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/containers/bitset.bend as BitWords` and replace hand-rolled bit get/set/extract internals with `BitWords.word_get(w, k)`, `BitWords.word_put(v, w, k)`, `BitWords.word_op` / `low` where shapes match (exact names verified Task 0). Keep every public `def` name and signature identical; Bloom estimation/schedule/policy defs stay hand-written. If no internal matches cleanly, keep the file as-is and record that in the commit message (this task is allowed to be a no-op).
 
 - [ ] **Step 2: Check + targeted proofs**
 
@@ -370,125 +380,76 @@ Stage only the files that actually changed (`git status --short` first; drop unc
 
 ---
 
-### Task 4: MemTable on hub hash_table + Decimal on hub math
+### Task 4: Hub math adoption (MemTable + Decimal stay)
 
 **Files:**
-- Modify: `src/MemTable.bend` (map backend; public API unchanged)
-- Modify: `src/Decimal.bend` (delegate words/powers to `src/math/`)
-- Modify: `laws/MemTable.bend` (keep the two bridge laws; drop scan-lemma internals), `laws/Decimal.bend` (fixtures only)
-- Modify: `proofs/MemTableProof.bend`, `proofs/DecimalProof.bend`
-- Test: `bend proofs/MemTableProof.bend`, `./proofs/run.sh`
+- Modify: `src/BitTree.bend` (one line: `Nat.pow(2n, height)` → hub tail-recursive `pow2t`)
+- Explicitly unchanged: `src/MemTable.bend`, `laws/MemTable.bend`, `proofs/MemTableProof.bend`, `src/Decimal.bend`, `laws/Decimal.bend`, `proofs/DecimalProof.bend`
+- Test: `bend proofs/BitTreeProof.bend`, `bend proofs/DecimalProof.bend` (regression)
 
-- [ ] **Step 1: Rewrite MemTable on the hub hash map**
+MemTable-on-HashMap is rejected by the affinity rule (proven Task 0): `HashMap.get` hands the map back so reads would have to thread it, and storing the map would de-`Data` `MT` → `Db` → the `Sess` `+db` threading the whole facade depends on. The prepend log stays: puts are already O(1) with zero comparisons and reads scan at most the 4096-entry cap under proven laws — it was never the bottleneck.
 
-Rewrite `src/MemTable.bend` keeping the exact public surface (`Entry{key, val}`, `MemTable` type name, `empty`, `put`, `del`, `count`, `get`) with this shape (hub def names per Task 0 records):
-```bend
-import Base
-import 0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/containers/hash_table.bend as HashMap
-import ./Keys.bend as Keys
+`Decimal.bend` likewise has nothing to delegate: it is a pure decimal digit scanner over `Nat`/`Char` with no 64-bit words or power tables (the plan's assumption was wrong; verified against `src/math/{u64,pow2,hash}.bend`). The one real `src/math/` adoption is hub `pow2t` (tail-recursive 2^d, proven `pow2t(d) == 2^d`, compiles to a flat native loop) for `BitTree.nonempty_metadata_ok`, done in Step 1 below.
 
-type Entry is Data:
-  Entry{key: String, val: Maybe<&2, String>}
+- [ ] **Step 1: Adopt hub `pow2t` in BitTree capacity check**
 
-type MemTable is Data:
-  MT{map: HashMap.Map}
+In `src/BitTree.bend`: add `import 0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/math/pow2.bend as Pow2`, replace `Nat.pow(2n, height)` with `Pow2.pow2t(height)` in `nonempty_metadata_ok` (only `Nat.pow` site in `src/`, verified by grep). No law mentions `Nat.pow`, so no fixture changes. Check: `bend src/BitTree.bend --check-only`, expected exit 0.
 
-def empty() -> MemTable:
-  MT{HashMap.empty()}
+- [ ] **Step 2: Regression pass (MemTable + Decimal untouched)**
 
-def put(t: MemTable, k: String, v: String) -> MemTable:
-  match t:
-    case MT{map}:
-      MT{HashMap.insert(map, k, Some{v})}
+Run: `bend proofs/BitTreeProof.bend && bend proofs/DecimalProof.bend && bend proofs/MemTableProof.bend`
+Expected: all green (Decimal/MemTable run as regression — untouched).
 
-def del(t: MemTable, k: String) -> MemTable:
-  match t:
-    case MT{map}:
-      MT{HashMap.insert(map, k, None{})}
+- [ ] **Step 3: Commit**
 
-def get(t: MemTable, +k: String) -> Maybe<&2, String>:
-  match t:
-    case MT{+map}:
-      HashMap.get(&2, String, map, k)
-```
-Delete `scan_step`, `scan_go`, `frozen_lemma`, `ryw_core`, `del_core`. Keep `ryw_bridge`/`del_bridge` statements in `laws/MemTable.bend`, re-witnessed against the map backend. `count` delegates to the hub map size (`HashMap.count` or recorded equivalent). Tombstone semantics stay: `None{}` hides older versions, newest write wins.
-
-- [ ] **Step 2: Delegate Decimal words/powers to hub math**
-
-In `src/Decimal.bend`: add the hub `src/math/` import (exact path from the Task 0 Step 2 listing), replace hand-rolled 64-bit word ops and powers-of-two tables with the hub defs, keeping all public `def` names/signatures. Check: `bend src/Decimal.bend --check-only`, expected exit 0.
-
-- [ ] **Step 3: Rewrite MemTable + Decimal witnesses**
-
-In `laws/MemTable.bend`, keep exactly the two bridge statements (`get(put(t,k,v),k)==Some{v}}`, `get(del(put(t,k,v),k),k)==None{}}`); delete scan-lemma defs. In `proofs/MemTableProof.bend`, re-prove the bridges against the map backend using the hub map's own insert-get lemma (cite it; do not re-prove the map). Same fixture-only treatment for `laws/Decimal.bend` + `proofs/DecimalProof.bend`.
-
-- [ ] **Step 4: Gate + bench + commit**
-
-Run: `bend proofs/MemTableProof.bend && bend proofs/DecimalProof.bend && ./proofs/run.sh`
-Expected: green throughout. Then `bin/mylsm bench` vs `bench/BASELINE.md` (write path must not regress: puts are the fastest shape — O(1), zero comparisons).
 ```bash
-git add src/MemTable.bend src/Decimal.bend laws/MemTable.bend laws/Decimal.bend proofs/MemTableProof.bend proofs/DecimalProof.bend
-git commit -m "feat: memtable on hub hash map, decimal on hub math"
+git add src/BitTree.bend docs/superpowers/plans/2026-09-24-bend-hub-refactor.md
+git commit -m "feat: bittree capacity on hub pow2t, memtable+decimal stay"
 ```
 
 ---
 
-### Task 5: Sort/merge layer — SortedRun on tree+array, MergeIter/Compact on heap
+### Task 5: Sort/merge layer — EVALUATED, no change (spike finding)
 
-**Files:**
-- Modify: `src/SortedRun.bend`, `src/MergeIter.bend`, `src/Compact.bend` (public `def` names/signatures unchanged)
-- Modify: `laws/SortedRun.bend`, `laws/MergeIter.bend`, `laws/Compact.bend` + matching proofs (glue properties only)
-- Test: targeted proofs, `./proofs/run.sh`, compaction bench
+**Finding (2026-09-24, recorded instead of a rewrite):** the plan's premise was stale. `sort_newest` is already O(N log N) via precedence-preserving balanced multi-run merge (`merge_many_newest` over singleton runs, `merge_newer` pairwise-linear, `merge_round` halving rounds — the linear-compaction work). The hub offers consumable shapes (`TreeMap.poll_first_entry`, `Heap.to_sorted_list`, both verified by grep), and `SortedRun.entry_cmp` already exists as a ready static comparator — but a rewrite buys nothing asymptotically (TreeMap inserts are O(log N) each with RB-rebalance + affinity-threading overhead vs our linear pairwise merges; heap k-way is the same complexity class) while invalidating the proven `SortedRun`/`MergeIter`/`Compact` law suites. Newest-wins would additionally need oldest-first iteration (hub `put` overwrites) for zero gain. Per the spike + bench gates, Task 5 is a documented no-op: no `src/`, `laws/`, or `proofs/` changes.
 
-- [ ] **Step 1: SortedRun via indexed red-black tree draining to packed array**
+- [ ] **Step 1: Spike — confirm consumable shape exists (done, read-only)**
 
-In `src/SortedRun.bend`: add `import 0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/containers/balanced_search_tree.bend as RBTree` and `import 0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/containers/dynamic_array.bend as DynArray` (exact def names per a fresh `grep -n "^def " ` on the fetched sources, same command shape as Task 0 Step 3). Keep `sort_newest(entries)` signature; implement as: insert entries into the tree keyed by `Keys.cmp` (newest-first tiebreak preserved), drain in order to a packed array, return as `List`. Delete the quadratic construction internals. Check: `bend src/SortedRun.bend --check-only`, expected exit 0.
+Run: `grep -n "^def " ~/.bend/lib/0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/containers/balanced_search_tree.bend | grep -i "poll_first_entry" && grep -n "^def " ~/.bend/lib/0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/containers/binary_heap.bend | grep -i "to_sorted_list"`
+Expected: both present (`poll_first_entry`, `to_sorted_list`). Shape exists — but unused per the finding above. If a future bench ever shows sort/merge as the bottleneck, `entry_cmp` (`src/SortedRun.bend:29`) is the ready static comparator.
 
-- [ ] **Step 2: MergeIter/Compact N-way merge via binary heap**
+- [ ] **Step 2: Regression pass + commit the finding**
 
-In `src/MergeIter.bend`: keep `scan(merged, lo, hi)` signature; implement the merge with `binary_heap.bend` (packed-array min-heap, `Keys.cmp` as static comparator) instead of linear scans. In `src/Compact.bend`: use `priority_queue.bend` facades for run selection and parallelize independent compaction ranges (per `AGENT.md`: parallelize whenever semantically sound). No signature changes; no new `IO`. Check both: `bend src/MergeIter.bend --check-only && bend src/Compact.bend --check-only`, expected exit 0 for both.
-
-- [ ] **Step 3: Glue laws + witnesses for ordering**
-
-In `laws/SortedRun.bend` keep newest-wins + sortedness statements; in `laws/MergeIter.bend` keep `range_scan` correctness; in `laws/Compact.bend` keep merge-output properties. Re-witness in the three matching `proofs/` files against the new backends, citing hub tree/heap lemmas where applicable. This is the biggest proof-touch layer: run each targeted proof individually (`bend proofs/SortedRunProof.bend`, then `MergeIter`, then `Compact`) and fix one module at a time before the full gate.
-
-- [ ] **Step 4: Gate + compaction bench + commit**
-
-Run: `./proofs/run.sh` (expected green), then `bin/mylsm bench` plus `bench/compaction_regression.sh`, compared against `bench/BASELINE.md` (the 20,485-write / 4.524s reference and the 1M-write acceptance figures are the bars to beat on identical hardware).
+Run: `bend proofs/SortedRunProof.bend && bend proofs/MergeIterProof.bend && bend proofs/CompactProof.bend`
+Expected: all green (untouched).
 ```bash
-git add src/SortedRun.bend src/MergeIter.bend src/Compact.bend laws/SortedRun.bend laws/MergeIter.bend laws/Compact.bend proofs/SortedRunProof.bend proofs/MergeIterProof.bend proofs/CompactProof.bend
-git commit -m "feat: sorted runs on hub tree+array, merge on hub heap"
+git add docs/superpowers/plans/2026-09-24-bend-hub-refactor.md
+git commit -m "docs: task 5 sort-merge evaluated, no rewrite" -m "sort_newest already O(N log N) balanced merge; hub tree/heap same class with worse constants and full proof-suite cost. Spike gate produces a documented no-op."
 ```
-Bench regression on the compaction workload → revert that layer's `src/` change and keep the laws intact, noted in the commit message.
 
 ---
 
-### Task 6: SSTable blocks + WAL batching (+ optional LRU block cache)
+### Task 6: Read-path analysis — EVALUATED, deferred to Phase 3 (findings)
 
-**Files:**
-- Modify: `src/Sstable.bend` (`build`/`from_sorted_unique`/`build_sorted` emit block index; add block-scoped lookup, keep old whole-table lookup name as delegate), `src/Wal.bend` (`encode`/`decode` unchanged; batching via hub queue/deque)
-- Modify: `laws/Sstable.bend`, `laws/Wal.bend` + matching proofs (block-index lookup equivalence, batch fold equivalence)
-- Test: targeted proofs, `./proofs/run.sh`, million-write acceptance if time permits
+**Findings (2026-09-24, read-only analysis, no code changes):**
 
-- [ ] **Step 1: Sparse block index + binary search in Sstable**
+1. Block index on `Sstable.lookup`: REJECTED as theater. `lookup` (`src/Sstable.bend:230`) is called only by one law (`laws/Sstable.bend:20`); production reads never touch it. The real read path is `Db.db_get` (`src/Db.bend:83`) → `all_entries` (concats mem + every table into one giant list) → `MemTable.get` linear scan — O(total entries) String compares per read. Indexing `lookup` would optimize a dead path.
+2. The genuine fix — per-table newest-first search in `db_get` with `maybe_present` Bloom prefilter (which would make both `lookup` and the currently-unused Bloom filter live) — is a `Db` read-path redesign, not a hub adoption: no hub module fits (affinity rule), it touches `Db`/`Flush`/`Compact`/`Recover` laws, and the bench cannot validate it (portable backend has no storage IO; `bin/mylsm bench` fails pre-existing, Task 2). Per the bench gate ("sin mejora medida, la capa se revierte" — unmeasurable here), this is deferred to Phase 3 where it already lives ("block-oriented reads", "measured Bloom-filter tuning").
+3. WAL queue: REJECTED by the affinity rule (`Batch is Data` cannot hold the linear hub queue; List fold stays). LRU cache: deferred (needs threaded-cache redesign).
 
-In `src/Sstable.bend`: build tables over `dynamic_array.bend` packed storage; `build`/`build_sorted`/`from_sorted_unique` additionally record a sparse block index (first key per N-entry block; N as a named `def block_entries() -> Nat` returning `64n`); add `block_get(table, k)` doing binary search over the index then a bounded intra-block scan; keep the existing whole-table lookup `def` as a one-line delegate to `block_get` so callers and laws keep working. Check: `bend src/Sstable.bend --check-only`, expected exit 0.
+- [ ] **Step 1: Verify the dead-path claim (done, read-only)**
 
-- [ ] **Step 2: WAL grouped commits via hub queue**
+Run: `grep -rn "Sstable.lookup\|maybe_present" src/ app/ bench/ mylsm.bend | grep -v "def lookup\|def maybe_present\|laws/"`
+Expected: no production callers (only def sites). Confirmed 2026-09-24.
 
-In `src/Wal.bend`: keep `encode`/`decode`/`Mut`/`Batch` shapes; implement batch accumulation with `queue.bend` (two-list FIFO) and `deque.bend` where both ends are needed (exact hub def names via the Task 0 `grep` command on those two files). No `IO` changes; batching stays pure (grouped-commit policy in Bend, host append stays in `src/effs/`). Check: `bend src/Wal.bend --check-only`, expected exit 0.
+- [ ] **Step 2: Regression pass + commit the findings**
 
-- [ ] **Step 3: Block-index equivalence laws + optional LRU cache**
-
-In `laws/Sstable.bend` add: `block_get(t,k) == lookup(t,k)` for all fixture tables (closed fixtures) plus the open-input statement the checker admits. `lookup` is the existing whole-table lookup (`src/Sstable.bend:230`); it becomes a one-line delegate to `block_get`, so this law pins the block index to current behavior. If `lru.bend` block-cache is added, it must be a pure-behind-facade memo that never changes lookup results: add the law `cached_get(t,k) == block_get(t,k)` in the same file. Witness both in `proofs/SstableProof.bend`. In `laws/Wal.bend` keep batch-fold equivalence (`sbatch` == sequential `sput`/`sdel`); witness in `proofs/` — this property already exists via `Db` laws, so prefer citing over re-proving.
-
-- [ ] **Step 4: Gate + bench + commit**
-
-Run: `bend proofs/SstableProof.bend && bend proofs/WalProof.bend`, then `./proofs/run.sh` (expected green), then `bin/mylsm bench` vs `bench/BASELINE.md` (block reads must beat whole-file reads on a dataset exceeding RAM to count as the Phase 3 win).
+Run: `bend proofs/SstableProof.bend && bend proofs/WalProof.bend`
+Expected: green (untouched).
 ```bash
-git add src/Sstable.bend src/Wal.bend laws/Sstable.bend laws/Wal.bend proofs/SstableProof.bend
-git commit -m "feat: sstable block index plus wal queue batching"
+git add docs/superpowers/plans/2026-09-24-bend-hub-refactor.md
+git commit -m "docs: task 6 read-path analyzed, block index deferred" -m "Sstable.lookup is a dead path (only a law calls it); real bottleneck is db_get concat-then-scan, a Db redesign needing measurable bench. Deferred to Phase 3."
 ```
-Stage only changed paths (`git status --short` first).
 
 ---
 

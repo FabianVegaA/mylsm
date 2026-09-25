@@ -8,4 +8,4 @@ import ../src/SstFileV2.bend as SstFileV2
 # Keys.cmp over 1-char keys normalizes fast.
 
 law sst2_duplicate_reject:
-  {SstFileV2.order_decision(Keys.cmp("a", "a"), MemTable.Entry{"a", Some{"new"}}, 1n, Some{"a"}, Nil{}, 1n, 1n, 0, 0n) == SstFileV2.DecoderRejected{SstFileV2.UnsortedOrDuplicate{}} : SstFileV2.Decoder}
+  {SstFileV2.order_decision(Keys.cmp("a", "a"), MemTable.Entry{"a", Some{"new"}}, 1n, Some{"a"}, Nil{}, 1n, 1n, "", 0n) == SstFileV2.DecoderRejected{SstFileV2.UnsortedOrDuplicate{}} : SstFileV2.Decoder}

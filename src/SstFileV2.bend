@@ -1,15 +1,15 @@
 import Base
 import ./Decimal.bend as Decimal
 import ./Keys.bend as Keys
-import ./Manifest.bend as Manifest
 import ./MemTable.bend as MemTable
 import ./Sstable.bend as Sstable
+import ./SstChecksum.bend as SstChecksum
 
 # Compact SSTable v2:
 #   S2;<level>;<count>;<entries>#<checksum>
 #   P;<key-length>;<value-length>;<key><value>
 #   D;<key-length>;<key>
-# The checksum is Manifest.mhash(body, 7).
+# The checksum is SstChecksum.digest(body) (hub SHA-256, hex).
 
 def max_file_chars() -> Nat:
   Nat.add(4294967295n, 1n)
@@ -63,7 +63,7 @@ type Phase is Data:
   ReadKey{tag: Tag, remaining: Nat, value_length: Nat, reversed: String}
   ReadValue{key: String, remaining: Nat, reversed: String}
   NeedHash{}
-  ReadChecksum{scan: Decimal.Scan}
+  ReadChecksum{reversed: String}
 
 type Transition is Data:
   Next{phase: Phase}
@@ -80,7 +80,7 @@ type Decoder is Data:
     reversed_entries: List<&2, MemTable.Entry>,
     level: Nat,
     declared_count: Nat,
-    hash: U32,
+    body_rev: String,
     consumed: Nat
   }
   DecoderRejected{error: Error}
@@ -111,12 +111,9 @@ def body(+entries: List<&2, MemTable.Entry>, level: Nat) -> String:
 
 def serialize(+entries: List<&2, MemTable.Entry>, level: Nat) -> String:
   +encoded_body = body(entries, level)
-  encoded_body ++ "#" ++ U32.show(Manifest.mhash(encoded_body, 7))
+  encoded_body ++ "#" ++ SstChecksum.digest(encoded_body)
 
 # --- Pure one-character decoder transitions ---
-
-def body_hash(hash: U32, c: Char) -> U32:
-  U32.add(U32.mul(hash, 31), Char.to_u32(c))
 
 def expected_char(ok: Bool, next: Phase, error: Error) -> Transition:
   match ok:
@@ -243,18 +240,8 @@ def value_step(key: String, remaining: Nat, reversed: String, c: Char) -> Transi
         case 1n+more:
           Next{ReadValue{key, 1n+more, SCon{c, reversed}}}
 
-def checksum_scan(scan: Decimal.Scan) -> Transition:
-  match scan:
-    case Decimal.Failed{error}:
-      match error:
-        case Decimal.Overflow{}:
-          TransitionRejected{DecimalOverflow{}}
-        case _:
-          TransitionRejected{TrailingData{}}
-    case Decimal.Finished{value}:
-      TransitionRejected{TrailingData{}}
-    case Decimal.Reading{value, started, leading_zero}:
-      Next{ReadChecksum{Decimal.Reading{value, started, leading_zero}}}
+def checksum_step(+reversed: String, +c: Char) -> Transition:
+  Next{ReadChecksum{SCon{c, reversed}}}
 
 def phase_step(phase: Phase, +c: Char) -> Transition:
   match phase:
@@ -281,39 +268,39 @@ def phase_step(phase: Phase, +c: Char) -> Transition:
     case ReadValue{key, remaining, reversed}:
       value_step(key, remaining, reversed, c)
     case NeedHash{}:
-      expected_char(Char.is_eq(c, '#'), ReadChecksum{Decimal.Reading{0n, False{}, False{}}}, TruncatedChecksum{})
-    case ReadChecksum{scan}:
-      checksum_scan(Decimal.scan_step(c, scan, 4294967295n, Decimal.Complete{}))
+      expected_char(Char.is_eq(c, '#'), ReadChecksum{SNil{}}, TruncatedChecksum{})
+    case ReadChecksum{reversed}:
+      checksum_step(reversed, c)
 
-def phase_hashes(phase: Phase) -> Bool:
+def phase_bodies(phase: Phase) -> Bool:
   match phase:
     case NeedHash{}:
       False{}
-    case ReadChecksum{scan}:
+    case ReadChecksum{reversed}:
       False{}
     case _:
       True{}
 
-def select_hash(hashes: Bool, hash: U32, c: Char) -> U32:
-  match hashes:
+def select_body(keeps: Bool, body_rev: String, c: Char) -> String:
+  match keeps:
     case True{}:
-      body_hash(hash, c)
+      SCon{c, body_rev}
     case False{}:
-      hash
+      body_rev
 
 # --- Applying transitions enforces exact count and strict key order ---
 
-def decoder_next(phase: Phase, remaining: Nat, previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>, level: Nat, declared: Nat, hash: U32, consumed: Nat) -> Decoder:
-  Dec{phase, remaining, previous, entries, level, declared, hash, consumed}
+def decoder_next(phase: Phase, remaining: Nat, previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>, level: Nat, declared: Nat, body_rev: String, consumed: Nat) -> Decoder:
+  Dec{phase, remaining, previous, entries, level, declared, body_rev, consumed}
 
-def count_transition(count: Nat, previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>, level: Nat, hash: U32, consumed: Nat) -> Decoder:
+def count_transition(count: Nat, previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>, level: Nat, body_rev: String, consumed: Nat) -> Decoder:
   match count:
     case 0n:
-      decoder_next(NeedHash{}, 0n, previous, entries, level, 0n, hash, consumed)
+      decoder_next(NeedHash{}, 0n, previous, entries, level, 0n, body_rev, consumed)
     case 1n++rest:
-      decoder_next(ReadTag{}, 1n+rest, previous, entries, level, 1n+rest, hash, consumed)
+      decoder_next(ReadTag{}, 1n+rest, previous, entries, level, 1n+rest, body_rev, consumed)
 
-def ordered_entry(entry: MemTable.Entry, remaining: Nat, previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>, level: Nat, declared: Nat, hash: U32, consumed: Nat) -> Decoder:
+def ordered_entry(entry: MemTable.Entry, remaining: Nat, previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>, level: Nat, declared: Nat, body_rev: String, consumed: Nat) -> Decoder:
   match entry:
     case MemTable.Entry{+key, +val}:
       match remaining:
@@ -322,56 +309,56 @@ def ordered_entry(entry: MemTable.Entry, remaining: Nat, previous: Maybe<&2, Str
         case 1n+rest:
           match rest:
             case 0n:
-              decoder_next(NeedHash{}, 0n, Some{key}, Con{MemTable.Entry{key, val}, entries}, level, declared, hash, consumed)
+              decoder_next(NeedHash{}, 0n, Some{key}, Con{MemTable.Entry{key, val}, entries}, level, declared, body_rev, consumed)
             case 1n+more:
-              decoder_next(ReadTag{}, 1n+more, Some{key}, Con{MemTable.Entry{key, val}, entries}, level, declared, hash, consumed)
+              decoder_next(ReadTag{}, 1n+more, Some{key}, Con{MemTable.Entry{key, val}, entries}, level, declared, body_rev, consumed)
 
-def order_decision(cmp: Cmp, entry: MemTable.Entry, remaining: Nat, previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>, level: Nat, declared: Nat, hash: U32, consumed: Nat) -> Decoder:
+def order_decision(cmp: Cmp, entry: MemTable.Entry, remaining: Nat, previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>, level: Nat, declared: Nat, body_rev: String, consumed: Nat) -> Decoder:
   match cmp:
     case LT{}:
-      ordered_entry(entry, remaining, previous, entries, level, declared, hash, consumed)
+      ordered_entry(entry, remaining, previous, entries, level, declared, body_rev, consumed)
     case _:
       DecoderRejected{UnsortedOrDuplicate{}}
 
-def entry_transition(+entry: MemTable.Entry, remaining: Nat, previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>, level: Nat, declared: Nat, hash: U32, consumed: Nat) -> Decoder:
+def entry_transition(+entry: MemTable.Entry, remaining: Nat, previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>, level: Nat, declared: Nat, body_rev: String, consumed: Nat) -> Decoder:
   match entry:
     case MemTable.Entry{+key, +val}:
       match previous:
         case None{}:
-          ordered_entry(MemTable.Entry{key, val}, remaining, None{}, entries, level, declared, hash, consumed)
+          ordered_entry(MemTable.Entry{key, val}, remaining, None{}, entries, level, declared, body_rev, consumed)
         case Some{+old}:
-          order_decision(Keys.cmp(old, key), MemTable.Entry{key, val}, remaining, Some{old}, entries, level, declared, hash, consumed)
+          order_decision(Keys.cmp(old, key), MemTable.Entry{key, val}, remaining, Some{old}, entries, level, declared, body_rev, consumed)
 
-def apply_transition(transition: Transition, remaining: Nat, previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>, level: Nat, declared: Nat, hash: U32, consumed: Nat) -> Decoder:
+def apply_transition(transition: Transition, remaining: Nat, previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>, level: Nat, declared: Nat, body_rev: String, consumed: Nat) -> Decoder:
   match transition:
     case TransitionRejected{error}:
       DecoderRejected{error}
     case Next{phase}:
-      decoder_next(phase, remaining, previous, entries, level, declared, hash, consumed)
+      decoder_next(phase, remaining, previous, entries, level, declared, body_rev, consumed)
     case LevelRead{new_level}:
-      decoder_next(ReadCount{Decimal.Reading{0n, False{}, False{}}}, remaining, previous, entries, new_level, declared, hash, consumed)
+      decoder_next(ReadCount{Decimal.Reading{0n, False{}, False{}}}, remaining, previous, entries, new_level, declared, body_rev, consumed)
     case CountRead{count}:
-      count_transition(count, previous, entries, level, hash, consumed)
+      count_transition(count, previous, entries, level, body_rev, consumed)
     case EntryRead{entry}:
-      entry_transition(entry, remaining, previous, entries, level, declared, hash, consumed)
+      entry_transition(entry, remaining, previous, entries, level, declared, body_rev, consumed)
 
-def decoder_step_live(+phase: Phase, remaining: Nat, previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>, level: Nat, declared: Nat, hash: U32, consumed: Nat, +c: Char) -> Decoder:
-  +next_hash = select_hash(phase_hashes(phase), hash, c)
-  apply_transition(phase_step(phase, c), remaining, previous, entries, level, declared, next_hash, Nat.add(consumed, 1n))
+def decoder_step_live(+phase: Phase, remaining: Nat, previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>, level: Nat, declared: Nat, body_rev: String, consumed: Nat, +c: Char) -> Decoder:
+  +next_body = select_body(phase_bodies(phase), body_rev, c)
+  apply_transition(phase_step(phase, c), remaining, previous, entries, level, declared, next_body, Nat.add(consumed, 1n))
 
-def decoder_step_bounded(within: Bool, phase: Phase, remaining: Nat, previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>, level: Nat, declared: Nat, hash: U32, consumed: Nat, c: Char) -> Decoder:
+def decoder_step_bounded(within: Bool, phase: Phase, remaining: Nat, previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>, level: Nat, declared: Nat, body_rev: String, consumed: Nat, c: Char) -> Decoder:
   match within:
     case False{}:
       DecoderRejected{FileTooLarge{}}
     case True{}:
-      decoder_step_live(phase, remaining, previous, entries, level, declared, hash, consumed, c)
+      decoder_step_live(phase, remaining, previous, entries, level, declared, body_rev, consumed, c)
 
 def decoder_step(decoder: Decoder, c: Char) -> Decoder:
   match decoder:
     case DecoderRejected{error}:
       DecoderRejected{error}
-    case Dec{phase, remaining_entries, previous_key, reversed_entries, level, declared_count, hash, +consumed}:
-      decoder_step_bounded(Nat.is_lt(consumed, max_file_chars()), phase, remaining_entries, previous_key, reversed_entries, level, declared_count, hash, consumed, c)
+    case Dec{phase, remaining_entries, previous_key, reversed_entries, level, declared_count, body_rev, +consumed}:
+      decoder_step_bounded(Nat.is_lt(consumed, max_file_chars()), phase, remaining_entries, previous_key, reversed_entries, level, declared_count, body_rev, consumed, c)
 
 # --- EOF validation and table construction ---
 
@@ -382,21 +369,17 @@ def checksum_decision(equal: Bool, entries: List<&2, MemTable.Entry>, level: Nat
     case True{}:
       Parsed{Sstable.from_sorted_unique(List.reverse(&2, MemTable.Entry, entries), level)}
 
-def checksum_value(parsed: Decimal.Parse, entries: List<&2, MemTable.Entry>, level: Nat, hash: U32) -> ParseResult:
-  match parsed:
-    case Decimal.Rejected{error}:
-      ParseRejected{TruncatedChecksum{}}
-    case Decimal.Accepted{Decimal.Dec{value, rest}}:
-      checksum_decision(Nat.is_eq(value, Sstable.u32_to_nat_exact(hash)), entries, level)
+def checksum_value(+claimed_rev: String, entries: List<&2, MemTable.Entry>, level: Nat, +body_rev: String) -> ParseResult:
+  checksum_decision(SstChecksum.verify(String.reverse(body_rev), String.reverse(claimed_rev)), entries, level)
 
 def finish_decoder(decoder: Decoder) -> ParseResult:
   match decoder:
     case DecoderRejected{error}:
       ParseRejected{error}
-    case Dec{phase, remaining_entries, previous_key, reversed_entries, level, declared_count, hash, consumed}:
+    case Dec{phase, remaining_entries, previous_key, reversed_entries, level, declared_count, body_rev, consumed}:
       match phase:
-        case ReadChecksum{scan}:
-          checksum_value(Decimal.scan_end(scan, "", Decimal.Complete{}), reversed_entries, level, hash)
+        case ReadChecksum{reversed}:
+          checksum_value(reversed, reversed_entries, level, body_rev)
         case NeedS{}:
           ParseRejected{TruncatedHeader{}}
         case Need2{}:
@@ -420,7 +403,7 @@ def decode_go(rest: String, decoder: Decoder) -> ParseResult:
       decode_go(t, decoder_step(decoder, c))
 
 def parse_result(s: String) -> ParseResult:
-  decode_go(s, Dec{NeedS{}, 0n, None{}, Nil{}, 0n, 0n, 7, 0n})
+  decode_go(s, Dec{NeedS{}, 0n, None{}, Nil{}, 0n, 0n, "", 0n})
 
 def parse_wrap(result: ParseResult) -> Maybe<&2, Sstable.Table>:
   match result:
@@ -433,9 +416,6 @@ def parse(s: String) -> Maybe<&2, Sstable.Table>:
   parse_wrap(parse_result(s))
 
 # Useful pure projections for laws and streaming-state agreement.
-def checksum_body(s: String) -> U32:
-  Manifest.mhash(s, 7)
-
 def parser_decides(result: ParseResult) -> Bool:
   True{}
 

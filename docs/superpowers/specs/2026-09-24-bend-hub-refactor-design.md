@@ -23,14 +23,28 @@ enfoque 2 aprobado.
 | Capa MyLSM hoy | Módulo hub (`bend-collections`) | Cambio |
 |---|---|---|
 | `Keys` (cmp/eq + refl chain) | se queda como comparador; `balanced_search_tree` lo consume | sin cambio de API; expone `cmp` como `static comparator` del heap/tree |
-| `MemTable` (prepend-log + `scan_go`) | `src/containers/hash_table.bend` (String keys, API estilo `Base.Map`) | `put/del` → upsert con `Maybe` (tombstone = `None`); `get` → `HashMap.get` con `-V: Data`; se eliminan `scan_step/scan_go/frozen_lemma` (~60 líneas) |
-| `SortedRun` (build cuadrático) | `src/containers/balanced_search_tree.bend` (indexed red-black) + `src/containers/dynamic_array.bend` (packed) | `sort_newest`/`build` → inserción en tree + drain a array packed |
-| `MergeIter` / `Compact` merge | `src/containers/binary_heap.bend` (min-heap, static comparator) + `src/containers/priority_queue.bend` | merge N-way por heap en vez de scans lineales; `Compact` paralelizable por rangos disjuntos |
-| `BitTree` Bloom | `src/containers/bitset.bend` + `src/containers/bitlist.bend` | Bloom sobre packed words; estimación/schedule quedan como política nuestra |
-| `Sstable` lookup lineal | `src/containers/dynamic_array.bend` + sparse block index propio | bloques + binary search (Phase 3); futuro `src/containers/lru.bend` como block-cache |
-| `SstFileV2` / `V1Fast` checksums + codec | `src/crypto/sha/sha256.bend` (FIPS 180-4) / `src/crypto/keccak/keccak.bend` / `src/crypto/blake/blake3/blake3.bend` | se retira codec hand-rolled; se adopta API packed probada vs spec ejecutable |
-| `Decimal` / words / potencias | `src/math/` (u64 words, hashing) | se elimina `Decimal.bend` hand-rolled |
-| `Wal` / `Manifest` batching | `src/containers/queue.bend` (two-list) / `src/containers/deque.bend` | grouped commits + batching real (Phase 3) |
+| `MemTable` (prepend-log + `scan_go`) | — | SE QUEDA: el hub `HashMap` es lineal y `MT`/`Db` son `Data` (ver §2c). Puts ya O(1), scan acotado a 4096, nunca fue el cuello |
+| `SortedRun` (build cuadrático) | `src/containers/balanced_search_tree.bend` (indexed red-black), uso efímero | `sort_newest` construye/drena el tree dentro de la función sin almacenarlo (ver §2c); requiere drain consumible en la API hub |
+| `MergeIter` / `Compact` merge | `src/containers/binary_heap.bend` (min-heap, static comparator) + `src/containers/priority_queue.bend`, uso efímero | merge N-way por heap sin almacenar estado; misma condición de drain |
+| `BitTree` Bloom | `src/containers/bitset.bend` solo fns puras (`word_get`/`word_put`/`word_op`) | SE QUEDA el storage `Data`; el `Bitset` lineal no cabe en `BitTree is Data` (ver §2c) |
+| `Sstable` lookup lineal | índice de bloques disperso como `Data` sobre storage `List` actual | bloques + binary search (Phase 3); `DynArray` solo efímero en `build` si se consume entero; `lru` block-cache diferido (exigiría cache threaded) |
+| `SstFileV2` checksums + codec (V1 eliminado, §2b) | `src/crypto/sha/sha256.bend` (FIPS 180-4) | v2 adopta `hex(sha256(ascii(body)))` vía `src/SstChecksum.bend` |
+| `Decimal` / words / potencias | `src/math/` (u64 words, hashing), solo fns puras | se delega lo que encaje sin tocar los tipos `Data` |
+| `Wal` / `Manifest` batching | `src/containers/queue.bend` (two-list) / `src/containers/deque.bend`, solo si hay forma efímera limpia | `Batch is Data` no admite queue almacenada; si no encaja, `Wal` no se toca |
+
+## 2c. Regla de afinidad (probada contra el checker, 2026-09-24)
+
+Los containers del hub son `Type` (lineales): las lecturas devuelven el
+estado (`HashMap.get → map & V`, `Bitset.get/set → Bitset & …`) y descartarlo
+falla (`expected Data, observed Quant`); ningún `type … is Data` puede
+contenerlos (`expected Data, observed Type` — incluye campos `Array`). Como
+`MemTable`/`Db`/`Sstable`/`Wal`/`BitTree` son `Data` y el threading `+db` de
+`Sess` depende de ello, los containers del hub solo se usan **efímeros dentro
+de funciones** (construidos, threaded, consumidos del todo; nunca almacenados
+en `Data`, nunca descartados). Las funciones puras (`SHA.*`, `math.*`,
+`word_get`/`word_put`) no tienen restricción. Los swaps totales que exigirían
+almacenar estado hub en `Data` quedan **rechazados** con el rationale
+registrado en el plan.
 
 No-objetivos: orquestación `Db` / `Recover` / `Flush`, host effects
 (`Fs` / `Console` / `CrashPoint` / `src/effs/*.c|*.js`), formato exacto de

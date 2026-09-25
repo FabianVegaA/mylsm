@@ -1,4 +1,6 @@
 import Base
+import 0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/containers/bitset.bend as BitWords
+import 0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/math/pow2.bend as Pow2
 
 # Pure indexed bit tree.
 #
@@ -171,9 +173,6 @@ def replace_word_if(inside: Bool, t: BitTree, index: Nat, value: U32) -> BitTree
 def replace_word(+t: BitTree, +index: Nat, value: U32) -> BitTree:
   replace_word_if(Nat.is_lt(index, word_count(t)), t, index, value)
 
-def bit_mask(bit: Nat) -> U32:
-  U32.shln(1, Nat.mod(bit, 32n))
-
 def set_if(inside: Bool, +t: BitTree, +bit: Nat) -> BitTree:
   match inside:
     case False{}:
@@ -181,7 +180,7 @@ def set_if(inside: Bool, +t: BitTree, +bit: Nat) -> BitTree:
     case True{}:
       +index = Nat.div(bit, 32n)
       +old = word_at(t, index)
-      replace_word(t, index, U32.or(old, bit_mask(bit)))
+      replace_word(t, index, BitWords.word_put(True{}, old, Nat.mod(bit, 32n)))
 
 # Set one logical bit. Out-of-range indexes leave the tree unchanged.
 def set(+t: BitTree, +bit: Nat) -> BitTree:
@@ -192,7 +191,7 @@ def test_if(inside: Bool, +t: BitTree, +bit: Nat) -> Bool:
     case False{}:
       False{}
     case True{}:
-      U32.is_ne(U32.and(word_at(t, Nat.div(bit, 32n)), bit_mask(bit)), 0)
+      BitWords.word_get(word_at(t, Nat.div(bit, 32n)), Nat.mod(bit, 32n))
 
 # Test one logical bit. Out-of-range indexes, including every index in the
 # zero-word tree, return False{}.
@@ -226,7 +225,7 @@ def nonempty_metadata_ok(root: WordTree, +words: Nat, +capacity: Nat, +height: N
     Bool.and(
       Nat.is_le(words, capacity),
       Bool.and(
-        Nat.is_eq(capacity, Nat.pow(2n, height)),
+        Nat.is_eq(capacity, Pow2.pow2t(height)),
         shape_ok(height, root))))
 
 # Checks zero canonicality, logical bounds, power-of-two capacity, height, and

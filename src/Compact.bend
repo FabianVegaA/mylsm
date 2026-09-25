@@ -465,7 +465,7 @@ def compact_pre(+dir: String, +mem: MemTable.MemTable, +levels: List<&2, List<&2
   +remt = tail_of(newl1)
   +l1dir = dir ++ "/l1"
   +outname = "l1-" ++ Nat.show(flushed) ++ ".tbl"
-  compact_goA(dir, l1dir, l1dir ++ "/" ++ outname ++ ".tmp", l1dir ++ "/" ++ outname, dir ++ "/MANIFEST", dir ++ "/MANIFEST.tmp", SstFile.serialize_v2(Db.table_entries(out), 1n), outname, mem, levels2, l1list(levels), remt, flushed, manifest_token)
+  compact_goA(dir, l1dir, l1dir ++ "/" ++ outname ++ ".tmp", l1dir ++ "/" ++ outname, dir ++ "/MANIFEST", dir ++ "/MANIFEST.tmp", SstFile.serialize(Db.table_entries(out), 1n), outname, mem, levels2, l1list(levels), remt, flushed, manifest_token)
 
 def compact_trig(gt: Bool, +dir: String, +mem: MemTable.MemTable, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match gt:
