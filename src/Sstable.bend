@@ -18,8 +18,56 @@ type Table is Data:
     nbits: Nat,
     smallest: Maybe<&2, String>,
     largest: Maybe<&2, String>,
-    count: Nat
+    count: Nat,
+    chunks: List<&2, List<&2, MemTable.Entry>>,
+    blocks: List<&2, String>
   }
+
+def block_entries() -> Nat:
+  64n
+
+def chunk_go(fuel: Nat, +entries: List<&2, MemTable.Entry>, +cur: List<&2, MemTable.Entry>, room: Nat, acc: List<&2, List<&2, MemTable.Entry>>) -> List<&2, List<&2, MemTable.Entry>>:
+  match fuel:
+    case 0n:
+      List.reverse(&2, List<&2, MemTable.Entry>, Con{List.reverse(&2, MemTable.Entry, cur), acc})
+    case 1n+f:
+      match entries:
+        case Nil{}:
+          List.reverse(&2, List<&2, MemTable.Entry>, Con{List.reverse(&2, MemTable.Entry, cur), acc})
+        case Con{e, t}:
+          match room:
+            case 0n:
+              chunk_go(f, t, Con{e, Nil{}}, Nat.sub(block_entries(), 1n), Con{List.reverse(&2, MemTable.Entry, cur), acc})
+            case 1n+r:
+              chunk_go(f, t, Con{e, cur}, r, acc)
+
+def chunk(+entries: List<&2, MemTable.Entry>) -> List<&2, List<&2, MemTable.Entry>>:
+  match entries:
+    case Nil{}:
+      Nil{}
+    case Con{e, t}:
+      chunk_go(List.length(&2, MemTable.Entry, entries), t, Con{e, Nil{}}, Nat.sub(block_entries(), 1n), Nil{})
+
+def chunk_head_key(+c: List<&2, MemTable.Entry>) -> Maybe<&2, String>:
+  match c:
+    case Nil{}:
+      None{}
+    case Con{MemTable.Entry{key, val}, t}:
+      Some{key}
+
+def block_cons_acc(head: Maybe<&2, String>, acc: List<&2, String>) -> List<&2, String>:
+  match head:
+    case None{}:
+      acc
+    case Some{k}:
+      Con{k, acc}
+
+def block_keys(+chunks: List<&2, List<&2, MemTable.Entry>>, acc: List<&2, String>) -> List<&2, String>:
+  match chunks:
+    case Nil{}:
+      List.reverse(&2, String, acc)
+    case Con{c, t}:
+      block_keys(t, block_cons_acc(chunk_head_key(c), acc))
 
 type Metadata is Data:
   Meta{smallest: Maybe<&2, String>, largest: Maybe<&2, String>, count: Nat}
@@ -127,12 +175,12 @@ def bloom_test(b: Bloom, +k: String) -> Bool:
 
 def table_bits(t: Table) -> Nat:
   match t:
-    case Tbl{entries, filter, nbits, smallest, largest, count}:
+    case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
       nbits
 
 def maybe_present(t: Table, +k: String) -> Bool:
   match t:
-    case Tbl{entries, filter, nbits, smallest, largest, count}:
+    case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
       bloom_test(filter, k)
 
 # --- Canonicalization and construction ---
@@ -163,13 +211,13 @@ def from_sorted_unique_est_meta(+entries: List<&2, MemTable.Entry>, level: Nat, 
   match meta:
     case Meta{smallest, largest, count}:
       +nb = bloom_bits(level, est_keys)
-      Tbl{entries, bloom_of(entries, bloom_new(nb)), nb, smallest, largest, count}
+      Tbl{entries, bloom_of(entries, bloom_new(nb)), nb, smallest, largest, count, chunk(entries), block_keys(chunk(entries), Nil{})}
 
 def from_sorted_unique_meta(+entries: List<&2, MemTable.Entry>, level: Nat, meta: Metadata) -> Table:
   match meta:
     case Meta{smallest, largest, +count}:
       +nb = bloom_bits(level, count)
-      Tbl{entries, bloom_of(entries, bloom_new(nb)), nb, smallest, largest, count}
+      Tbl{entries, bloom_of(entries, bloom_new(nb)), nb, smallest, largest, count, chunk(entries), block_keys(chunk(entries), Nil{})}
 
 def from_sorted_unique(+entries: List<&2, MemTable.Entry>, level: Nat) -> Table:
   from_sorted_unique_meta(entries, level, metadata(entries))
@@ -184,17 +232,17 @@ def build(+entries: List<&2, MemTable.Entry>, level: Nat, est_keys: Nat) -> Tabl
 # Metadata accessors keep clients independent of the Tbl field layout.
 def table_smallest(t: Table) -> Maybe<&2, String>:
   match t:
-    case Tbl{entries, filter, nbits, smallest, largest, count}:
+    case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
       smallest
 
 def table_largest(t: Table) -> Maybe<&2, String>:
   match t:
-    case Tbl{entries, filter, nbits, smallest, largest, count}:
+    case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
       largest
 
 def table_count(t: Table) -> Nat:
   match t:
-    case Tbl{entries, filter, nbits, smallest, largest, count}:
+    case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
       count
 
 # Open bridge: metadata is matched explicitly so the Bloom schedule projects
@@ -229,5 +277,5 @@ def bloom_size_stable(entries: List<&2, MemTable.Entry>, bits: BitTree.BitTree, 
 
 def lookup(t: Table, +k: String) -> Maybe<&2, String>:
   match t:
-    case Tbl{entries, filter, nbits, smallest, largest, count}:
+    case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
       MemTable.get(MemTable.MT{entries}, k)

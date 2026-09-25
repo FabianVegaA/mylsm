@@ -60,12 +60,12 @@ def print_entries(es: List<&2, MemTable.Entry>) -> IO(Unit):
 
 def mem_count(db: Db.Db) -> Nat:
   match db:
-    case Db.Db{dir, mem, levels, flushed, manifest_token}:
+    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
       MemTable.count(mem)
 
 def level_count(db: Db.Db) -> Nat:
   match db:
-    case Db.Db{dir, mem, levels, flushed, manifest_token}:
+    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
       List.length(&2, List<&2, Sstable.Table>, levels)
 
 def compute_gpu_ok(enabled: Bool, fuel: Nat) -> IO(Nat):

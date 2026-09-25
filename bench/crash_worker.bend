@@ -124,7 +124,7 @@ def rest_levels(levels: List<&2, List<&2, Sstable.Table>>) -> List<&2, List<&2, 
 
 def level_count(db: Db.Db, level: Nat) -> Nat:
   match db:
-    case Db.Db{dir, mem, levels, flushed, manifest_token}:
+    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
       match level:
         case 0n:
           List.length(&2, Sstable.Table, first_level(levels))

@@ -446,7 +446,7 @@ def open_levels_checked(ok: Bool, +dir: String, +m: Manifest.Manifest, levels: L
     case True{}:
       do IO<Result<&1, &1, U32 & String, Db.Db>>:
         mem : MemTable.MemTable <- IO.try(MemTable.MemTable, wal_part(dir))
-        return Done{Db.Db{dir, mem, levels, count_gen(mfst_lists(m)), Manifest.serialize(m)}}
+        return Done{Db.Db{dir, mem, MemTable.empty(), Db.default_batch_cap(), Nil{}, levels, count_gen(mfst_lists(m)), Manifest.serialize(m)}}
 
 def open_levels(+dir: String, +m: Manifest.Manifest) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
@@ -504,12 +504,12 @@ def flush_dec(full: Bool, +db: Db.Db) -> IO(Result<&1, &1, U32 & String, Db.Db>)
 
 def flush_gate(db: Db.Db) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match db:
-    case Db.Db{dir, +mem, levels, flushed, manifest_token}:
-      flush_dec(needs_flush_cap(mem, 4096n), Db.Db{dir, mem, levels, flushed, manifest_token})
+    case Db.Db{dir, +mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
+      flush_dec(needs_flush_cap(mem, 4096n), Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token})
 
 def l0_full(db: Db.Db) -> Bool:
   match db:
-    case Db.Db{dir, mem, levels, flushed, manifest_token}:
+    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
       Nat.is_lt(7n, List.length(&2, Sstable.Table, Compact.l0list(levels)))
 
 def drain_once(+db: Db.Db) -> IO(Result<&1, &1, U32 & String, Db.Db>):

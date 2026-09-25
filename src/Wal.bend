@@ -58,6 +58,9 @@ def encode(b: Batch) -> String:
     case Batch{muts}:
       enc_muts(muts)
 
+def stage(+staged: List<&2, Batch>, +b: Batch) -> List<&2, Batch>:
+  Con{b, staged}
+
 # --- Decode pump (fuel + state; Nat counters; unified dash phase) ---
 
 type Phase is Data:

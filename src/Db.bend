@@ -25,16 +25,25 @@ import ./CrashPoint.bend as CrashPoint
 # table; within a level, tables are stored newest-first. Flush (Task 8)
 # Cons'es new tables at the head; compaction (Task 9) preserves the order.
 
+type BEntry is Data:
+  BEntry{tab: String, key: String, val: Maybe<&2, String>}
+
+def default_batch_cap() -> Nat:
+  1n
+
+def bcache_bound() -> Nat:
+  256n
+
 # manifest_token is the exact serialized Manifest observed by this handle. Flush
 # and compaction compare it before publication to reject stale-handle drift.
 type Db is Data:
-  Db{dir: String, mem: MemTable.MemTable, levels: List<&2, List<&2, Sstable.Table>>, flushed: Nat, manifest_token: String}
+  Db{dir: String, mem: MemTable.MemTable, frozen: MemTable.MemTable, batch_cap: Nat, bcache: List<&2, BEntry>, levels: List<&2, List<&2, Sstable.Table>>, flushed: Nat, manifest_token: String}
 
 def wal_path(+dir: String) -> String:
   dir ++ "/wal.log"
 
 def open_db(+dir: String) -> Db:
-  Db{dir, MemTable.empty(), Nil{}, 0n, Manifest.serialize(Manifest.M{Nil{}})}
+  Db{dir, MemTable.empty(), MemTable.empty(), default_batch_cap(), Nil{}, Nil{}, 0n, Manifest.serialize(Manifest.M{Nil{}})}
 
 # --- Pure write core (laws below pin batch == sequential) ---
 
@@ -56,7 +65,7 @@ def apply_batch(+muts: List<&2, Wal.Mut>, +mem: MemTable.MemTable) -> MemTable.M
 
 def table_entries(+t: Sstable.Table) -> List<&2, MemTable.Entry>:
   match t:
-    case Sstable.Tbl{entries, filter, nbits, smallest, largest, count}:
+    case Sstable.Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
       entries
 
 def level_entries(+tabs: List<&2, Sstable.Table>) -> List<&2, MemTable.Entry>:
@@ -75,7 +84,7 @@ def all_level_entries(+lvls: List<&2, List<&2, Sstable.Table>>) -> List<&2, MemT
 
 def all_entries(+db: Db) -> List<&2, MemTable.Entry>:
   match db:
-    case Db{dir, mem, levels, flushed, manifest_token}:
+    case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
       match mem:
         case MemTable.MT{entries}:
           List.append(&2, MemTable.Entry, entries, all_level_entries(levels))
@@ -111,12 +120,12 @@ def wal_append(+dir: String, +data: String) -> IO(Result<&1, &1, U32 & String, U
 
 def db_write(+db: Db, +b: Wal.Batch) -> IO(Result<&1, &1, U32 & String, Db>):
   match db:
-    case Db{dir, mem, levels, flushed, manifest_token}:
+    case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
       match b:
         case Wal.Batch{muts}:
           do IO<Result<&1, &1, U32 & String, Db>>:
             res : Unit <- IO.try(Unit, wal_append(dir, Wal.encode(Wal.Batch{muts})))
-            return Done{Db{dir, apply_batch(muts, mem), levels, flushed, manifest_token}}
+            return Done{Db{dir, apply_batch(muts, mem), frozen, batch_cap, bcache, levels, flushed, manifest_token}}
 
 def db_put(+db: Db, +k: String, +v: String) -> IO(Result<&1, &1, U32 & String, Db>):
   db_write(db, Wal.Batch{Con{Wal.Put{k, v}, Nil{}}})
