@@ -1,6 +1,6 @@
 {
   "name": "mylsm",
   "description": "Pure in-memory LSM core: Sess session monad plus MemTable, SSTable, WAL and Manifest part control.",
-  "import": "import mylsm-lsm-store@0.2.0.0/mylsm.bend as MyLSM",
+  "import": "import mylsm-lsm-store@0.3.0.0/mylsm.bend as MyLSM",
   "category": "packages"
 }
