@@ -41,3 +41,18 @@ law sstable_block_hit_equiv:
 # LAW: block_get_hit misses cleanly (closed)
 law sstable_block_hit_missing:
   {Sstable.block_get_hit(Sstable.build(sst_e2(), 0n, 2n), "zzz") == None{} : Maybe<&2, Maybe<&2, String>>}
+
+def blm_a() -> Sstable.Bloom:
+  Sstable.bloom_of(Con{MemTable.Entry{"a", Some{"1"}}, Nil{}}, Sstable.bloom_new(64n))
+
+# LAW: union keeps member bits (closed)
+law sstable_bloom_union_hit:
+  {Sstable.bloom_test(Sstable.bloom_union(blm_a(), Sstable.bloom_new(64n)), "a") == True{} : Bool}
+
+# LAW: union adds no ghost bits for this vector (closed)
+law sstable_bloom_union_miss:
+  {Sstable.bloom_test(Sstable.bloom_union(blm_a(), Sstable.bloom_new(64n)), "zzz") == False{} : Bool}
+
+# LAW: two-half parallel build equals the sequential build (closed)
+law sstable_bloom_par_agrees:
+  {Sstable.bloom_of_par(sst_e2(), 64n) == Sstable.bloom_of(sst_e2(), Sstable.bloom_new(64n)) : Sstable.Bloom}

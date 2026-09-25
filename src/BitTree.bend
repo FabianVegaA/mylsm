@@ -198,8 +198,31 @@ def test_if(inside: Bool, +tree: BitTree, +bit: Nat) -> Bool:
 def test(+tree: BitTree, +bit: Nat) -> Bool:
   test_if(valid_bit(tree, bit), tree, bit)
 
+# Word-wise union for chunked Bloom builds. Both sides always share the exact
+# shape (same height from the same bit count); mismatched arms are unreachable
+# by construction and keep the Fork side.
+def union_bits(ta: WordTree, tb: WordTree) -> WordTree:
+  match ta tb:
+    case Empty{} Empty{}:
+      Empty{}
+    case Empty{} Leaf{wb}:
+      Leaf{wb}
+    case Empty{} Fork{lb, rb}:
+      Fork{lb, rb}
+    case Leaf{wa} Empty{}:
+      Leaf{wa}
+    case Leaf{wa} Leaf{wb}:
+      Leaf{U32.or(wa, wb)}
+    case Leaf{wa} Fork{lb, rb}:
+      Fork{lb, rb}
+    case Fork{la, ra} Empty{}:
+      Fork{la, ra}
+    case Fork{la, ra} Leaf{wb}:
+      Fork{la, ra}
+    case Fork{la, ra} Fork{lb, rb}:
+      Fork{union_bits(la, lb), union_bits(ra, rb)}
+
 # Structural checker for the exact perfect-tree shape described by metadata.
-# The two equal-sized subtrees are checked in parallel.
 def shape_ok(+height: Nat, tree: WordTree) -> Bool:
   match height tree:
     case 0n Empty{}:

@@ -193,6 +193,40 @@ def bloom_of(entries: List<&2, MemTable.Entry>, +blm: Bloom) -> Bloom:
         case MemTable.Entry{key, val}:
           bloom_of(t, bloom_add(blm, key))
 
+def bloom_union_trees(+abits: BitTree.BitTree, +bbits: BitTree.BitTree, size: Nat) -> Bloom:
+  match abits:
+    case BitTree.BT{aroot, awords, acap, aheight}:
+      match bbits:
+        case BitTree.BT{broot, bwords, bcap, bheight}:
+          Blm{BitTree.BT{BitTree.union_bits(aroot, broot), awords, acap, aheight}, size}
+
+def bloom_union(ba: Bloom, bb: Bloom) -> Bloom:
+  match ba:
+    case Blm{abits, asize}:
+      match bb:
+        case Blm{bbits, bsize}:
+          bloom_union_trees(abits, bbits, Nat.max(asize, bsize))
+
+def bloom_of_chunk(+chunk: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
+  bloom_of(chunk, bloom_new(nb))
+
+# Two-half parallel build (spike 1): one spawn, one union. Sequential below.
+def bloom_of_par(+entries: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
+  +half = Nat.div(List.length(&2, MemTable.Entry, entries), 2n)
+  left right = bloom_of_chunk(List.take(&2, MemTable.Entry, entries, half), nb) bloom_of_chunk(List.drop(&2, MemTable.Entry, entries, half), nb)
+  bloom_union(left, right)
+
+# Size-gated entry point: parallel pays only above 2048 entries.
+def bloom_pick(small: Bool, +entries: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
+  match small:
+    case True{}:
+      bloom_of(entries, bloom_new(nb))
+    case False{}:
+      bloom_of_par(entries, nb)
+
+def bloom_of_auto(+entries: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
+  bloom_pick(Nat.is_lt(List.length(&2, MemTable.Entry, entries), 2048n), entries, nb)
+
 def metadata_tail(entries: List<&2, MemTable.Entry>, +first: String, last: String, +count: Nat) -> Metadata:
   match entries:
     case Nil{}:
@@ -211,13 +245,13 @@ def from_sorted_unique_est_meta(+entries: List<&2, MemTable.Entry>, level: Nat, 
   match meta:
     case Meta{smallest, largest, count}:
       +nb = bloom_bits(level, est_keys)
-      Tbl{entries, bloom_of(entries, bloom_new(nb)), nb, smallest, largest, count, chunk(entries), block_keys(chunk(entries), Nil{})}
+      Tbl{entries, bloom_of_auto(entries, nb), nb, smallest, largest, count, chunk(entries), block_keys(chunk(entries), Nil{})}
 
 def from_sorted_unique_meta(+entries: List<&2, MemTable.Entry>, level: Nat, meta: Metadata) -> Table:
   match meta:
     case Meta{smallest, largest, +count}:
       +nb = bloom_bits(level, count)
-      Tbl{entries, bloom_of(entries, bloom_new(nb)), nb, smallest, largest, count, chunk(entries), block_keys(chunk(entries), Nil{})}
+      Tbl{entries, bloom_of_auto(entries, nb), nb, smallest, largest, count, chunk(entries), block_keys(chunk(entries), Nil{})}
 
 def from_sorted_unique(+entries: List<&2, MemTable.Entry>, level: Nat) -> Table:
   from_sorted_unique_meta(entries, level, metadata(entries))
