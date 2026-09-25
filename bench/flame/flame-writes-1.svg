@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="288" font-family="monospace" font-size="12">
+<text x="600" y="24" text-anchor="middle" font-size="16">MyLSM 1M writes, early phase — 12755 samples</text>
+<rect x="0.0" y="126" width="0.5" height="20" fill="hsl(124,45%,60%)" stroke="white"><title>start;main;io_loop;DYLD-STUB$$read — 3 (0.0%)</title></rect>
+<rect x="0.3" y="126" width="0.5" height="20" fill="hsl(37,65%,55%)" stroke="white"><title>start;main;io_loop;WL_FID_STRING_APPEND_K1793 — 4 (0.0%)</title></rect>
+<rect x="0.7" y="126" width="0.5" height="20" fill="hsl(19,65%,55%)" stroke="white"><title>start;main;io_loop;WL_FID____SRC_WAL_DASHES_K1239 — 2 (0.0%)</title></rect>
+<rect x="0.8" y="126" width="306.8" height="20" fill="hsl(210,60%,65%)" stroke="white"><title>start;main;io_loop;__select — 3261 (25.6%)</title></rect>
+<text x="3.8" y="141">__select</text>
+<rect x="307.6" y="126" width="0.5" height="20" fill="hsl(9,45%,60%)" stroke="white"><title>start;main;io_loop;_malloc_zone_calloc — 1 (0.0%)</title></rect>
+<rect x="307.7" y="126" width="0.5" height="20" fill="hsl(311,45%,60%)" stroke="white"><title>start;main;io_loop;_xzm_free — 2 (0.0%)</title></rect>
+<rect x="307.9" y="126" width="0.5" height="20" fill="hsl(18,45%,60%)" stroke="white"><title>start;main;io_loop;_xzm_malloc_zone_malloc_type_calloc_entry — 2 (0.0%)</title></rect>
+<rect x="308.1" y="126" width="0.5" height="20" fill="hsl(245,45%,60%)" stroke="white"><title>start;main;io_loop;clock_gettime — 2 (0.0%)</title></rect>
+<rect x="0.0" y="148" width="0.5" height="20" fill="hsl(268,45%,60%)" stroke="white"><title>start;main;io_loop;clock_gettime;_mach_boottime_usec — 1 (0.0%)</title></rect>
+<rect x="0.0" y="170" width="0.5" height="20" fill="hsl(35,45%,60%)" stroke="white"><title>start;main;io_loop;clock_gettime;_mach_boottime_usec;__commpage_gettimeofday_internal — 1 (0.0%)</title></rect>
+<rect x="0.0" y="214" width="0.8" height="20" fill="hsl(315,45%,60%)" stroke="white"><title>start;main;io_loop;clock_gettime;_mach_boottime_usec;gettimeofday;__commpage_gettimeofday_internal;mach_absolute_time — 8 (0.1%)</title></rect>
+<rect x="0.0" y="170" width="0.5" height="20" fill="hsl(30,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;???;WL_FID_EXIT — 5 (0.0%)</title></rect>
+<rect x="0.0" y="148" width="2.2" height="20" fill="hsl(28,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_CLO_APPLY — 23 (0.2%)</title></rect>
+<rect x="2.2" y="148" width="0.6" height="20" fill="hsl(24,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_ENTER — 6 (0.0%)</title></rect>
+<rect x="2.7" y="148" width="0.7" height="20" fill="hsl(30,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_EXIT — 7 (0.1%)</title></rect>
+<rect x="3.4" y="148" width="0.5" height="20" fill="hsl(32,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_FILE_OPEN — 1 (0.0%)</title></rect>
+<rect x="3.5" y="148" width="0.5" height="20" fill="hsl(21,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_IO_BIND — 5 (0.0%)</title></rect>
+<rect x="4.0" y="148" width="0.5" height="20" fill="hsl(17,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_IO_BIND_C1846 — 1 (0.0%)</title></rect>
+<rect x="4.0" y="148" width="0.5" height="20" fill="hsl(26,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_IO_TRY_C1049 — 2 (0.0%)</title></rect>
+<rect x="4.2" y="148" width="0.5" height="20" fill="hsl(22,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_IO_TRY_C370 — 2 (0.0%)</title></rect>
+<rect x="4.4" y="148" width="34.1" height="20" fill="hsl(11,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_LIST_LENGTH — 362 (2.8%)</title></rect>
+<text x="7.4" y="163">WL…</text>
+<rect x="0.0" y="170" width="115.7" height="20" fill="hsl(63,60%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_LIST_LENGTH;span_fade — 1230 (9.6%)</title></rect>
+<text x="3.0" y="185">span_fade</text>
+<rect x="0.0" y="192" width="58.2" height="20" fill="hsl(48,60%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_LIST_LENGTH;span_fade;term_drop — 619 (4.9%)</title></rect>
+<text x="3.0" y="207">term_d…</text>
+<rect x="115.7" y="170" width="129.9" height="20" fill="hsl(48,60%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_LIST_LENGTH;term_drop — 1381 (10.8%)</title></rect>
+<text x="118.7" y="185">term_drop</text>
+<rect x="38.5" y="148" width="7.1" height="20" fill="hsl(19,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_LIST_LENGTH_K1597 — 75 (0.6%)</title></rect>
+<rect x="45.5" y="148" width="0.5" height="20" fill="hsl(35,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_NAT_SHOW — 1 (0.0%)</title></rect>
+<rect x="45.6" y="148" width="0.5" height="20" fill="hsl(15,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_NAT_SHOW_FIN — 1 (0.0%)</title></rect>
+<rect x="45.7" y="148" width="3.3" height="20" fill="hsl(19,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_STRING_APPEND — 35 (0.3%)</title></rect>
+<rect x="0.0" y="170" width="3.8" height="20" fill="hsl(63,60%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_STRING_APPEND;span_fade — 40 (0.3%)</title></rect>
+<rect x="3.8" y="170" width="0.5" height="20" fill="hsl(48,60%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_STRING_APPEND;term_drop — 3 (0.0%)</title></rect>
+<rect x="49.0" y="148" width="3.6" height="20" fill="hsl(37,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_STRING_APPEND_K1793 — 38 (0.3%)</title></rect>
+<rect x="0.0" y="170" width="0.5" height="20" fill="hsl(274,45%,60%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_STRING_APPEND_K1793;rfc_wrap — 5 (0.0%)</title></rect>
+<rect x="0.0" y="170" width="0.5" height="20" fill="hsl(48,60%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_STRING_EQ_K1607;term_drop — 1 (0.0%)</title></rect>
+<rect x="52.6" y="148" width="2.7" height="20" fill="hsl(20,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_STRING_LENGTH — 29 (0.2%)</title></rect>
+<rect x="55.3" y="148" width="0.7" height="20" fill="hsl(38,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_STRING_LENGTH_K1419 — 7 (0.1%)</title></rect>
+<rect x="56.0" y="148" width="0.5" height="20" fill="hsl(23,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_WRITE_MANY_K1799 — 1 (0.0%)</title></rect>
+<rect x="56.1" y="148" width="0.5" height="20" fill="hsl(36,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID_WRITE_MANY_K1800 — 3 (0.0%)</title></rect>
+<rect x="56.4" y="148" width="0.5" height="20" fill="hsl(29,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_COMPACT_COMPACT — 1 (0.0%)</title></rect>
+<rect x="56.4" y="148" width="0.5" height="20" fill="hsl(10,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_COMPACT_COMPACT_C1367 — 2 (0.0%)</title></rect>
+<rect x="0.0" y="170" width="7.2" height="20" fill="hsl(48,60%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_COMPACT_IN_GO;term_drop — 76 (0.6%)</title></rect>
+<rect x="56.6" y="148" width="0.5" height="20" fill="hsl(19,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_CRASHPOINT_HIT_C1234 — 2 (0.0%)</title></rect>
+<rect x="56.8" y="148" width="0.5" height="20" fill="hsl(34,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_DB_APPLY_AND_ROTATE — 3 (0.0%)</title></rect>
+<rect x="57.1" y="148" width="0.5" height="20" fill="hsl(26,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_DB_DB_WRITE_C1621 — 1 (0.0%)</title></rect>
+<rect x="57.2" y="148" width="0.5" height="20" fill="hsl(34,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_DB_DB_WRITE_K1619 — 1 (0.0%)</title></rect>
+<rect x="57.3" y="148" width="0.5" height="20" fill="hsl(31,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_DB_DB_WRITE_K1620 — 1 (0.0%)</title></rect>
+<rect x="57.4" y="148" width="0.5" height="20" fill="hsl(20,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_DB_WAL_APPEND_C1515 — 1 (0.0%)</title></rect>
+<rect x="57.5" y="148" width="0.5" height="20" fill="hsl(16,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_DB_WAL_APPEND_C1520 — 1 (0.0%)</title></rect>
+<rect x="57.6" y="148" width="0.5" height="20" fill="hsl(31,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_DB_WAL_APPEND_C1525 — 1 (0.0%)</title></rect>
+<rect x="57.7" y="148" width="0.5" height="20" fill="hsl(17,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_DB_WAL_APPEND_C1527 — 1 (0.0%)</title></rect>
+<rect x="57.8" y="148" width="0.5" height="20" fill="hsl(21,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_DB_WAL_APPEND_C1530 — 1 (0.0%)</title></rect>
+<rect x="57.9" y="148" width="0.5" height="20" fill="hsl(19,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_DB_WAL_APPEND_K1514 — 2 (0.0%)</title></rect>
+<rect x="58.0" y="148" width="0.5" height="20" fill="hsl(24,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_DB_WAL_FRAME_K1408 — 1 (0.0%)</title></rect>
+<rect x="58.1" y="148" width="0.5" height="20" fill="hsl(17,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_DB_WAL_FRAME_K1410 — 1 (0.0%)</title></rect>
+<rect x="58.2" y="148" width="0.5" height="20" fill="hsl(30,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_RECOVER_DRAIN_GO — 1 (0.0%)</title></rect>
+<rect x="58.3" y="148" width="0.5" height="20" fill="hsl(22,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_RECOVER_L0_FULL_K1202 — 1 (0.0%)</title></rect>
+<rect x="58.4" y="148" width="0.5" height="20" fill="hsl(26,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_RECOVER_WRITE — 1 (0.0%)</title></rect>
+<rect x="58.5" y="148" width="0.5" height="20" fill="hsl(26,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_RECOVER_WRITE_C1692 — 1 (0.0%)</title></rect>
+<rect x="58.6" y="148" width="0.5" height="20" fill="hsl(23,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_WAL_DASHES — 3 (0.0%)</title></rect>
+<rect x="58.9" y="148" width="1.2" height="20" fill="hsl(19,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_WAL_DASHES_K1239 — 13 (0.1%)</title></rect>
+<rect x="0.0" y="170" width="0.7" height="20" fill="hsl(274,45%,60%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_WAL_DASHES_K1239;rfc_wrap — 7 (0.1%)</title></rect>
+<rect x="60.1" y="148" width="0.5" height="20" fill="hsl(17,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_WAL_ENC_MUTS — 1 (0.0%)</title></rect>
+<rect x="60.2" y="148" width="0.5" height="20" fill="hsl(25,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_WAL_ENC_MUT_K1219 — 2 (0.0%)</title></rect>
+<rect x="0.0" y="170" width="0.5" height="20" fill="hsl(341,45%,60%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_WAL_ENC_MUT_K1219;spin_165 — 1 (0.0%)</title></rect>
+<rect x="0.0" y="192" width="0.5" height="20" fill="hsl(63,60%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_WAL_ENC_MUT_K1219;spin_165;span_fade — 3 (0.0%)</title></rect>
+<rect x="0.3" y="192" width="0.5" height="20" fill="hsl(48,60%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_WAL_ENC_MUT_K1219;spin_165;term_drop — 1 (0.0%)</title></rect>
+<rect x="60.4" y="148" width="0.5" height="20" fill="hsl(13,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;WL_FID____SRC_WAL_ENC_MUT_K1226 — 2 (0.0%)</title></rect>
+<rect x="60.6" y="148" width="0.5" height="20" fill="hsl(50,60%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;corpus_eval — 1 (0.0%)</title></rect>
+<rect x="0.0" y="170" width="0.5" height="20" fill="hsl(30,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;corpus_eval;WL_FID_EXIT — 2 (0.0%)</title></rect>
+<rect x="0.2" y="170" width="0.5" height="20" fill="hsl(27,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;corpus_eval;WL_FID_WRITE_MANY_K1798 — 1 (0.0%)</title></rect>
+<rect x="0.3" y="170" width="0.5" height="20" fill="hsl(16,65%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;corpus_eval;WL_FID____SRC_DB_WAL_APPEND_C1522 — 1 (0.0%)</title></rect>
+<rect x="0.0" y="192" width="328.3" height="20" fill="hsl(68,45%,60%)" stroke="white"><title>start;main;io_loop;corpus_eval;pool_turn;_pthread_cond_wait;__psynch_cvwait — 3490 (27.4%)</title></rect>
+<text x="3.0" y="207">__psynch_cvwait</text>
+<rect x="0.0" y="192" width="0.5" height="20" fill="hsl(332,45%,60%)" stroke="white"><title>start;main;io_loop;corpus_eval;pool_turn;pthread_cond_broadcast;__psynch_cvbroad — 1 (0.0%)</title></rect>
+<rect x="60.7" y="148" width="1.7" height="20" fill="hsl(274,45%,60%)" stroke="white"><title>start;main;io_loop;corpus_eval;rfc_wrap — 18 (0.1%)</title></rect>
+<rect x="62.4" y="148" width="12.2" height="20" fill="hsl(63,60%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;span_fade — 130 (1.0%)</title></rect>
+<rect x="74.6" y="148" width="25.5" height="20" fill="hsl(48,60%,55%)" stroke="white"><title>start;main;io_loop;corpus_eval;term_drop — 271 (2.1%)</title></rect>
+<rect x="0.0" y="148" width="0.5" height="20" fill="hsl(311,45%,60%)" stroke="white"><title>start;main;io_loop;file_open_pack;_xzm_free — 1 (0.0%)</title></rect>
+<rect x="0.1" y="148" width="0.5" height="20" fill="hsl(208,45%,60%)" stroke="white"><title>start;main;io_loop;file_open_pack;free — 1 (0.0%)</title></rect>
+<rect x="308.3" y="126" width="0.5" height="20" fill="hsl(317,45%,60%)" stroke="white"><title>start;main;io_loop;file_write_pack — 1 (0.0%)</title></rect>
+<rect x="0.0" y="148" width="0.5" height="20" fill="hsl(311,45%,60%)" stroke="white"><title>start;main;io_loop;file_write_pack;_xzm_free — 2 (0.0%)</title></rect>
+<rect x="0.0" y="170" width="0.5" height="20" fill="hsl(315,45%,60%)" stroke="white"><title>start;main;io_loop;file_write_pack;_xzm_free;mach_absolute_time — 1 (0.0%)</title></rect>
+<rect x="0.2" y="148" width="0.5" height="20" fill="hsl(38,45%,60%)" stroke="white"><title>start;main;io_loop;file_write_pack;xzm_malloc_zone_try_free_default — 1 (0.0%)</title></rect>
+<rect x="308.4" y="126" width="0.5" height="20" fill="hsl(322,45%,60%)" stroke="white"><title>start;main;io_loop;fsync_pack — 2 (0.0%)</title></rect>
+<rect x="308.6" y="126" width="0.5" height="20" fill="hsl(69,60%,55%)" stroke="white"><title>start;main;io_loop;io_exec — 4 (0.0%)</title></rect>
+<rect x="0.0" y="170" width="0.5" height="20" fill="hsl(286,45%,60%)" stroke="white"><title>start;main;io_loop;io_exec;chmod_run;DYLD-STUB$$__error — 1 (0.0%)</title></rect>
+<rect x="0.0" y="192" width="42.5" height="20" fill="hsl(331,45%,60%)" stroke="white"><title>start;main;io_loop;io_exec;chmod_run;chmod;__chmod — 452 (3.5%)</title></rect>
+<text x="3.0" y="207">__ch…</text>
+<rect x="0.0" y="192" width="1.1" height="20" fill="hsl(49,60%,55%)" stroke="white"><title>start;main;io_loop;io_exec;chmod_run;io_cstr;io_cstr — 12 (0.1%)</title></rect>
+<rect x="0.0" y="170" width="39.6" height="20" fill="hsl(251,45%,60%)" stroke="white"><title>start;main;io_loop;io_exec;file_close_run;close — 421 (3.3%)</title></rect>
+<text x="3.0" y="185">clo…</text>
+<rect x="0.0" y="170" width="0.5" height="20" fill="hsl(112,45%,60%)" stroke="white"><title>start;main;io_loop;io_exec;file_open_run;DYLD-STUB$$free — 1 (0.0%)</title></rect>
+<rect x="0.1" y="170" width="1.0" height="20" fill="hsl(49,60%,55%)" stroke="white"><title>start;main;io_loop;io_exec;file_open_run;io_cstr — 11 (0.1%)</title></rect>
+<rect x="0.0" y="192" width="0.5" height="20" fill="hsl(20,45%,60%)" stroke="white"><title>start;main;io_loop;io_exec;file_open_run;io_cstr;DYLD-STUB$$malloc — 3 (0.0%)</title></rect>
+<rect x="0.3" y="192" width="0.5" height="20" fill="hsl(35,45%,60%)" stroke="white"><title>start;main;io_loop;io_exec;file_open_run;io_cstr;_malloc_zone_malloc — 1 (0.0%)</title></rect>
+<rect x="1.1" y="170" width="4.4" height="20" fill="hsl(65,60%,55%)" stroke="white"><title>start;main;io_loop;io_exec;file_open_run;io_work — 47 (0.4%)</title></rect>
+<rect x="0.0" y="192" width="0.5" height="20" fill="hsl(175,45%,60%)" stroke="white"><title>start;main;io_loop;io_exec;file_open_run;io_work;pthread_mutex_unlock — 1 (0.0%)</title></rect>
+<rect x="0.0" y="170" width="30.9" height="20" fill="hsl(49,60%,55%)" stroke="white"><title>start;main;io_loop;io_exec;file_write_run;io_cstr — 328 (2.6%)</title></rect>
+<text x="3.0" y="185">io…</text>
+<rect x="0.0" y="192" width="0.5" height="20" fill="hsl(288,45%,60%)" stroke="white"><title>start;main;io_loop;io_exec;file_write_run;io_cstr;&lt;deduplicated_symbol&gt; — 2 (0.0%)</title></rect>
+<rect x="30.9" y="170" width="3.7" height="20" fill="hsl(65,60%,55%)" stroke="white"><title>start;main;io_loop;io_exec;file_write_run;io_work — 39 (0.3%)</title></rect>
+<rect x="0.0" y="236" width="0.5" height="20" fill="hsl(127,45%,60%)" stroke="white"><title>start;main;io_loop;io_exec;file_write_run;io_work;_pthread_mutex_firstfit_unlock_slow;_pthread_mutex_firstfit_wake;__psynch_mutexdrop — 1 (0.0%)</title></rect>
+<rect x="0.0" y="192" width="1.4" height="20" fill="hsl(49,60%,55%)" stroke="white"><title>start;main;io_loop;io_exec;fsync_run;io_cstr;io_cstr — 15 (0.1%)</title></rect>
+<rect x="0.0" y="170" width="5.6" height="20" fill="hsl(65,60%,55%)" stroke="white"><title>start;main;io_loop;io_exec;fsync_run;io_work — 60 (0.5%)</title></rect>
+<rect x="0.0" y="236" width="0.5" height="20" fill="hsl(127,45%,60%)" stroke="white"><title>start;main;io_loop;io_exec;fsync_run;io_work;_pthread_mutex_firstfit_unlock_slow;_pthread_mutex_firstfit_wake;__psynch_mutexdrop — 2 (0.0%)</title></rect>
+<rect x="0.0" y="170" width="0.8" height="20" fill="hsl(10,45%,60%)" stroke="white"><title>start;main;io_loop;io_exec;get_env_run;getenv — 8 (0.1%)</title></rect>
+<rect x="0.8" y="170" width="0.5" height="20" fill="hsl(49,60%,55%)" stroke="white"><title>start;main;io_loop;io_exec;get_env_run;io_cstr — 5 (0.0%)</title></rect>
+<rect x="0.0" y="192" width="0.5" height="20" fill="hsl(49,60%,55%)" stroke="white"><title>start;main;io_loop;io_exec;get_env_run;io_cstr;io_cstr — 4 (0.0%)</title></rect>
+<rect x="0.0" y="214" width="0.5" height="20" fill="hsl(188,45%,60%)" stroke="white"><title>start;main;io_loop;io_exec;read_dir_count_run;__opendir2;open$NOCANCEL;__open_nocancel — 2 (0.0%)</title></rect>
+<rect x="0.0" y="192" width="0.5" height="20" fill="hsl(207,45%,60%)" stroke="white"><title>start;main;io_loop;io_exec;remove_run;unlink;__unlink — 5 (0.0%)</title></rect>
+<rect x="0.0" y="192" width="0.5" height="20" fill="hsl(62,45%,60%)" stroke="white"><title>start;main;io_loop;io_exec;rename_run;rename;__rename — 2 (0.0%)</title></rect>
+<rect x="309.0" y="126" width="0.9" height="20" fill="hsl(62,60%,55%)" stroke="white"><title>start;main;io_loop;io_loop — 10 (0.1%)</title></rect>
+<rect x="0.0" y="170" width="0.5" height="20" fill="hsl(345,45%,60%)" stroke="white"><title>start;main;io_loop;io_sync;fflush;__sflush — 1 (0.0%)</title></rect>
+<rect x="0.0" y="192" width="0.5" height="20" fill="hsl(179,45%,60%)" stroke="white"><title>start;main;io_loop;io_sync;fflush;flockfile;_pthread_mutex_firstfit_lock_slow — 2 (0.0%)</title></rect>
+<rect x="0.2" y="192" width="0.5" height="20" fill="hsl(140,45%,60%)" stroke="white"><title>start;main;io_loop;io_sync;fflush;flockfile;pthread_mutex_lock — 1 (0.0%)</title></rect>
+<rect x="0.0" y="192" width="0.5" height="20" fill="hsl(286,45%,60%)" stroke="white"><title>start;main;io_loop;io_sync;fflush;funlockfile;DYLD-STUB$$__error — 1 (0.0%)</title></rect>
+<rect x="0.1" y="192" width="0.5" height="20" fill="hsl(281,45%,60%)" stroke="white"><title>start;main;io_loop;io_sync;fflush;funlockfile;DYLD-STUB$$pthread_mutex_unlock — 1 (0.0%)</title></rect>
+<rect x="309.9" y="126" width="7.8" height="20" fill="hsl(358,45%,60%)" stroke="white"><title>start;main;io_loop;read — 83 (0.7%)</title></rect>
+<rect x="0.0" y="170" width="0.5" height="20" fill="hsl(229,45%,60%)" stroke="white"><title>start;main;io_loop;read;cerror;_pthread_exit_if_canceled — 1 (0.0%)</title></rect>
+<rect x="0.1" y="170" width="0.5" height="20" fill="hsl(54,45%,60%)" stroke="white"><title>start;main;io_loop;read;cerror;cerror_nocancel — 1 (0.0%)</title></rect>
+</svg>

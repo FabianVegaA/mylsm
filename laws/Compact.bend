@@ -9,11 +9,11 @@ import ../src/Compact.bend as Compact
 # L1: [a=v0, z=vz] (absorbed: overlaps hull [a..m]) + [p=vp] (remainder).
 # L2 shadow: [x=v_old] (drops the Del x tombstone) + [q=vq].
 
-def cp_e1(k: String, v: String) -> List<&2, MemTable.Entry>:
-  Con{MemTable.Entry{k, Some{v}}, Nil{}}
+def cp_e1(key: String, val: String) -> List<&2, MemTable.Entry>:
+  Con{MemTable.Entry{key, Some{val}}, Nil{}}
 
-def cp_e_del(k: String) -> List<&2, MemTable.Entry>:
-  Con{MemTable.Entry{k, None{}}, Nil{}}
+def cp_e_del(key: String) -> List<&2, MemTable.Entry>:
+  Con{MemTable.Entry{key, None{}}, Nil{}}
 
 def cp_t0() -> Sstable.Table:
   Sstable.build(cp_e1("m", "vm"), 0n, 1n)
@@ -82,10 +82,10 @@ law compact_absorbed:
   {Compact.table_overlap(cp_t2(), cp_u0()) == True{} : Bool}
 
 def cp_db_pre() -> Db.Db:
-  Db.Db{"/d", MemTable.MT{Nil{}}, cp_levels(), 5n, ""}
+  Db.Db{"/d", MemTable.MT{Nil{}}, MemTable.MT{Nil{}}, 1n, Nil{}, cp_levels(), 5n, "", 0n, 0n}
 
 def cp_db_post() -> Db.Db:
-  Db.Db{"/d", MemTable.MT{Nil{}}, cp_post(), 6n, ""}
+  Db.Db{"/d", MemTable.MT{Nil{}}, MemTable.MT{Nil{}}, 1n, Nil{}, cp_post(), 6n, "", 0n, 0n}
 
 # LAW: post-compaction hit pinned (closed; anti-vacuity)
 law compact_hit:

@@ -2,6 +2,7 @@ import Base
 import ./Keys.bend as Keys
 import ./MemTable.bend as MemTable
 import ./Sstable.bend as Sstable
+import ./SortedRun.bend as SortedRun
 import ./SstFile.bend as SstFile
 import ./Wal.bend as Wal
 import ./Manifest.bend as Manifest
@@ -35,8 +36,8 @@ def l0_add(+levels: List<&2, List<&2, Sstable.Table>>, +tbl: Sstable.Table) -> L
     case Con{l0, rest}:
       Con{Con{tbl, l0}, rest}
 
-def mfst_add(+m: Manifest.Manifest, +name: String) -> Manifest.Manifest:
-  match m:
+def mfst_add(+mfst: Manifest.Manifest, +name: String) -> Manifest.Manifest:
+  match mfst:
     case Manifest.M{lvs}:
       match lvs:
         case Nil{}:
@@ -51,9 +52,9 @@ def write_tail(fr: (File & Result<&1, &1, U32 & String, Unit>), +path: String) -
     case (f2, r):
       do IO<Result<&1, &1, U32 & String, Unit>>:
         res : Unit <- IO.try(Unit, IO.pure(Result<&1, &1, U32 & String, Unit>, r))
-        cls : Unit <- File.close(f2)
-        syn : Unit <- IO.try(Unit, Fs.fsync(path))
-        prm : Unit <- IO.try(Unit, Fs.chmod(path, U32.from_nat(384n)))
+        _cls : Unit <- File.close(f2)
+        _syn : Unit <- IO.try(Unit, Fs.fsync(path))
+        _p_rm : Unit <- IO.try(Unit, Fs.chmod(path, U32.from_nat(384n)))
         return Done{res}
 
 def write_file(+path: String, +data: String) -> IO(Result<&1, &1, U32 & String, Unit>):
@@ -66,7 +67,7 @@ def read_tail3(fr: (File & Result<&1, &1, U32 & String, String>)) -> IO(Result<&
   match fr:
     case (f3, r1):
       do IO<Result<&1, &1, U32 & String, String>>:
-        cls : Unit <- File.close(f3)
+        _cls : Unit <- File.close(f3)
         IO.pure(Result<&1, &1, U32 & String, String>, r1)
 
 
@@ -79,15 +80,15 @@ def read_file(+path: String) -> IO(Result<&1, &1, U32 & String, String>):
     fr : (File & Result<&1, &1, U32 & String, String>) <- File.read(f, U32.from_nat(4294967295n))
     read_tail3(fr)
 
-def mfst_parsed(+m: Maybe<&2, Manifest.Manifest>) -> Result<&1, &1, U32 & String, Manifest.Manifest>:
-  match m:
+def mfst_parsed(+opt: Maybe<&2, Manifest.Manifest>) -> Result<&1, &1, U32 & String, Manifest.Manifest>:
+  match opt:
     case None{}:
       Fail{(U32.from_nat(1n), "bad manifest")}
     case Some{mm}:
       Done{mm}
 
-def mfst_tail(r: Result<&1, &1, U32 & String, String>) -> IO(Result<&1, &1, U32 & String, Manifest.Manifest>):
-  match r:
+def mfst_tail(res: Result<&1, &1, U32 & String, String>) -> IO(Result<&1, &1, U32 & String, Manifest.Manifest>):
+  match res:
     case Fail{e}:
       IO.pure(Result<&1, &1, U32 & String, Manifest.Manifest>, Fail{e})
     case Done{s}:
@@ -96,14 +97,14 @@ def mfst_tail(r: Result<&1, &1, U32 & String, String>) -> IO(Result<&1, &1, U32 
 # A stat-confirmed absent manifest means a fresh database. Metadata, open, read,
 # and parse errors for an existing manifest propagate fail-closed; they must
 # never be reinterpreted as an empty database and overwritten.
-def mread_tail(f: File) -> IO(Result<&1, &1, U32 & String, Manifest.Manifest>):
+def mread_tail(file: File) -> IO(Result<&1, &1, U32 & String, Manifest.Manifest>):
   do IO<Result<&1, &1, U32 & String, Manifest.Manifest>>:
-    fr : (File & Result<&1, &1, U32 & String, String>) <- File.read(f, U32.mul(U32.from_nat(1024n), U32.from_nat(1024n)))
+    fr : (File & Result<&1, &1, U32 & String, String>) <- File.read(file, U32.mul(U32.from_nat(1024n), U32.from_nat(1024n)))
     r : Result<&1, &1, U32 & String, String> <- read_tail3(fr)
     mfst_tail(r)
 
-def mopen_tail(r: Result<&1, &1, U32 & String, File>) -> IO(Result<&1, &1, U32 & String, Manifest.Manifest>):
-  match r:
+def mopen_tail(res: Result<&1, &1, U32 & String, File>) -> IO(Result<&1, &1, U32 & String, Manifest.Manifest>):
+  match res:
     case Fail{e}:
       IO.pure(Result<&1, &1, U32 & String, Manifest.Manifest>, Fail{e})
     case Done{f}:
@@ -123,8 +124,8 @@ def load_mfst(+path: String) -> IO(Result<&1, &1, U32 & String, Manifest.Manifes
     present : Bool <- IO.try(Bool, Fs.exists(path))
     load_mfst_exists(present, path)
 
-def dir_tail(r: Result<&1, &1, U32 & String, Nat>, +path: String) -> IO(Result<&1, &1, U32 & String, Unit>):
-  match r:
+def dir_tail(res: Result<&1, &1, U32 & String, Nat>, +path: String) -> IO(Result<&1, &1, U32 & String, Unit>):
+  match res:
     case Done{n}:
       IO.pure(Result<&1, &1, U32 & String, Unit>, Done{Unit{}})
     case Fail{e}:
@@ -137,49 +138,125 @@ def ensure_dir(+path: String) -> IO(Result<&1, &1, U32 & String, Unit>):
 
 # --- Flush chain (defined bottom-up: tails first, entry last) ---
 
-def flush_goB(+dir: String, +mpath: String, +mtmp: String, +m2: Manifest.Manifest, +tbl: Sstable.Table, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def flush_goB(
+  +dir: String,
+  +mpath: String,
+  +mtmp: String,
+  +m2: Manifest.Manifest,
+  +tbl: Sstable.Table,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +mem: MemTable.MemTable,
+  +batch_cap: Nat,
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
-    v1 : Unit <- IO.try(Unit, write_file(mtmp, Manifest.serialize(m2)))
-    cp1 : Unit <- IO.try(Unit, CrashPoint.hit("flush.manifest_synced"))
-    v2 : Unit <- IO.try(Unit, Fs.rename(mtmp, mpath))
-    v3 : Unit <- IO.try(Unit, Fs.fsync(dir))
-    cp2 : Unit <- IO.try(Unit, CrashPoint.hit("flush.manifest_published"))
-    rm : Result<&1, &1, U32 & String, Unit> <- Fs.remove(Db.wal_path(dir))
-    return Done{Db.Db{dir, MemTable.MT{Nil{}}, l0_add(levels, tbl), Nat.add(flushed, 1n), Manifest.serialize(m2)}}
+    _v1 : Unit <- IO.try(Unit, write_file(mtmp, Manifest.serialize(m2)))
+    _cp1 : Unit <- IO.try(Unit, CrashPoint.hit("flush.manifest_synced"))
+    _v2 : Unit <- IO.try(Unit, Fs.rename(mtmp, mpath))
+    _v3 : Unit <- IO.try(Unit, Fs.fsync(dir))
+    _cp2 : Unit <- IO.try(Unit, CrashPoint.hit("flush.manifest_published"))
+    _rm : Result<&1, &1, U32 & String, Unit> <- Fs.remove(Db.wal_path(dir))
+    return Done{Db.Db{dir, mem, MemTable.MT{Nil{}}, batch_cap, Nil{}, l0_add(levels, tbl), Nat.add(flushed, 1n), Manifest.serialize(m2), 0n, 0n}}
 
-def flush_drift(ok: Bool, +dir: String, +mpath: String, +mtmp: String, +m: Manifest.Manifest, +tbl: Sstable.Table, +name: String, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def flush_drift(
+  ok: Bool,
+  +dir: String,
+  +mpath: String,
+  +mtmp: String,
+  +mfst: Manifest.Manifest,
+  +tbl: Sstable.Table,
+  +name: String,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +mem: MemTable.MemTable,
+  +batch_cap: Nat,
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match ok:
     case False{}:
       IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{(U32.from_nat(2n), "manifest drift")})
     case True{}:
-      flush_goB(dir, mpath, mtmp, mfst_add(m, name), tbl, levels, flushed)
+      flush_goB(dir, mpath, mtmp, mfst_add(mfst, name), tbl, levels, flushed, mem, batch_cap)
 
-def flush_goA(+dir: String, +l0dir: String, +tmp: String, +final: String, +mpath: String, +mtmp: String, +content: String, +tbl: Sstable.Table, +name: String, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def flush_goA(
+  +dir: String,
+  +l0dir: String,
+  +tmp: String,
+  +final: String,
+  +mpath: String,
+  +mtmp: String,
+  +content: String,
+  +tbl: Sstable.Table,
+  +name: String,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +manifest_token: String,
+  +mem: MemTable.MemTable,
+  +batch_cap: Nat,
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
-    u1 : Unit <- IO.try(Unit, ensure_dir(l0dir))
-    u2 : Unit <- IO.try(Unit, write_file(tmp, content))
-    cp1 : Unit <- IO.try(Unit, CrashPoint.hit("flush.table_synced"))
-    u3 : Unit <- IO.try(Unit, Fs.rename(tmp, final))
-    u4 : Unit <- IO.try(Unit, Fs.fsync(l0dir))
-    cp2 : Unit <- IO.try(Unit, CrashPoint.hit("flush.table_published"))
+    _u1 : Unit <- IO.try(Unit, ensure_dir(l0dir))
+    _u2 : Unit <- IO.try(Unit, write_file(tmp, content))
+    _cp1 : Unit <- IO.try(Unit, CrashPoint.hit("flush.table_synced"))
+    _u3 : Unit <- IO.try(Unit, Fs.rename(tmp, final))
+    _u4 : Unit <- IO.try(Unit, Fs.fsync(l0dir))
+    _cp2 : Unit <- IO.try(Unit, CrashPoint.hit("flush.table_published"))
     +m : Manifest.Manifest <- IO.try(Manifest.Manifest, load_mfst(mpath))
-    flush_drift(String.eq(Manifest.serialize(m), manifest_token), dir, mpath, mtmp, m, tbl, name, levels, flushed)
+    flush_drift(String.eq(Manifest.serialize(m), manifest_token), dir, mpath, mtmp, m, tbl, name, levels, flushed, mem, batch_cap)
 
-def flush_pre(+dir: String, +entries: List<&2, MemTable.Entry>, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def flush_pre(
+  +dir: String,
+  +entries: List<&2, MemTable.Entry>,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +manifest_token: String,
+  +batch_cap: Nat,
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   +tbl = Sstable.build(entries, 0n, List.length(&2, MemTable.Entry, entries))
   +name = table_name(flushed)
   +l0dir = dir ++ "/l0"
-  flush_goA(dir, l0dir, l0dir ++ "/" ++ name ++ ".tmp", l0dir ++ "/" ++ name, dir ++ "/MANIFEST", dir ++ "/MANIFEST.tmp", SstFile.serialize(Db.table_entries(tbl), 0n), tbl, name, levels, flushed, manifest_token)
+  flush_goA(dir, l0dir, l0dir ++ "/" ++ name ++ ".tmp", l0dir ++ "/" ++ name, dir ++ "/MANIFEST", dir ++ "/MANIFEST.tmp", SstFile.serialize(Db.table_entries(tbl), 0n), tbl, name, levels, flushed, manifest_token, MemTable.MT{Nil{}}, batch_cap)
+
+# Frozen-path flush MERGES mem (newer) over frozen (older) into one L0 table
+# and drains both: the WAL is truncated on publish, so anything left in mem
+# would otherwise exist nowhere on disk (loss window caught by 20485 smoke).
+def flush_frozen(
+  +dir: String,
+  +mem: MemTable.MemTable,
+  +entries: List<&2, MemTable.Entry>,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +manifest_token: String,
+  +batch_cap: Nat,
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+  match mem:
+    case MemTable.MT{live}:
+      +merged = SortedRun.merge_many_newest(Con{live, Con{entries, Nil{}}})
+      +tbl = Sstable.build(merged, 0n, List.length(&2, MemTable.Entry, merged))
+      +name = table_name(flushed)
+      +l0dir = dir ++ "/l0"
+      flush_goA(dir, l0dir, l0dir ++ "/" ++ name ++ ".tmp", l0dir ++ "/" ++ name, dir ++ "/MANIFEST", dir ++ "/MANIFEST.tmp", SstFile.serialize(Db.table_entries(tbl), 0n), tbl, name, levels, flushed, manifest_token, MemTable.MT{Nil{}}, batch_cap)
+
+def flush_pick(
+  +frozen: MemTable.MemTable,
+  +mem: MemTable.MemTable,
+  +dir: String,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +manifest_token: String,
+  +batch_cap: Nat,
+  +bcache: List<&2, Db.BEntry>,
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+  match frozen mem:
+    case MemTable.MT{Nil{}} MemTable.MT{Nil{}}:
+      IO.pure(Result<&1, &1, U32 & String, Db.Db>, Done{Db.Db{dir, MemTable.MT{Nil{}}, MemTable.MT{Nil{}}, batch_cap, bcache, levels, flushed, manifest_token, 0n, 0n}})
+    case MemTable.MT{Nil{}} MemTable.MT{Con{e, t}}:
+      flush_pre(dir, Con{e, t}, levels, flushed, manifest_token, batch_cap)
+    case MemTable.MT{Con{fe, ft}} _:
+      flush_frozen(dir, mem, Con{fe, ft}, levels, flushed, manifest_token, batch_cap)
 
 def flush(+db: Db.Db) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match db:
-    case Db.Db{dir, mem, levels, flushed, manifest_token}:
-      match mem:
-        case MemTable.MT{entries}:
-          match entries:
-            case Nil{}:
-              IO.pure(Result<&1, &1, U32 & String, Db.Db>, Done{Db.Db{dir, MemTable.MT{Nil{}}, levels, flushed, manifest_token}})
-            case Con{_, _}:
-              flush_pre(dir, entries, levels, flushed, manifest_token)
+    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
+      flush_pick(frozen, mem, dir, levels, flushed, manifest_token, batch_cap, bcache)
 
 # --- Closed-vector laws live in laws/Flush.bend (spec law 6) ---

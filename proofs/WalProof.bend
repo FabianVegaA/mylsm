@@ -13,5 +13,5 @@ def Laws.wal_rt_del1():
 def Laws.wal_rt_multi():
   {==}
 
-def Laws.wal_fail_closed(s):
+def Laws.wal_fail_closed(_s):
   {==}

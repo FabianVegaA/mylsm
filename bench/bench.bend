@@ -9,7 +9,7 @@ def main() -> IO(Unit):
     h : Db.Db <- IO.try(Db.Db, Recover.open_db("bench-data"))
     t0 : Nat <- IO.now()
     r : Result<&1, &1, U32 & String, Db.Db> <- Db.db_put(h, "bench-key", "v")
-    h2 : Db.Db <- IO.try(Db.Db, IO.pure(Result<&1, &1, U32 & String, Db.Db>, r))
+    _h2 : Db.Db <- IO.try(Db.Db, IO.pure(Result<&1, &1, U32 & String, Db.Db>, r))
     t1 : Nat <- IO.now()
     IO.print("single_put_elapsed_ms=" ++ Nat.show(Nat.sub(t1, t0)))
     IO.print("single_put_ops=1")

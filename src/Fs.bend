@@ -19,7 +19,7 @@ def read_dir_count(path: String) -> IO(Result<&1, &1, U32 & String, Nat>):
   import "./effs/read_dir.c"
   import "./effs/read_dir.js"
 
-def read_dir_at(path: String, i: Nat) -> IO(Result<&1, &1, U32 & String, String>):
+def read_dir_at(path: String, idx: Nat) -> IO(Result<&1, &1, U32 & String, String>):
   import "./effs/read_dir.c"
   import "./effs/read_dir.js"
 
@@ -54,14 +54,14 @@ def grab_name(nm: String, acc: List<String>) -> List<String>:
 # Fuel-bounded sweep 0..count-1. Startup-only use (spec §10 below): the
 # directory is stable during recovery, so count-then-fetch is exact.
 
-def read_go(fuel: Nat, +path: String, +i: Nat, acc: List<String>) -> IO(List<String>):
+def read_go(fuel: Nat, +path: String, +idx: Nat, acc: List<String>) -> IO(List<String>):
   match fuel:
     case 0n:
       IO.pure(List<String>, List.reverse(&1, String, acc))
     case 1n+f:
       do IO<List<String>>:
-        nm : String <- IO.try(String, read_dir_at(path, i))
-        read_go(f, path, Nat.add(i, 1n), grab_name(nm, acc))
+        nm : String <- IO.try(String, read_dir_at(path, idx))
+        read_go(f, path, Nat.add(idx, 1n), grab_name(nm, acc))
 
 def read_dir(+path: String) -> IO(Result<&1, &1, U32 & String, List<String>>):
   do IO<Result<&1, &1, U32 & String, List<String>>>:

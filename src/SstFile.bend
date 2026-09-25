@@ -15,5 +15,5 @@ def parse(+encoded: String) -> Maybe<&2, Sstable.Table>:
 
 
 # Total-parser witness used by the hardening law.
-def is_decided(+result: Maybe<&2, Sstable.Table>) -> Bool:
+def is_decided(+_result: Maybe<&2, Sstable.Table>) -> Bool:
   True{}

@@ -6,8 +6,8 @@ import ../src/SstFile.bend as SstFile
 # Deterministic fail-closed corpus. The decoder totality laws cover arbitrary
 # Strings; this executable adds representative truncation, noise, and valid
 # records without depending on an external random-number package.
-def corpus(i: Nat) -> String:
-  match i:
+def corpus(idx: Nat) -> String:
+  match idx:
     case 0n:
       ""
     case 1n+m:
@@ -29,25 +29,25 @@ def corpus(i: Nat) -> String:
                     case 1n+s:
                       corpus(s)
 
-def all_decided(a: Bool, b: Bool, c: Bool) -> Bool:
-  match a b c:
+def all_decided(first: Bool, second: Bool, third: Bool) -> Bool:
+  match first second third:
     case True{} True{} True{}:
       True{}
     case _ _ _:
       False{}
 
-def check_one(+s: String) -> Bool:
-  all_decided(Wal.is_decided(Wal.decode(s)), Manifest.is_decided(Manifest.parse(s)), SstFile.is_decided(SstFile.parse(s)))
+def check_one(+str: String) -> Bool:
+  all_decided(Wal.is_decided(Wal.decode(str)), Manifest.is_decided(Manifest.parse(str)), SstFile.is_decided(SstFile.parse(str)))
 
-def and_bool(a: Bool, b: Bool) -> Bool:
-  match a:
+def and_bool(first: Bool, second: Bool) -> Bool:
+  match first:
     case True{}:
-      b
+      second
     case False{}:
       False{}
 
-def check_go(n: Nat, ok: Bool) -> Bool:
-  match n:
+def check_go(num: Nat, ok: Bool) -> Bool:
+  match num:
     case 0n:
       ok
     case 1n+m:

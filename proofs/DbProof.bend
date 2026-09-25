@@ -12,3 +12,36 @@ def Laws.db_batch_atomic():
 
 def Laws.db_recover():
   {==}
+
+def Laws.db_get_newest_wins():
+  {==}
+
+def Laws.db_get_tombstone_hides():
+  {==}
+
+def Laws.db_get_miss():
+  {==}
+
+def Laws.db_cache_transparent_hit():
+  {==}
+
+def Laws.db_cache_transparent_tomb():
+  {==}
+
+def Laws.db_cache_transparent_miss():
+  {==}
+
+def Laws.db_staged_order():
+  {==}
+
+def Laws.rotate_below_cap():
+  {==}
+
+def Laws.rotate_fires():
+  {==}
+
+def Laws.rotate_preserves():
+  {==}
+
+def Laws.frozen_empty_branches():
+  {==}

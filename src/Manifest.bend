@@ -15,12 +15,12 @@ import Base
 type Manifest is Data:
   M{levels: List<&2, List<&2, String>>}
 
-def mhash(s: String, h: U32) -> U32:
-  match s:
+def mhash(str: String, seed: U32) -> U32:
+  match str:
     case SNil{}:
-      h
+      seed
     case SCon{c, t}:
-      mhash(t, U32.add(U32.mul(h, 31), Char.to_u32(c)))
+      mhash(t, U32.add(U32.mul(seed, 31), Char.to_u32(c)))
 
 def encode_line(names: List<&2, String>) -> String:
   String.join(names, ",")
@@ -32,8 +32,8 @@ def encode_lines(xss: List<&2, List<&2, String>>) -> List<&2, String>:
     case Con{h, t}:
       Con{encode_line(h), encode_lines(t)}
 
-def serialize(m: Manifest) -> String:
-  match m:
+def serialize(mfst: Manifest) -> String:
+  match mfst:
     case M{levels}:
       +ls = encode_lines(levels)
       +content = String.join(ls, SCon{Char.from_u32(10), SNil{}})
@@ -48,69 +48,69 @@ def name_ok_step(ok: Bool, good: Bool) -> Bool:
     case False{}:
       False{}
 
-def nc_alpha(a: Bool, c: Char) -> Bool:
-  match a:
+def nc_alpha(ok: Bool, ch: Char) -> Bool:
+  match ok:
     case True{}:
       True{}
     case False{}:
-      Char.is_digit(c)
+      Char.is_digit(ch)
 
-def nc_us(u: Bool, +c: Char) -> Bool:
-  match u:
+def nc_us(ok: Bool, +ch: Char) -> Bool:
+  match ok:
     case True{}:
       True{}
     case False{}:
-      nc_alpha(Char.is_alpha(c), c)
+      nc_alpha(Char.is_alpha(ch), ch)
 
-def nc_dot(d: Bool, +c: Char) -> Bool:
-  match d:
+def nc_dot(ok: Bool, +ch: Char) -> Bool:
+  match ok:
     case True{}:
       True{}
     case False{}:
-      nc_us(Char.is_eq(c, Char.from_u32(95)), c)
+      nc_us(Char.is_eq(ch, Char.from_u32(95)), ch)
 
-def nc_dash(d: Bool, +c: Char) -> Bool:
-  match d:
+def nc_dash(ok: Bool, +ch: Char) -> Bool:
+  match ok:
     case True{}:
       True{}
     case False{}:
-      nc_dot(Char.is_eq(c, Char.from_u32(46)), c)
+      nc_dot(Char.is_eq(ch, Char.from_u32(46)), ch)
 
-def name_char_ok(+c: Char) -> Bool:
-  nc_dash(Char.is_eq(c, Char.from_u32(45)), c)
+def name_char_ok(+ch: Char) -> Bool:
+  nc_dash(Char.is_eq(ch, Char.from_u32(45)), ch)
 
-def name_go(s: String, ok: Bool) -> Bool:
-  match s:
+def name_go(str: String, ok: Bool) -> Bool:
+  match str:
     case SNil{}:
       ok
     case SCon{h, t}:
       name_go(t, name_ok_step(ok, name_char_ok(h)))
 
-def name_dots2(d2: Bool, s: String) -> Bool:
+def name_dots2(d2: Bool, str: String) -> Bool:
   match d2:
     case True{}:
       False{}
     case False{}:
-      name_go(s, True{})
+      name_go(str, True{})
 
-def name_dots(d1: Bool, d2: Bool, s: String) -> Bool:
+def name_dots(d1: Bool, d2: Bool, str: String) -> Bool:
   match d1:
     case True{}:
       False{}
     case False{}:
-      name_dots2(d2, s)
+      name_dots2(d2, str)
 
-def name_ok(s: String) -> Bool:
-  match s:
+def name_ok(str: String) -> Bool:
+  match str:
     case SNil{}:
       False{}
     case SCon{+h, +t}:
       name_dots(String.eq(SCon{h, t}, "."), String.eq(SCon{h, t}, ".."), SCon{h, t})
 
-def names_and(a: Bool, b: Bool) -> Bool:
-  match a:
+def names_and(lhs: Bool, rhs: Bool) -> Bool:
+  match lhs:
     case True{}:
-      b
+      rhs
     case False{}:
       False{}
 
@@ -137,8 +137,8 @@ def body_valid(ls: List<&2, String>) -> Bool:
     case Con{h, t}:
       names_and(line_valid(h), body_valid(t))
 
-def chk_rd(m: Maybe<&2, U32>, content: String) -> Bool:
-  match m:
+def chk_rd(opt: Maybe<&2, U32>, content: String) -> Bool:
+  match opt:
     case None{}:
       False{}
     case Some{v}:
@@ -154,8 +154,8 @@ def chk_sw(sw: Bool, chk: String, content: String) -> Bool:
 def chk_valid(+chk: String, content: String) -> Bool:
   chk_sw(String.starts_with(chk, "#"), chk, content)
 
-def valid_split(p: (List<&2, String> & String)) -> Bool:
-  match p:
+def valid_split(pair: (List<&2, String> & String)) -> Bool:
+  match pair:
     case (+body, chk):
       names_and(body_valid(body), chk_valid(chk, String.join(body, SCon{Char.from_u32(10), SNil{}})))
 
@@ -171,8 +171,8 @@ def split_last(ls: List<&2, String>, acc: List<&2, String>) -> (List<&2, String>
 def valid_lines(lines: List<&2, String>) -> Bool:
   valid_split(split_last(lines, Nil{}))
 
-def valid_manifest(s: String) -> Bool:
-  valid_lines(String.split(s, Char.from_u32(10)))
+def valid_manifest(str: String) -> Bool:
+  valid_lines(String.split(str, Char.from_u32(10)))
 
 def parse_line_u(line: String) -> List<&2, String>:
   match line:
@@ -188,21 +188,21 @@ def parse_levels_u(ls: List<&2, String>, acc: List<&2, List<&2, String>>) -> Lis
     case Con{h, t}:
       parse_levels_u(t, Con{parse_line_u(h), acc})
 
-def parse_unchecked(p: (List<&2, String> & String)) -> Manifest:
-  match p:
+def parse_unchecked(pair: (List<&2, String> & String)) -> Manifest:
+  match pair:
     case (body, chk):
       M{parse_levels_u(body, Nil{})}
 
-def parse_dispatch(ok: Bool, s: String) -> Maybe<&2, Manifest>:
+def parse_dispatch(ok: Bool, str: String) -> Maybe<&2, Manifest>:
   match ok:
     case True{}:
-      Some{parse_unchecked(split_last(String.split(s, Char.from_u32(10)), Nil{}))}
+      Some{parse_unchecked(split_last(String.split(str, Char.from_u32(10)), Nil{}))}
     case False{}:
       None{}
 
-def parse(+s: String) -> Maybe<&2, Manifest>:
-  parse_dispatch(valid_manifest(s), s)
+def parse(+str: String) -> Maybe<&2, Manifest>:
+  parse_dispatch(valid_manifest(str), str)
 
 # Total-parser witness used by the hardening law.
-def is_decided(+m: Maybe<&2, Manifest>) -> Bool:
+def is_decided(+_m: Maybe<&2, Manifest>) -> Bool:
   True{}

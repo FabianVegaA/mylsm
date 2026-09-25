@@ -9,10 +9,10 @@ def scan_mem() -> List<&2, MemTable.Entry>:
   Con{MemTable.Entry{"b", Some{"v2"}}, Con{MemTable.Entry{"a", Some{"v1"}}, Nil{}}}
 
 def fl_pre() -> Db.Db:
-  Db.Db{"/d", MemTable.MT{scan_mem()}, Nil{}, 0n, ""}
+  Db.Db{"/d", MemTable.MT{scan_mem()}, MemTable.MT{Nil{}}, 1n, Nil{}, Nil{}, 0n, "", 2n, 0n}
 
 def fl_post() -> Db.Db:
-  Db.Db{"/d", MemTable.MT{Nil{}}, Con{Con{Sstable.build(scan_mem(), 0n, 2n), Nil{}}, Nil{}}, 1n, ""}
+  Db.Db{"/d", MemTable.MT{Nil{}}, MemTable.MT{Nil{}}, 1n, Nil{}, Con{Con{Sstable.build(scan_mem(), 0n, 2n), Nil{}}, Nil{}}, 1n, "", 0n, 0n}
 
 # LAW: pre-flush read hits (closed; kills vacuity for the pair below)
 law flush_hit_pre:

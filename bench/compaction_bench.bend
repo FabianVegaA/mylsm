@@ -25,15 +25,15 @@ def nat_default(value: Maybe<&2, Nat>, fallback: Nat) -> Nat:
     case None{}: fallback
     case Some{n}: n
 
-def zeros(n: Nat) -> String:
-  match n:
+def zeros(num: Nat) -> String:
+  match num:
     case 0n:
       ""
     case 1n+m:
       "0" ++ zeros(m)
 
-def padded(n: Nat) -> String:
-  +shown = Nat.show(n)
+def padded(num: Nat) -> String:
+  +shown = Nat.show(num)
   zeros(Nat.sub(10n, String.length(shown))) ++ shown
 
 def make_run(fuel: Nat, +index: Nat, +tag: String) -> List<&2, MemTable.Entry>:
@@ -55,9 +55,9 @@ def bool_text(ok: Bool) -> String:
     case True{}: "pass"
     case False{}: "fail"
 
-def bool_and(a: Bool, b: Bool) -> Bool:
-  match a:
-    case True{}: b
+def bool_and(lhs: Bool, rhs: Bool) -> Bool:
+  match lhs:
+    case True{}: rhs
     case False{}: False{}
 
 def maybe_value_eq(got: Maybe<&2, String>, +expected: String) -> Bool:
@@ -65,8 +65,8 @@ def maybe_value_eq(got: Maybe<&2, String>, +expected: String) -> Bool:
     case None{}: False{}
     case Some{value}: String.eq(value, expected)
 
-def table_get(t: Sstable.Table, +key: String) -> Maybe<&2, String>:
-  MemTable.get(MemTable.MT{Db.table_entries(t)}, key)
+def table_get(tab: Sstable.Table, +key: String) -> Maybe<&2, String>:
+  MemTable.get(MemTable.MT{Db.table_entries(tab)}, key)
 
 def merged_ok(+merged: List<&2, MemTable.Entry>, +entries: Nat, +runs: Nat) -> Bool:
   +last = Nat.sub(entries, 1n)
@@ -121,8 +121,8 @@ def odd_disjoint_ok() -> Bool:
         maybe_value_eq(MemTable.get(MemTable.MT{merged}, "d"), "d"),
         maybe_value_eq(MemTable.get(MemTable.MT{merged}, "e"), "e"))))
 
-def force_bloom(b: Sstable.Bloom) -> Nat:
-  match b:
+def force_bloom(rhs: Sstable.Bloom) -> Nat:
+  match rhs:
     case Sstable.Blm{bits, size}:
       Nat.add(size, BitTree.word_count(bits))
 
@@ -136,56 +136,56 @@ def run_case(+dir: String, +entries_per_run: Nat, +runs: Nat) -> IO(Unit):
     +fixture : List<&2, List<&2, MemTable.Entry>> <- IO.pure(List<&2, List<&2, MemTable.Entry>>, make_fixture(runs, entries_per_run))
     fixture_count : Nat <- IO.pure(Nat, Nat.mul(runs, entries_per_run))
     fixture_stop : Nat <- IO.now()
-    p0 : Unit <- print_phase(case_name, "fixture_construction_unmeasured", fixture_start, fixture_stop)
-    p1 : Unit <- IO.print("case=" ++ case_name ++ " fixture_entries=" ++ Nat.show(fixture_count))
+    _p0 : Unit <- print_phase(case_name, "fixture_construction_unmeasured", fixture_start, fixture_stop)
+    _p1 : Unit <- IO.print("case=" ++ case_name ++ " fixture_entries=" ++ Nat.show(fixture_count))
 
     merge_start : Nat <- IO.now()
     +merged : List<&2, MemTable.Entry> <- IO.pure(List<&2, MemTable.Entry>, SortedRun.merge_many_newest(fixture))
     merged_count : Nat <- IO.pure(Nat, List.length(&2, MemTable.Entry, merged))
     +merge_correct : Bool <- IO.pure(Bool, merged_ok(merged, entries_per_run, runs))
     merge_stop : Nat <- IO.now()
-    p2 : Unit <- print_phase(case_name, "run_merge", merge_start, merge_stop)
+    _p2 : Unit <- print_phase(case_name, "run_merge", merge_start, merge_stop)
 
     tombstone_start : Nat <- IO.now()
     +kept : List<&2, MemTable.Entry> <- IO.pure(List<&2, MemTable.Entry>, Compact.shadow_drop(merged, Nil{}))
     +kept_count : Nat <- IO.pure(Nat, List.length(&2, MemTable.Entry, kept))
     tombstone_stop : Nat <- IO.now()
-    p3 : Unit <- print_phase(case_name, "tombstone_processing", tombstone_start, tombstone_stop)
+    _p3 : Unit <- print_phase(case_name, "tombstone_processing", tombstone_start, tombstone_stop)
 
     bloom_start : Nat <- IO.now()
     bloom : Sstable.Bloom <- IO.pure(Sstable.Bloom, Sstable.bloom_of(kept, Sstable.bloom_new(Sstable.bloom_bits(1n, kept_count))))
     bloom_forced : Nat <- IO.pure(Nat, force_bloom(bloom))
     bloom_stop : Nat <- IO.now()
-    p4 : Unit <- print_phase(case_name, "bloom_construction", bloom_start, bloom_stop)
+    _p4 : Unit <- print_phase(case_name, "bloom_construction", bloom_start, bloom_stop)
 
     serialization_start : Nat <- IO.now()
     +serialized : String <- IO.pure(String, SstFile.serialize(kept, 1n))
     serialized_bytes : Nat <- IO.pure(Nat, String.length(serialized))
     +parse_correct : Bool <- IO.pure(Bool, parsed_ok(SstFile.parse(serialized), entries_per_run, runs))
     serialization_stop : Nat <- IO.now()
-    p5 : Unit <- print_phase(case_name, "serialization", serialization_start, serialization_stop)
+    _p5 : Unit <- print_phase(case_name, "serialization", serialization_start, serialization_stop)
 
     +filename : String <- IO.pure(String, "compaction-" ++ case_name ++ ".tbl")
     +tmp_path : String <- IO.pure(String, dir ++ "/" ++ filename ++ ".tmp")
     +final_path : String <- IO.pure(String, dir ++ "/" ++ filename)
     write_start : Nat <- IO.now()
-    w0 : Unit <- IO.try(Unit, Flush.write_file(tmp_path, serialized))
-    w1 : Unit <- IO.try(Unit, Fs.rename(tmp_path, final_path))
-    w2 : Unit <- IO.try(Unit, Fs.fsync(dir))
+    _w0 : Unit <- IO.try(Unit, Flush.write_file(tmp_path, serialized))
+    _w1 : Unit <- IO.try(Unit, Fs.rename(tmp_path, final_path))
+    _w2 : Unit <- IO.try(Unit, Fs.fsync(dir))
     write_stop : Nat <- IO.now()
-    p6 : Unit <- print_phase(case_name, "output_write", write_start, write_stop)
+    _p6 : Unit <- print_phase(case_name, "output_write", write_start, write_stop)
 
     +manifest : Manifest.Manifest <- IO.pure(Manifest.Manifest, Manifest.M{Con{Con{filename, Nil{}}, Nil{}}})
     +manifest_tmp : String <- IO.pure(String, dir ++ "/MANIFEST.tmp")
     +manifest_path : String <- IO.pure(String, dir ++ "/MANIFEST")
     publish_start : Nat <- IO.now()
-    m0 : Unit <- IO.try(Unit, Flush.write_file(manifest_tmp, Manifest.serialize(manifest)))
-    m1 : Unit <- IO.try(Unit, Fs.rename(manifest_tmp, manifest_path))
-    m2 : Unit <- IO.try(Unit, Fs.fsync(dir))
+    _m0 : Unit <- IO.try(Unit, Flush.write_file(manifest_tmp, Manifest.serialize(manifest)))
+    _m1 : Unit <- IO.try(Unit, Fs.rename(manifest_tmp, manifest_path))
+    _m2 : Unit <- IO.try(Unit, Fs.fsync(dir))
     publish_stop : Nat <- IO.now()
-    p7 : Unit <- print_phase(case_name, "manifest_publication", publish_start, publish_stop)
+    _p7 : Unit <- print_phase(case_name, "manifest_publication", publish_start, publish_stop)
     correctness : Bool <- IO.pure(Bool, bool_and(merge_correct, bool_and(Nat.is_eq(kept_count, entries_per_run), bool_and(parse_correct, bool_and(tombstone_ok(), odd_disjoint_ok())))))
-    p8 : Unit <- IO.print("case=" ++ case_name ++ " correctness=" ++ bool_text(correctness) ++ " newest_wins=" ++ bool_text(merge_correct) ++ " tombstone=" ++ bool_text(tombstone_ok()) ++ " odd_disjoint_runs=" ++ bool_text(odd_disjoint_ok()) ++ " output_parse=" ++ bool_text(parse_correct))
+    _p8 : Unit <- IO.print("case=" ++ case_name ++ " correctness=" ++ bool_text(correctness) ++ " newest_wins=" ++ bool_text(merge_correct) ++ " tombstone=" ++ bool_text(tombstone_ok()) ++ " odd_disjoint_runs=" ++ bool_text(odd_disjoint_ok()) ++ " output_parse=" ++ bool_text(parse_correct))
     IO.print("case=" ++ case_name ++ " status=complete merged_entries=" ++ Nat.show(merged_count) ++ " kept_entries=" ++ Nat.show(kept_count) ++ " bloom_force=" ++ Nat.show(bloom_forced) ++ " serialized_bytes=" ++ Nat.show(serialized_bytes))
 
 def main() -> IO(Unit):
@@ -194,8 +194,8 @@ def main() -> IO(Unit):
     dir_env : String <- IO.try(String, Console.get_env("MYLSM_BENCH_DIR"))
     +entries : Nat <- IO.pure(Nat, nat_default(Nat.read(entries_env), 4097n))
     +dir : String <- IO.pure(String, env_default(dir_env, ".mylsm-compaction-bench-data"))
-    h0 : Unit <- IO.print("benchmark=compaction bend_version=2.0.9 entries_per_run=" ++ Nat.show(entries))
-    h1 : Unit <- IO.print("output_directory=" ++ dir)
-    c1 : Unit <- run_case(dir, entries, 1n)
-    c4 : Unit <- run_case(dir, entries, 4n)
+    _h0 : Unit <- IO.print("benchmark=compaction bend_version=2.0.9 entries_per_run=" ++ Nat.show(entries))
+    _h1 : Unit <- IO.print("output_directory=" ++ dir)
+    _c1 : Unit <- run_case(dir, entries, 1n)
+    _c4 : Unit <- run_case(dir, entries, 4n)
     run_case(dir, entries, 5n)

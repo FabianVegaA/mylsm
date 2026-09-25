@@ -15,8 +15,8 @@ type Mode is Data:
   Current{decoder: V2.Decoder}
 
 
-def chunk_parse(p: Decimal.Parse) -> Result<&1, &1, U32 & String, Chunk>:
-  match p:
+def chunk_parse(pair: Decimal.Parse) -> Result<&1, &1, U32 & String, Chunk>:
+  match pair:
     case Decimal.Rejected{error}:
       Fail{(U32.from_nat(8n), "bad UTF-8 chunk envelope")}
     case Decimal.Accepted{Decimal.Dec{value, rest}}:
@@ -64,8 +64,10 @@ def finish_mode(mode: Mode) -> Result<&1, &1, U32 & String, Sstable.Table>:
 
 
 
-def stream_loop(fuel: Nat, +path: String, +offset: Nat, mode: Mode, pending: Maybe<&2, Chunk>) -> IO(Result<&1, &1, U32 & String, Sstable.Table>):
-  match fuel pending:
+# `chunks_left` is an 8 GiB safety cap with a loud exhaustion error
+# ("table exceeds streaming read limit"), never a silent truncation.
+def stream_loop(chunks_left: Nat, +path: String, +offset: Nat, mode: Mode, pending: Maybe<&2, Chunk>) -> IO(Result<&1, &1, U32 & String, Sstable.Table>):
+  match chunks_left pending:
     case 0n _:
       IO.pure(Result<&1, &1, U32 & String, Sstable.Table>, Fail{(U32.from_nat(7n), "table exceeds streaming read limit")})
     case 1n+rest None{}:

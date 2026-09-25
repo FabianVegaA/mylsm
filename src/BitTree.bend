@@ -55,8 +55,8 @@ def zero_tree(+height: Nat) -> WordTree:
       left right = zero_tree(h) zero_tree(h)
       Fork{left, right}
 
-def new_from_plan(words: Nat, p: Plan) -> BitTree:
-  match p:
+def new_from_plan(words: Nat, plan: Plan) -> BitTree:
+  match plan:
     case Plan{capacity, +height}:
       BT{zero_tree(height), words, capacity, height}
 
@@ -69,33 +69,33 @@ def new(+words: Nat) -> BitTree:
 
 # Metadata helpers intended to keep representation laws independent of field
 # layout.
-def word_count(t: BitTree) -> Nat:
-  match t:
+def word_count(tree: BitTree) -> Nat:
+  match tree:
     case BT{root, words, capacity, height}:
       words
 
-def capacity_words(t: BitTree) -> Nat:
-  match t:
+def capacity_words(tree: BitTree) -> Nat:
+  match tree:
     case BT{root, words, capacity, height}:
       capacity
 
-def tree_height(t: BitTree) -> Nat:
-  match t:
+def tree_height(tree: BitTree) -> Nat:
+  match tree:
     case BT{root, words, capacity, height}:
       height
 
-def bit_count(t: BitTree) -> Nat:
-  Nat.mul(word_count(t), 32n)
+def bit_count(tree: BitTree) -> Nat:
+  Nat.mul(word_count(tree), 32n)
 
-def valid_bit(t: BitTree, bit: Nat) -> Bool:
-  Nat.is_lt(bit, bit_count(t))
+def valid_bit(tree: BitTree, bit: Nat) -> Bool:
+  Nat.is_lt(bit, bit_count(tree))
 
-def same_metadata(+a: BitTree, +b: BitTree) -> Bool:
+def same_metadata(+ta: BitTree, +tb: BitTree) -> Bool:
   Bool.and(
-    Nat.is_eq(word_count(a), word_count(b)),
+    Nat.is_eq(word_count(ta), word_count(tb)),
     Bool.and(
-      Nat.is_eq(capacity_words(a), capacity_words(b)),
-      Nat.is_eq(tree_height(a), tree_height(b))))
+      Nat.is_eq(capacity_words(ta), capacity_words(tb)),
+      Nat.is_eq(tree_height(ta), tree_height(tb))))
 
 # Build the root-to-leaf path by consuming low bits while prepending them.
 def path_bit(rem: Nat) -> Bool:
@@ -146,57 +146,57 @@ def tree_set_word(path: List<&2, Bool>, value: U32, tree: WordTree) -> WordTree:
     case Con{True{}, rest} Fork{left, right}:
       Fork{left, tree_set_word(rest, value, right)}
 
-def word_at_if(inside: Bool, t: BitTree, index: Nat) -> U32:
+def word_at_if(inside: Bool, tree: BitTree, index: Nat) -> U32:
   match inside:
     case False{}:
       0
     case True{}:
-      match t:
+      match tree:
         case BT{root, words, capacity, height}:
           tree_word(index_path(height, index, Nil{}), root)
 
 # Safe logical-word lookup; padding leaves are not externally addressable.
-def word_at(+t: BitTree, +index: Nat) -> U32:
-  word_at_if(Nat.is_lt(index, word_count(t)), t, index)
+def word_at(+tree: BitTree, +index: Nat) -> U32:
+  word_at_if(Nat.is_lt(index, word_count(tree)), tree, index)
 
-def replace_word_if(inside: Bool, t: BitTree, index: Nat, value: U32) -> BitTree:
+def replace_word_if(inside: Bool, tree: BitTree, index: Nat, value: U32) -> BitTree:
   match inside:
     case False{}:
-      t
+      tree
     case True{}:
-      match t:
+      match tree:
         case BT{root, words, capacity, +height}:
           BT{tree_set_word(index_path(height, index, Nil{}), value, root), words, capacity, height}
 
 # Safe logical-word update. This helper makes metadata preservation and
 # unaffected-word laws direct to state.
-def replace_word(+t: BitTree, +index: Nat, value: U32) -> BitTree:
-  replace_word_if(Nat.is_lt(index, word_count(t)), t, index, value)
+def replace_word(+tree: BitTree, +index: Nat, value: U32) -> BitTree:
+  replace_word_if(Nat.is_lt(index, word_count(tree)), tree, index, value)
 
-def set_if(inside: Bool, +t: BitTree, +bit: Nat) -> BitTree:
+def set_if(inside: Bool, +tree: BitTree, +bit: Nat) -> BitTree:
   match inside:
     case False{}:
-      t
+      tree
     case True{}:
       +index = Nat.div(bit, 32n)
-      +old = word_at(t, index)
-      replace_word(t, index, BitWords.word_put(True{}, old, Nat.mod(bit, 32n)))
+      +old = word_at(tree, index)
+      replace_word(tree, index, BitWords.word_put(True{}, old, Nat.mod(bit, 32n)))
 
 # Set one logical bit. Out-of-range indexes leave the tree unchanged.
-def set(+t: BitTree, +bit: Nat) -> BitTree:
-  set_if(valid_bit(t, bit), t, bit)
+def set(+tree: BitTree, +bit: Nat) -> BitTree:
+  set_if(valid_bit(tree, bit), tree, bit)
 
-def test_if(inside: Bool, +t: BitTree, +bit: Nat) -> Bool:
+def test_if(inside: Bool, +tree: BitTree, +bit: Nat) -> Bool:
   match inside:
     case False{}:
       False{}
     case True{}:
-      BitWords.word_get(word_at(t, Nat.div(bit, 32n)), Nat.mod(bit, 32n))
+      BitWords.word_get(word_at(tree, Nat.div(bit, 32n)), Nat.mod(bit, 32n))
 
 # Test one logical bit. Out-of-range indexes, including every index in the
 # zero-word tree, return False{}.
-def test(+t: BitTree, +bit: Nat) -> Bool:
-  test_if(valid_bit(t, bit), t, bit)
+def test(+tree: BitTree, +bit: Nat) -> Bool:
+  test_if(valid_bit(tree, bit), tree, bit)
 
 # Structural checker for the exact perfect-tree shape described by metadata.
 # The two equal-sized subtrees are checked in parallel.
@@ -230,8 +230,8 @@ def nonempty_metadata_ok(root: WordTree, +words: Nat, +capacity: Nat, +height: N
 
 # Checks zero canonicality, logical bounds, power-of-two capacity, height, and
 # exact tree shape. It does not require padding words to remain zero.
-def well_formed(t: BitTree) -> Bool:
-  match t:
+def well_formed(tree: BitTree) -> Bool:
+  match tree:
     case BT{Empty{}, words, capacity, height}:
       empty_metadata_ok(words, capacity, height)
     case BT{root, words, capacity, height}:
