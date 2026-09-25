@@ -275,7 +275,61 @@ def bloom_size_stable(entries: List<&2, MemTable.Entry>, bits: BitTree.BitTree, 
         case MemTable.Entry{+key, val}:
           bloom_size_stable(t, bit_set(bhash_n(key, 17, size), bit_set(bhash_n(key, 257, size), bits)), size)
 
-def lookup(t: Table, +k: String) -> Maybe<&2, String>:
+# Block-scoped lookup. Checker constraints (proven by scratch experiments):
+# multi-scrutinee matches follow declaration order, and only Nat answers flow
+# through match arms — so selection returns an index, picked up by chunk_at_go.
+def pick_ix(bt: List<&2, String>, ct: List<&2, List<&2, MemTable.Entry>>, ix: Nat, +k: String, order: Cmp) -> Nat:
+  match bt ct order:
+    case _ _ GT{}:
+      ix
+    case Nil{} _ _:
+      ix
+    case _ Nil{} _:
+      ix
+    case Con{b2, bt2} Con{d2, ct2} LT{}:
+      pick_ix(bt2, ct2, Nat.add(ix, 1n), k, Keys.cmp(b2, k))
+    case Con{b2, bt2} Con{d2, ct2} EQ{}:
+      pick_ix(bt2, ct2, Nat.add(ix, 1n), k, Keys.cmp(b2, k))
+
+def chunk_at_go(fuel: Nat, +chunks: List<&2, List<&2, MemTable.Entry>>, ix: Nat) -> List<&2, MemTable.Entry>:
+  match fuel chunks:
+    case 0n _:
+      Nil{}
+    case 1n+f Nil{}:
+      Nil{}
+    case 1n+f Con{c, t}:
+      match ix:
+        case 0n:
+          c
+        case 1n+p:
+          chunk_at_go(f, t, p)
+
+def chunk_at(+chunks: List<&2, List<&2, MemTable.Entry>>, ix: Nat) -> List<&2, MemTable.Entry>:
+  chunk_at_go(List.length(&2, List<&2, MemTable.Entry>, chunks), chunks, ix)
+
+def block_scan(+chunk: List<&2, MemTable.Entry>, +k: String) -> Maybe<&2, String>:
+  MemTable.get(MemTable.MT{chunk}, k)
+
+def block_pick(+chunks: List<&2, List<&2, MemTable.Entry>>, +blocks: List<&2, String>, +k: String) -> List<&2, MemTable.Entry>:
+  match chunks blocks:
+    case Nil{} _:
+      Nil{}
+    case _ Nil{}:
+      Nil{}
+    case Con{c, ct} Con{b, bt}:
+      chunk_at(chunks, pick_ix(bt, ct, 0n, k, Keys.cmp(b, k)))
+
+def block_finish(picked: List<&2, MemTable.Entry>, +entries: List<&2, MemTable.Entry>, +k: String) -> Maybe<&2, String>:
+  match picked:
+    case Nil{}:
+      MemTable.get(MemTable.MT{entries}, k)
+    case Con{e, t}:
+      block_scan(Con{e, t}, k)
+
+def block_get(t: Table, +k: String) -> Maybe<&2, String>:
   match t:
     case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
-      MemTable.get(MemTable.MT{entries}, k)
+      block_finish(block_pick(chunks, blocks, k), entries, k)
+
+def lookup(t: Table, +k: String) -> Maybe<&2, String>:
+  block_get(t, k)

@@ -25,3 +25,11 @@ law sst_metadata_count:
 
 law sst_metadata_bounds:
   {(Sstable.table_smallest(Sstable.from_sorted_unique(Con{MemTable.Entry{"a", Some{"1"}}, Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}}, 1n)), Sstable.table_largest(Sstable.from_sorted_unique(Con{MemTable.Entry{"a", Some{"1"}}, Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}}, 1n))) == (Some{"a"}, Some{"b"}) : Maybe<&2, String> & Maybe<&2, String>}
+
+# LAW: block_get agrees with lookup on a hit (closed)
+law sstable_block_get_equiv:
+  {Sstable.block_get(Sstable.build(sst_e2(), 0n, 2n), "k") == Sstable.lookup(Sstable.build(sst_e2(), 0n, 2n), "k") : Maybe<&2, String>}
+
+# LAW: block_get misses cleanly (closed)
+law sstable_block_get_missing:
+  {Sstable.block_get(Sstable.build(sst_e2(), 0n, 2n), "zzz") == None{} : Maybe<&2, String>}
