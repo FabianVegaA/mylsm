@@ -27,8 +27,8 @@ def nat_default(value: Maybe<&2, Nat>) -> Nat:
     case None{}: 1n
     case Some{n}: n
 
-def repl_loop(fuel: Nat, state: Exec.LoopState) -> IO(Unit):
-  match fuel state:
+def repl_loop(commands: Nat, state: Exec.LoopState) -> IO(Unit):
+  match commands state:
     case 0n _:
       IO.print("session command limit reached")
     case 1n+rest Exec.Stopped{}:

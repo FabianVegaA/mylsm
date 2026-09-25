@@ -37,8 +37,8 @@ def fixture_key(+family: String, +batch: Nat, +index: Nat) -> String:
 def fixture_value(+family: String, +batch: Nat, +index: Nat) -> String:
   "value-" ++ family ++ "-" ++ Nat.show(batch) ++ "-" ++ Nat.show(index)
 
-def fixture_puts(fuel: Nat, +family: String, +batch: Nat, +index: Nat) -> List<&2, Wal.Mut>:
-  match fuel:
+def fixture_puts(count: Nat, +family: String, +batch: Nat, +index: Nat) -> List<&2, Wal.Mut>:
+  match count:
     case 0n:
       Nil{}
     case 1n+rest:
@@ -57,8 +57,8 @@ def optional_value_eq(got: Maybe<&2, String>, +expected: String) -> Bool:
     case None{}: True{}
     case Some{value}: String.eq(value, expected)
 
-def fixture_keys_ok(fuel: Nat, +family: String, +batch: Nat, +index: Nat, +db: Db.Db) -> Bool:
-  match fuel:
+def fixture_keys_ok(count: Nat, +family: String, +batch: Nat, +index: Nat, +db: Db.Db) -> Bool:
+  match count:
     case 0n:
       True{}
     case 1n+rest:
@@ -66,8 +66,8 @@ def fixture_keys_ok(fuel: Nat, +family: String, +batch: Nat, +index: Nat, +db: D
         maybe_value_eq(Db.db_get(db, fixture_key(family, batch, index)), fixture_value(family, batch, index)),
         fixture_keys_ok(rest, family, batch, Nat.add(index, 1n), db))
 
-def compact_keys_ok(fuel: Nat, +batch: Nat, +db: Db.Db) -> Bool:
-  match fuel:
+def compact_keys_ok(count: Nat, +batch: Nat, +db: Db.Db) -> Bool:
+  match count:
     case 0n:
       True{}
     case 1n+rest:
@@ -175,8 +175,8 @@ def prepare_flush(+dir: String) -> IO(Unit):
     db1 : Db.Db <- IO.try(Db.Db, Db.db_write(db0, Wal.Batch{fixture_puts(4n, "flush", 0n, 0n)}))
     IO.print("worker_mode=prepare case=flush status=complete acknowledged_keys=4")
 
-def prepare_compact_tables(fuel: Nat, +batch: Nat, db: Db.Db) -> IO(Db.Db):
-  match fuel:
+def prepare_compact_tables(count: Nat, +batch: Nat, db: Db.Db) -> IO(Db.Db):
+  match count:
     case 0n:
       IO.pure(Db.Db, db)
     case 1n+rest:
