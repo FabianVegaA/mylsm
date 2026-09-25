@@ -148,6 +148,13 @@ default cap 1). Datasets fit in RAM: not yet publication-grade comparisons.
   20,485 in 2,278 ms (8,992.54 ops/s). Eliminating the per-write
   `List.length` walks (stored `mem_count`/`frozen_count` in `Db`,
   `RotRes`-threaded rotation) accounts for the step from 2,943.03.
+- Robust 1M median (`bench/workload/million_writes.sh`, Darwin arm64,
+  12 logical CPUs, Bend 2.0.27, ~40% free disk, machine under interactive
+  load, `feature/phase2-hardening`): six runs at 3,847.19 / 3,973.62 /
+  4,016.82 / 4,104.05 / 4,125.21 / 4,153.39 ops/s, median **4,060.44 ops/s**
+  (spread ±3.8% — stable under load). Ratio vs the pre-phase-3 single run
+  (1,628.34): ~2.49x. All runs: samples pass, pre/post recovery identical,
+  shape 454/0/2/1, `level_shape=pass`.
 - Anomaly for follow-up: recovery time is nearly flat across dataset sizes
   (9.8 s at 4,096 writes, 13.8 s at 20,485, 16.0 s at 1M) while table bytes
   grow 0 → 29 MB, pointing at fixed open-path overhead rather than
