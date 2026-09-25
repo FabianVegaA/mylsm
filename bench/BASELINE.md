@@ -137,6 +137,12 @@ default cap 1). Datasets fit in RAM: not yet publication-grade comparisons.
   `bench/million_writes.sh`): 614,122 ms (1,628.34 ops/s). Same-machine,
   same-disk, same-dataset direction, but single runs each — record two more
   before claiming the ratio.
+- Phase-3 1M median (`bench/million_writes.sh`, Darwin arm64, 12 logical
+  CPUs, Bend 2.0.27, ~42% free disk, machine under interactive load 3.8–5.2):
+  four runs at 3,021.87 / 2,936.32 / 2,935.61 / 2,949.74 ops/s, median
+  **2,943.03 ops/s** (spread ±1.5% — the workload is throughput-stable under
+  load). Ratio vs the pre-phase-3 single run: ~1.81x. All runs: samples pass,
+  pre/post recovery identical, `level_shape=pass`.
 - Anomaly for follow-up: recovery time is nearly flat across dataset sizes
   (9.8 s at 4,096 writes, 13.8 s at 20,485, 16.0 s at 1M) while table bytes
   grow 0 → 29 MB, pointing at fixed open-path overhead rather than
