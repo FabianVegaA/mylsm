@@ -9,3 +9,5 @@ function chmod(path, bits) {
     return io_fail(Math.abs(e.errno ?? 5));
   }
 }
+
+io_eff(CID(chmod), chmod);

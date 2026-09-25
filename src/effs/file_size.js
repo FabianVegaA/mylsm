@@ -9,3 +9,5 @@ function file_size(path) {
     return io_fail(Math.abs(e.errno ?? 5));
   }
 }
+
+io_eff(CID(file_size), file_size);

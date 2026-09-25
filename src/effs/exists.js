@@ -12,3 +12,5 @@ function exists(path) {
     return io_fail(Math.abs(e.errno ?? 5));
   }
 }
+
+io_eff(CID(exists), exists);

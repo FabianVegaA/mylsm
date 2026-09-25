@@ -67,7 +67,7 @@ has_gpu() {
 }
 
 bend_version() {
-  bend --version 2>/dev/null | sed -n '1p'
+  bend version 2>/dev/null | sed -n '1p'
 }
 
 native_build() {

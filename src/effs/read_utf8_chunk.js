@@ -31,3 +31,5 @@ function read_utf8_chunk(path, offset, requested) {
     if (fd !== undefined) fs.closeSync(fd);
   }
 }
+
+io_eff(CID(read_utf8_chunk), read_utf8_chunk);

@@ -18,7 +18,7 @@ Term stop_run(Env e, Term* f, IoWork* w) {
   if (kill(getpid(), SIGSTOP) != 0) {
     return io_fail(e, errno, NULL);
   }
-  return io_done(e, term_pak(CID_UNIT, 0));
+  return io_done(e, term_pak(CID(Unit), 0));
 #else
   free(name);
   return io_fail(e, ENOTSUP, NULL);
@@ -26,5 +26,5 @@ Term stop_run(Env e, Term* f, IoWork* w) {
 }
 
 static void __attribute__((constructor)) stop_use(void) {
-  io_eff(CID_STOP, stop_run, 0);
+  io_eff(CID(stop), stop_run, 0);
 }

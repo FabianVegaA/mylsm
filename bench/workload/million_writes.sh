@@ -85,7 +85,7 @@ COMMIT=$(git -C "$ROOT" rev-parse HEAD)
 if [[ -n $(git -C "$ROOT" --no-optional-locks status --short) ]]; then DIRTY=true; else DIRTY=false; fi
 
 echo "benchmark=million_writes"
-echo "bend_version=$(bend --version)"
+echo "bend_version=$(bend version)"
 echo "os=$(uname -s) architecture=$(uname -m) logical_cpus=$THREADS"
 echo "git_commit=$COMMIT git_dirty=$DIRTY"
 echo "disk_total_kib=$DISK_TOTAL disk_available_kib=$DISK_AVAILABLE disk_free_percent=$FREE_PERCENT"

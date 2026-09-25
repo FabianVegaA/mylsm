@@ -1,5 +1,6 @@
 When working with Bend:
 
+- Always use the latest Bend release (`bend update`); record it in `tools/toolchain.json` and revalidate gates on every toolchain bump.
 - Run `bend guide` to learn or refresh Bend syntax and proof conventions.
 - Keep formal laws in `laws/*.bend`, grouped by domain.
 - Keep witnesses in the matching `proofs/*Proof.bend` module. Each proof module must import its law module as `Laws` and only the dependencies its witnesses require.

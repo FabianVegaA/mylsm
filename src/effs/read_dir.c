@@ -29,7 +29,7 @@ Term read_dir_count_run(Env e, Term* f, IoWork* w) {
 }
 
 static void __attribute__((constructor)) read_dir_count_use(void) {
-  io_eff(CID_READ_DIR_COUNT, read_dir_count_run, 0);
+  io_eff(CID(read_dir_count), read_dir_count_run, 0);
 }
 
 Term read_dir_at_run(Env e, Term* f, IoWork* w) {
@@ -57,5 +57,5 @@ Term read_dir_at_run(Env e, Term* f, IoWork* w) {
 }
 
 static void __attribute__((constructor)) read_dir_at_use(void) {
-  io_eff(CID_READ_DIR_AT, read_dir_at_run, 0);
+  io_eff(CID(read_dir_at), read_dir_at_run, 0);
 }

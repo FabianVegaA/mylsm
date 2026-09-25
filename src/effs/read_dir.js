@@ -22,3 +22,6 @@ function read_dir_at(path, i) {
     return io_fail(Math.abs(e.errno ?? 5));
   }
 }
+
+io_eff(CID(read_dir_count), read_dir_count);
+io_eff(CID(read_dir_at), read_dir_at);

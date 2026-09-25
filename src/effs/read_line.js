@@ -21,3 +21,5 @@ function read_line() {
     return io_fail(Math.abs(e.errno ?? 5));
   }
 }
+
+io_eff(CID(read_line), read_line);

@@ -86,7 +86,7 @@ exec > >(tee "$RESULT") 2>&1
 
 COMMIT=$(git -C "$ROOT" rev-parse HEAD)
 if [[ -n $(git -C "$ROOT" --no-optional-locks status --short) ]]; then DIRTY=true; else DIRTY=false; fi
-BEND_VERSION=$(bend --version)
+BEND_VERSION=$(bend version)
 OS_NAME=$(uname -s)
 ARCH=$(uname -m)
 

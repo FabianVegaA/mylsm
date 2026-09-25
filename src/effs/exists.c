@@ -12,14 +12,14 @@ Term exists_run(Env e, Term* f, IoWork* w) {
   free(path);
   (void)w;
   if (rc == 0) {
-    return io_done(e, term_pak(CID_TRUE, 0));
+    return io_done(e, term_pak(CID(True), 0));
   }
   if (err == ENOENT) {
-    return io_done(e, term_pak(CID_FALSE, 0));
+    return io_done(e, term_pak(CID(False), 0));
   }
   return io_fail(e, err, NULL);
 }
 
 static void __attribute__((constructor)) exists_use(void) {
-  io_eff(CID_EXISTS, exists_run, 0);
+  io_eff(CID(exists), exists_run, 0);
 }

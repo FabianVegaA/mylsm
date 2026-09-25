@@ -63,5 +63,5 @@ Term read_utf8_chunk_run(Env e, Term* f, IoWork* w) {
 }
 
 static void __attribute__((constructor)) read_utf8_chunk_use(void) {
-  io_eff(CID_READ_UTF8_CHUNK, read_utf8_chunk_run, 0);
+  io_eff(CID(read_utf8_chunk), read_utf8_chunk_run, 0);
 }

@@ -12,7 +12,7 @@ static void fsync_call(IoWork* w) {
 
 static Term fsync_pack(Env e, IoWork* w) {
   Term r = w->code != 0 ? io_fail(e, w->code, NULL)
-    : io_done(e, term_pak(CID_UNIT, 0));
+    : io_done(e, term_pak(CID(Unit), 0));
   free(w->data);
   return r;
 }
@@ -23,5 +23,5 @@ Term fsync_run(Env e, Term* f, IoWork* w) {
 }
 
 static void __attribute__((constructor)) fsync_use(void) {
-  io_eff(CID_FSYNC, fsync_run, 0);
+  io_eff(CID(fsync), fsync_run, 0);
 }

@@ -11,9 +11,9 @@ Term chmod_run(Env e, Term* f, IoWork* w) {
   int err = errno;
   free(path);
   (void)w;
-  return rc == 0 ? io_done(e, term_pak(CID_UNIT, 0)) : io_fail(e, err, NULL);
+  return rc == 0 ? io_done(e, term_pak(CID(Unit), 0)) : io_fail(e, err, NULL);
 }
 
 static void __attribute__((constructor)) chmod_use(void) {
-  io_eff(CID_CHMOD, chmod_run, 0);
+  io_eff(CID(chmod), chmod_run, 0);
 }

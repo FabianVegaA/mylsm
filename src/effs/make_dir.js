@@ -9,3 +9,5 @@ function make_dir(path) {
     return io_fail(Math.abs(e.errno ?? 5));
   }
 }
+
+io_eff(CID(make_dir), make_dir);

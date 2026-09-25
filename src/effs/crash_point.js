@@ -23,3 +23,5 @@ function stop(name) {
     return io_fail(Math.abs(error.errno ?? 5));
   }
 }
+
+io_eff(CID(stop), stop);
