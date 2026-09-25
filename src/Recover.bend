@@ -131,7 +131,7 @@ def replay_mem_go(fuel: Nat, +mem: MemTable.MemTable, +s: String) -> MemTable.Me
 def replay_mem(+s: String) -> MemTable.MemTable:
   replay_mem_go(Nat.add(String.length(s), 1n), MemTable.empty(), s)
 
-def valid_add(+mlen: Maybe<&2, Nat>, +s: String, +acc: Nat) -> Nat:
+def valid_add(+mlen: Maybe<&2, Nat>, +acc: Nat) -> Nat:
   match mlen:
     case None{}:
       acc
@@ -144,7 +144,7 @@ def replay_valid_go(fuel: Nat, +acc: Nat, +s: String) -> Nat:
       acc
     case 1n+g:
       +fl = frame_len(s)
-      replay_valid_go(g, valid_add(fl, s, acc), drop_after(fl, s))
+      replay_valid_go(g, valid_add(fl, acc), drop_after(fl, s))
 
 def replay_valid(+s: String) -> Nat:
   replay_valid_go(Nat.add(String.length(s), 1n), 0n, s)
@@ -163,7 +163,7 @@ def shape_mid(a: Bool, b: Bool, c: Bool) -> Bool:
 
 # Table generations are compact decimal only. Unparsable middles are invalid
 # (no unary-dash legacy reads: no retrocompat).
-def gen_valid_read(parsed: Maybe<&2, Nat>, +middle: String) -> Bool:
+def gen_valid_read(parsed: Maybe<&2, Nat>) -> Bool:
   match parsed:
     case Some{n}:
       True{}
@@ -171,7 +171,7 @@ def gen_valid_read(parsed: Maybe<&2, Nat>, +middle: String) -> Bool:
       False{}
 
 def gen_valid(+middle: String) -> Bool:
-  gen_valid_read(Nat.read(middle), middle)
+  gen_valid_read(Nat.read(middle))
 
 def ov_ok(+big: Bool, +name: String, +ln: Nat) -> Bool:
   match big:
@@ -197,7 +197,7 @@ def name_shape_level(+name: String, +level: Nat) -> Bool:
   +ln = String.length(name)
   level_name_ok(Nat.is_le(Nat.add(prefix_len, 4n), ln), name, ln, prefix, prefix_len)
 
-def gen_value_read(parsed: Maybe<&2, Nat>, +middle: String) -> Nat:
+def gen_value_read(parsed: Maybe<&2, Nat>) -> Nat:
   match parsed:
     case Some{n}:
       n
@@ -205,7 +205,7 @@ def gen_value_read(parsed: Maybe<&2, Nat>, +middle: String) -> Nat:
       0n
 
 def gen_value(+middle: String) -> Nat:
-  gen_value_read(Nat.read(middle), middle)
+  gen_value_read(Nat.read(middle))
 
 def name_gen(+name: String) -> Nat:
   +ln = String.length(name)
@@ -346,14 +346,14 @@ def mem_tail_snd(+s: String, +dir: String) -> IO(Result<&1, &1, U32 & String, Me
   +valid = replay_valid(s)
   +ln = String.length(s)
   do IO<Result<&1, &1, U32 & String, MemTable.MemTable>>:
-    u : Unit <- IO.try(Unit, trunc_go(Nat.is_lt(valid, ln), dir, String.take(s, valid)))
+    _u : Unit <- IO.try(Unit, trunc_go(Nat.is_lt(valid, ln), dir, String.take(s, valid)))
     return Done{replay_mem(s)}
 
 def mem_tail_fst(fr: (File & Result<&1, &1, U32 & String, String>), +dir: String) -> IO(Result<&1, &1, U32 & String, MemTable.MemTable>):
   match fr:
     case (f3, r1):
       do IO<Result<&1, &1, U32 & String, MemTable.MemTable>>:
-        cls : Unit <- File.close(f3)
+        _cls : Unit <- File.close(f3)
         s : String <- IO.try(String, IO.pure(Result<&1, &1, U32 & String, String>, r1))
         mem_tail_snd(s, dir)
 
@@ -412,7 +412,7 @@ def sweep_one(r: Result<&1, &1, U32 & String, List<String>>, +dir: String) -> IO
       IO.pure(Unit, Unit{})
     case Done{ns}:
       do IO<Unit>:
-        ign : Result<&1, &1, U32 & String, Unit> <- Compact.remove_list(Compact.prefix(tmp_names(ns), dir))
+        _ign : Result<&1, &1, U32 & String, Unit> <- Compact.remove_list(Compact.prefix(tmp_names(ns), dir))
         IO.pure(Unit, Unit{})
 
 def sweep_get(+dir: String, +sub: String) -> IO(Unit):
@@ -479,12 +479,12 @@ def sweep_root(+dir: String) -> IO(Unit):
 
 def open_db(+dir: String) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
-    u0 : Unit <- IO.try(Unit, Flush.ensure_dir(dir))
-    s0 : Unit <- sweep_dir(dir, "l0")
-    s1 : Unit <- sweep_dir(dir, "l1")
-    s2 : Unit <- sweep_dir(dir, "l2")
-    s3 : Unit <- sweep_dir(dir, "l3")
-    s4 : Unit <- sweep_root(dir)
+    _u0 : Unit <- IO.try(Unit, Flush.ensure_dir(dir))
+    _s0 : Unit <- sweep_dir(dir, "l0")
+    _s1 : Unit <- sweep_dir(dir, "l1")
+    _s2 : Unit <- sweep_dir(dir, "l2")
+    _s3 : Unit <- sweep_dir(dir, "l3")
+    _s4 : Unit <- sweep_root(dir)
     +m : Manifest.Manifest <- IO.try(Manifest.Manifest, Flush.load_mfst(dir ++ "/MANIFEST"))
     open_names_go(manifest_names_ok(mfst_lists(m), 0n), dir, m)
 

@@ -174,7 +174,7 @@ def filter_neg(+rest: List<&2, Sstable.Table>, +lo: Maybe<&2, String>, +hi: Mayb
 
 # The production policy is conservative: every winning tombstone is retained
 # regardless of the lower-level shadow list.
-def drop_none(+k: String, +shadow: List<&2, MemTable.Entry>, +acc: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
+def drop_none(+k: String, +_shadow: List<&2, MemTable.Entry>, +acc: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
   Con{MemTable.Entry{k, None{}}, acc}
 
 def drop_go(fuel: Nat, +shadow: List<&2, MemTable.Entry>, +acc: List<&2, MemTable.Entry>, xs: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
@@ -417,17 +417,17 @@ def remove_list(names: List<&2, String>) -> IO(Result<&1, &1, U32 & String, Unit
       IO.pure(Result<&1, &1, U32 & String, Unit>, Done{Unit{}})
     case Con{n, t}:
       do IO<Result<&1, &1, U32 & String, Unit>>:
-        rm : Result<&1, &1, U32 & String, Unit> <- Fs.remove(n)
+        _rm : Result<&1, &1, U32 & String, Unit> <- Fs.remove(n)
         remove_list(t)
 
 def compact_goB(+dir: String, +mpath: String, +mtmp: String, +m2: Manifest.Manifest, +dels: List<&2, String>, +mem: MemTable.MemTable, +levels2: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, Db.BEntry>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
-    v1 : Unit <- IO.try(Unit, Flush.write_file(mtmp, Manifest.serialize(m2)))
-    cp1 : Unit <- IO.try(Unit, CrashPoint.hit("compact.manifest_synced"))
-    v2 : Unit <- IO.try(Unit, Fs.rename(mtmp, mpath))
-    v3 : Unit <- IO.try(Unit, Fs.fsync(dir))
-    cp2 : Unit <- IO.try(Unit, CrashPoint.hit("compact.manifest_published"))
-    ign : Result<&1, &1, U32 & String, Unit> <- remove_list(dels)
+    _v1 : Unit <- IO.try(Unit, Flush.write_file(mtmp, Manifest.serialize(m2)))
+    _cp1 : Unit <- IO.try(Unit, CrashPoint.hit("compact.manifest_synced"))
+    _v2 : Unit <- IO.try(Unit, Fs.rename(mtmp, mpath))
+    _v3 : Unit <- IO.try(Unit, Fs.fsync(dir))
+    _cp2 : Unit <- IO.try(Unit, CrashPoint.hit("compact.manifest_published"))
+    _ign : Result<&1, &1, U32 & String, Unit> <- remove_list(dels)
     return Done{Db.Db{dir, mem, frozen, batch_cap, bcache, levels2, Nat.add(flushed, 1n), Manifest.serialize(m2)}}
 
 def prefix_go(names: List<&2, String>, +dir: String, +acc: List<&2, String>) -> List<&2, String>:
@@ -449,12 +449,12 @@ def drift_go(ok: Bool, +dir: String, +mpath: String, +mtmp: String, +m: Manifest
 
 def compact_goA(+dir: String, +l1dir: String, +tmp: String, +final: String, +mpath: String, +mtmp: String, +content: String, +outname: String, +mem: MemTable.MemTable, +levels2: List<&2, List<&2, Sstable.Table>>, +oldl1: List<&2, Sstable.Table>, +remt: List<&2, Sstable.Table>, +flushed: Nat, +manifest_token: String, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, Db.BEntry>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
-    u1 : Unit <- IO.try(Unit, Flush.ensure_dir(l1dir))
-    u2 : Unit <- IO.try(Unit, Flush.write_file(tmp, content))
-    cp1 : Unit <- IO.try(Unit, CrashPoint.hit("compact.output_synced"))
-    u3 : Unit <- IO.try(Unit, Fs.rename(tmp, final))
-    u4 : Unit <- IO.try(Unit, Fs.fsync(l1dir))
-    cp2 : Unit <- IO.try(Unit, CrashPoint.hit("compact.output_published"))
+    _u1 : Unit <- IO.try(Unit, Flush.ensure_dir(l1dir))
+    _u2 : Unit <- IO.try(Unit, Flush.write_file(tmp, content))
+    _cp1 : Unit <- IO.try(Unit, CrashPoint.hit("compact.output_synced"))
+    _u3 : Unit <- IO.try(Unit, Fs.rename(tmp, final))
+    _u4 : Unit <- IO.try(Unit, Fs.fsync(l1dir))
+    _cp2 : Unit <- IO.try(Unit, CrashPoint.hit("compact.output_published"))
     +m : Manifest.Manifest <- IO.try(Manifest.Manifest, Flush.load_mfst(mpath))
     drift_go(String.eq(Manifest.serialize(m), manifest_token), dir, mpath, mtmp, m, oldl1, remt, outname, mem, levels2, flushed, frozen, batch_cap, bcache)
 

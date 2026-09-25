@@ -69,7 +69,7 @@ def parse_no_args(tokens: List<&2, String>, command: Repl.Command, usage: String
     case Con{_, _}:
       Repl.Invalid{usage}
 
-def parse_timing_once(mode: String, once: Bool) -> Repl.Command:
+def parse_timing_once(once: Bool) -> Repl.Command:
   match once:
     case True{}:
       Repl.Timing{Repl.TimingOnce{}}
@@ -81,7 +81,7 @@ def parse_timing_off(+mode: String, off: Bool) -> Repl.Command:
     case True{}:
       Repl.Timing{Repl.TimingOff{}}
     case False{}:
-      parse_timing_once(mode, String.eq(mode, "once"))
+      parse_timing_once(String.eq(mode, "once"))
 
 def parse_timing_on(+mode: String, on: Bool) -> Repl.Command:
   match on:
@@ -97,7 +97,7 @@ def parse_timing(tokens: List<&2, String>) -> Repl.Command:
     case _:
       Repl.Invalid{"usage: timing <on|off|once>"}
 
-def parse_mode_auto(mode: String, auto: Bool) -> Repl.Command:
+def parse_mode_auto(auto: Bool) -> Repl.Command:
   match auto:
     case True{}:
       Repl.Mode{Repl.Auto{}}
@@ -109,7 +109,7 @@ def parse_mode_gpu(+mode: String, gpu: Bool) -> Repl.Command:
     case True{}:
       Repl.Mode{Repl.Gpu{}}
     case False{}:
-      parse_mode_auto(mode, String.eq(mode, "auto"))
+      parse_mode_auto(String.eq(mode, "auto"))
 
 def parse_mode_cpu(+mode: String, cpu: Bool) -> Repl.Command:
   match cpu:

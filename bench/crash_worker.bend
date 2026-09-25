@@ -150,29 +150,29 @@ def case_keys_ok(+case_name: String, +trigger_policy: String, +db: Db.Db) -> Boo
 
 def verify_open(+case_name: String, +trigger_policy: String, +expected_l0: Nat, +expected_l1: Nat, +reopen: Nat, +db: Db.Db) -> IO(Unit):
   do IO<Unit>:
-    k : Unit <- require(case_keys_ok(case_name, trigger_policy, db), "acknowledged key/value verification failed")
-    s0 : Unit <- require(Nat.is_eq(level_count(db, 0n), expected_l0), "unexpected L0 shape")
-    s1 : Unit <- require(Nat.is_eq(level_count(db, 1n), expected_l1), "unexpected L1 shape")
+    _k : Unit <- require(case_keys_ok(case_name, trigger_policy, db), "acknowledged key/value verification failed")
+    _s0 : Unit <- require(Nat.is_eq(level_count(db, 0n), expected_l0), "unexpected L0 shape")
+    _s1 : Unit <- require(Nat.is_eq(level_count(db, 1n), expected_l1), "unexpected L1 shape")
     IO.print("worker_mode=verify case=" ++ case_name ++ " reopen=" ++ Nat.show(reopen) ++ " keys=pass level_shape=pass referenced_data=pass")
 
 def verify_twice(+dir: String, +case_name: String, +trigger_policy: String, +expected_l0: Nat, +expected_l1: Nat) -> IO(Unit):
   do IO<Unit>:
     db1 : Db.Db <- IO.try(Db.Db, Recover.open_db(dir))
-    v1 : Unit <- verify_open(case_name, trigger_policy, expected_l0, expected_l1, 1n, db1)
+    _v1 : Unit <- verify_open(case_name, trigger_policy, expected_l0, expected_l1, 1n, db1)
     db2 : Db.Db <- IO.try(Db.Db, Recover.open_db(dir))
-    v2 : Unit <- verify_open(case_name, trigger_policy, expected_l0, expected_l1, 2n, db2)
+    _v2 : Unit <- verify_open(case_name, trigger_policy, expected_l0, expected_l1, 2n, db2)
     IO.print("worker_mode=verify case=" ++ case_name ++ " status=complete reopen_stability=pass")
 
 def prepare_wal(+dir: String) -> IO(Unit):
   do IO<Unit>:
     db0 : Db.Db <- IO.try(Db.Db, Recover.open_db(dir))
-    db1 : Db.Db <- IO.try(Db.Db, Db.db_write(db0, Wal.Batch{fixture_puts(3n, "wal-base", 0n, 0n)}))
+    _db1 : Db.Db <- IO.try(Db.Db, Db.db_write(db0, Wal.Batch{fixture_puts(3n, "wal-base", 0n, 0n)}))
     IO.print("worker_mode=prepare case=wal status=complete acknowledged_keys=3")
 
 def prepare_flush(+dir: String) -> IO(Unit):
   do IO<Unit>:
     db0 : Db.Db <- IO.try(Db.Db, Recover.open_db(dir))
-    db1 : Db.Db <- IO.try(Db.Db, Db.db_write(db0, Wal.Batch{fixture_puts(4n, "flush", 0n, 0n)}))
+    _db1 : Db.Db <- IO.try(Db.Db, Db.db_write(db0, Wal.Batch{fixture_puts(4n, "flush", 0n, 0n)}))
     IO.print("worker_mode=prepare case=flush status=complete acknowledged_keys=4")
 
 def prepare_compact_tables(count: Nat, +batch: Nat, db: Db.Db) -> IO(Db.Db):
@@ -188,28 +188,28 @@ def prepare_compact_tables(count: Nat, +batch: Nat, db: Db.Db) -> IO(Db.Db):
 def prepare_compact(+dir: String) -> IO(Unit):
   do IO<Unit>:
     db0 : Db.Db <- IO.try(Db.Db, Recover.open_db(dir))
-    db5 : Db.Db <- prepare_compact_tables(5n, 0n, db0)
+    _db5 : Db.Db <- prepare_compact_tables(5n, 0n, db0)
     IO.print("worker_mode=prepare case=compact status=complete acknowledged_keys=15")
 
 def run_wal(+dir: String) -> IO(Unit):
   do IO<Unit>:
     db0 : Db.Db <- IO.try(Db.Db, Recover.open_db(dir))
-    armed : Unit <- IO.print("worker_mode=run case=wal status=armed")
-    db1 : Db.Db <- IO.try(Db.Db, Db.db_write(db0, Wal.Batch{Con{Wal.Put{"wal-trigger", "wal-trigger-value"}, Nil{}}}))
+    _armed : Unit <- IO.print("worker_mode=run case=wal status=armed")
+    _db1 : Db.Db <- IO.try(Db.Db, Db.db_write(db0, Wal.Batch{Con{Wal.Put{"wal-trigger", "wal-trigger-value"}, Nil{}}}))
     IO.print("worker_mode=run case=wal status=complete")
 
 def run_flush(+dir: String) -> IO(Unit):
   do IO<Unit>:
     db0 : Db.Db <- IO.try(Db.Db, Recover.open_db(dir))
-    armed : Unit <- IO.print("worker_mode=run case=flush status=armed")
-    db1 : Db.Db <- IO.try(Db.Db, Flush.flush(db0))
+    _armed : Unit <- IO.print("worker_mode=run case=flush status=armed")
+    _db1 : Db.Db <- IO.try(Db.Db, Flush.flush(db0))
     IO.print("worker_mode=run case=flush status=complete")
 
 def run_compact(+dir: String) -> IO(Unit):
   do IO<Unit>:
     db0 : Db.Db <- IO.try(Db.Db, Recover.open_db(dir))
-    armed : Unit <- IO.print("worker_mode=run case=compact status=armed")
-    db1 : Db.Db <- IO.try(Db.Db, Compact.compact(db0))
+    _armed : Unit <- IO.print("worker_mode=run case=compact status=armed")
+    _db1 : Db.Db <- IO.try(Db.Db, Compact.compact(db0))
     IO.print("worker_mode=run case=compact status=complete")
 
 def prepare_compact_dec(compact: Bool, +dir: String) -> IO(Unit):
@@ -269,8 +269,8 @@ def nat_or_die(value: Maybe<&2, Nat>, +name: String) -> IO(Nat):
 
 def verify_dispatch(+case_name: String, +dir: String, +trigger_policy: String, +l0_env: String, +l1_env: String) -> IO(Unit):
   do IO<Unit>:
-    valid_case : Unit <- require_config(case_valid(case_name), "unknown crash case")
-    valid_trigger : Unit <- require_config(trigger_policy_valid(trigger_policy), "invalid trigger policy")
+    _valid_case : Unit <- require_config(case_valid(case_name), "unknown crash case")
+    _valid_trigger : Unit <- require_config(trigger_policy_valid(trigger_policy), "invalid trigger policy")
     expected_l0 : Nat <- nat_or_die(Nat.read(l0_env), "MYLSM_EXPECT_L0")
     expected_l1 : Nat <- nat_or_die(Nat.read(l1_env), "MYLSM_EXPECT_L1")
     verify_twice(dir, case_name, trigger_policy, expected_l0, expected_l1)

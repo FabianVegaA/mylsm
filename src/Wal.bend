@@ -336,5 +336,5 @@ def dkeyspan(key: String, +kacc0: String, tail: String, muts0: List<&2, Mut>, ta
 # Closed round-trip vectors in laws/Wal.bend + Task-12 fuzz cover correctness.)
 
 # Total-parser witness used by the hardening law.
-def is_decided(+m: Maybe<&2, Batch>) -> Bool:
+def is_decided(+_m: Maybe<&2, Batch>) -> Bool:
   True{}

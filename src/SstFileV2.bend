@@ -300,7 +300,7 @@ def count_transition(count: Nat, previous: Maybe<&2, String>, entries: List<&2, 
     case 1n++rest:
       decoder_next(ReadTag{}, 1n+rest, previous, entries, level, 1n+rest, body_rev, consumed)
 
-def ordered_entry(entry: MemTable.Entry, remaining: Nat, previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>, level: Nat, declared: Nat, body_rev: String, consumed: Nat) -> Decoder:
+def ordered_entry(entry: MemTable.Entry, remaining: Nat, entries: List<&2, MemTable.Entry>, level: Nat, declared: Nat, body_rev: String, consumed: Nat) -> Decoder:
   match entry:
     case MemTable.Entry{+key, +val}:
       match remaining:
@@ -313,10 +313,10 @@ def ordered_entry(entry: MemTable.Entry, remaining: Nat, previous: Maybe<&2, Str
             case 1n+more:
               decoder_next(ReadTag{}, 1n+more, Some{key}, Con{MemTable.Entry{key, val}, entries}, level, declared, body_rev, consumed)
 
-def order_decision(cmp: Cmp, entry: MemTable.Entry, remaining: Nat, previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>, level: Nat, declared: Nat, body_rev: String, consumed: Nat) -> Decoder:
+def order_decision(cmp: Cmp, entry: MemTable.Entry, remaining: Nat, entries: List<&2, MemTable.Entry>, level: Nat, declared: Nat, body_rev: String, consumed: Nat) -> Decoder:
   match cmp:
     case LT{}:
-      ordered_entry(entry, remaining, previous, entries, level, declared, body_rev, consumed)
+      ordered_entry(entry, remaining, entries, level, declared, body_rev, consumed)
     case _:
       DecoderRejected{UnsortedOrDuplicate{}}
 
@@ -325,9 +325,9 @@ def entry_transition(+entry: MemTable.Entry, remaining: Nat, previous: Maybe<&2,
     case MemTable.Entry{+key, +val}:
       match previous:
         case None{}:
-          ordered_entry(MemTable.Entry{key, val}, remaining, None{}, entries, level, declared, body_rev, consumed)
+          ordered_entry(MemTable.Entry{key, val}, remaining, entries, level, declared, body_rev, consumed)
         case Some{+old}:
-          order_decision(Keys.cmp(old, key), MemTable.Entry{key, val}, remaining, Some{old}, entries, level, declared, body_rev, consumed)
+          order_decision(Keys.cmp(old, key), MemTable.Entry{key, val}, remaining, entries, level, declared, body_rev, consumed)
 
 def apply_transition(transition: Transition, remaining: Nat, previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>, level: Nat, declared: Nat, body_rev: String, consumed: Nat) -> Decoder:
   match transition:
@@ -416,7 +416,7 @@ def parse(s: String) -> Maybe<&2, Sstable.Table>:
   parse_wrap(parse_result(s))
 
 # Useful pure projections for laws and streaming-state agreement.
-def parser_decides(result: ParseResult) -> Bool:
+def parser_decides(_result: ParseResult) -> Bool:
   True{}
 
 def error_of(result: ParseResult) -> Maybe<&2, Error>:

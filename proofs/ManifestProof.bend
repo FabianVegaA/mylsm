@@ -7,5 +7,5 @@ def Laws.manifest_empty():
 def Laws.manifest_two():
   {==}
 
-def Laws.manifest_fail_closed(s):
+def Laws.manifest_fail_closed(_s):
   {==}

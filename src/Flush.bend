@@ -51,9 +51,9 @@ def write_tail(fr: (File & Result<&1, &1, U32 & String, Unit>), +path: String) -
     case (f2, r):
       do IO<Result<&1, &1, U32 & String, Unit>>:
         res : Unit <- IO.try(Unit, IO.pure(Result<&1, &1, U32 & String, Unit>, r))
-        cls : Unit <- File.close(f2)
-        syn : Unit <- IO.try(Unit, Fs.fsync(path))
-        prm : Unit <- IO.try(Unit, Fs.chmod(path, U32.from_nat(384n)))
+        _cls : Unit <- File.close(f2)
+        _syn : Unit <- IO.try(Unit, Fs.fsync(path))
+        _p_rm : Unit <- IO.try(Unit, Fs.chmod(path, U32.from_nat(384n)))
         return Done{res}
 
 def write_file(+path: String, +data: String) -> IO(Result<&1, &1, U32 & String, Unit>):
@@ -66,7 +66,7 @@ def read_tail3(fr: (File & Result<&1, &1, U32 & String, String>)) -> IO(Result<&
   match fr:
     case (f3, r1):
       do IO<Result<&1, &1, U32 & String, String>>:
-        cls : Unit <- File.close(f3)
+        _cls : Unit <- File.close(f3)
         IO.pure(Result<&1, &1, U32 & String, String>, r1)
 
 
@@ -139,12 +139,12 @@ def ensure_dir(+path: String) -> IO(Result<&1, &1, U32 & String, Unit>):
 
 def flush_goB(+dir: String, +mpath: String, +mtmp: String, +m2: Manifest.Manifest, +tbl: Sstable.Table, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, Db.BEntry>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
-    v1 : Unit <- IO.try(Unit, write_file(mtmp, Manifest.serialize(m2)))
-    cp1 : Unit <- IO.try(Unit, CrashPoint.hit("flush.manifest_synced"))
-    v2 : Unit <- IO.try(Unit, Fs.rename(mtmp, mpath))
-    v3 : Unit <- IO.try(Unit, Fs.fsync(dir))
-    cp2 : Unit <- IO.try(Unit, CrashPoint.hit("flush.manifest_published"))
-    rm : Result<&1, &1, U32 & String, Unit> <- Fs.remove(Db.wal_path(dir))
+    _v1 : Unit <- IO.try(Unit, write_file(mtmp, Manifest.serialize(m2)))
+    _cp1 : Unit <- IO.try(Unit, CrashPoint.hit("flush.manifest_synced"))
+    _v2 : Unit <- IO.try(Unit, Fs.rename(mtmp, mpath))
+    _v3 : Unit <- IO.try(Unit, Fs.fsync(dir))
+    _cp2 : Unit <- IO.try(Unit, CrashPoint.hit("flush.manifest_published"))
+    _rm : Result<&1, &1, U32 & String, Unit> <- Fs.remove(Db.wal_path(dir))
     return Done{Db.Db{dir, MemTable.MT{Nil{}}, frozen, batch_cap, bcache, l0_add(levels, tbl), Nat.add(flushed, 1n), Manifest.serialize(m2)}}
 
 def flush_drift(ok: Bool, +dir: String, +mpath: String, +mtmp: String, +m: Manifest.Manifest, +tbl: Sstable.Table, +name: String, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, Db.BEntry>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
@@ -156,12 +156,12 @@ def flush_drift(ok: Bool, +dir: String, +mpath: String, +mtmp: String, +m: Manif
 
 def flush_goA(+dir: String, +l0dir: String, +tmp: String, +final: String, +mpath: String, +mtmp: String, +content: String, +tbl: Sstable.Table, +name: String, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, Db.BEntry>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
-    u1 : Unit <- IO.try(Unit, ensure_dir(l0dir))
-    u2 : Unit <- IO.try(Unit, write_file(tmp, content))
-    cp1 : Unit <- IO.try(Unit, CrashPoint.hit("flush.table_synced"))
-    u3 : Unit <- IO.try(Unit, Fs.rename(tmp, final))
-    u4 : Unit <- IO.try(Unit, Fs.fsync(l0dir))
-    cp2 : Unit <- IO.try(Unit, CrashPoint.hit("flush.table_published"))
+    _u1 : Unit <- IO.try(Unit, ensure_dir(l0dir))
+    _u2 : Unit <- IO.try(Unit, write_file(tmp, content))
+    _cp1 : Unit <- IO.try(Unit, CrashPoint.hit("flush.table_synced"))
+    _u3 : Unit <- IO.try(Unit, Fs.rename(tmp, final))
+    _u4 : Unit <- IO.try(Unit, Fs.fsync(l0dir))
+    _cp2 : Unit <- IO.try(Unit, CrashPoint.hit("flush.table_published"))
     +m : Manifest.Manifest <- IO.try(Manifest.Manifest, load_mfst(mpath))
     flush_drift(String.eq(Manifest.serialize(m), manifest_token), dir, mpath, mtmp, m, tbl, name, levels, flushed, frozen, batch_cap, bcache)
 
