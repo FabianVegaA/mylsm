@@ -347,11 +347,11 @@ def bcache_lookup(+c: List<&2, BEntry>, +tab: String, +k: String) -> Maybe<&2, M
 def bcache_push(+c: List<&2, BEntry>, e: BEntry) -> List<&2, BEntry>:
   match Nat.is_le(bcache_bound(), List.length(&2, BEntry, c)):
     case True{}:
-      Con{e, List.take(&2, BEntry, Nat.sub(bcache_bound(), 1n), c)}
+      Con{e, List.take(&2, BEntry, c, Nat.sub(bcache_bound(), 1n))}
     case False{}:
       Con{e, c}
 ```
-(`List.take` — verify it exists in Base first with `bend base`; if absent, write a local `bcache_take` fuel-bounded take. Do not assume.) Wire into the Task-2 path: mem/frozen bypass the cache (already O(1)-ish scans); per-table `block_get_hit` consults `bcache_lookup` keyed by table identity. Table identity is a new total def (add beside `block_get` in Task 1's file region — implement it in this task if Task 1 didn't):
+(`List.take(a, -A, xs, n)` — verified against `bend base`: list before count.) Wire into the Task-2 path: mem/frozen bypass the cache (already O(1)-ish scans); per-table `block_get_hit` consults `bcache_lookup` keyed by table identity. Table identity is a new total def (add beside `block_get` in Task 1's file region — implement it in this task if Task 1 didn't):
 ```bend
 def opt_str(+m: Maybe<&2, String>, fallback: String) -> String:
   match m:
