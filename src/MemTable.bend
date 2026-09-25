@@ -108,7 +108,11 @@ def frozen_lemma(fuel: Nat, key: String, ans: Maybe<&2, String>, entries: List<&
           {==}
 
 # Lemma: reading a freshly-put key answers its value.
-def ryw_core(+entries: List<&2, Entry>, +key: String, val: String) -> {scan_go(List.length(&2, Entry, Con{Entry{key, Some{val}}, entries}), key, (False{}, None{}), Con{Entry{key, Some{val}}, entries}) == Some{val} : Maybe<&2, String>}:
+def ryw_core(
+  +entries: List<&2, Entry>,
+  +key: String,
+  val: String,
+) -> {scan_go(List.length(&2, Entry, Con{Entry{key, Some{val}}, entries}), key, (False{}, None{}), Con{Entry{key, Some{val}}, entries}) == Some{val} : Maybe<&2, String>}:
   %Equal.sym(Bool, Keys.eq(key, key), True{}, Keys.str_eq_refl(key)) : {scan_go(List.length(&2, Entry, entries), key, scan_step(False{}, _, Some{val}, None{}), entries) == Some{val} : Maybe<&2, String>}
   %frozen_lemma(List.length(&2, Entry, entries), key, Some{val}, entries) : {scan_go(List.length(&2, Entry, entries), key, (True{}, Some{val}), entries) == _ : Maybe<&2, String>}
   {==}
@@ -119,7 +123,10 @@ def ryw_bridge(tab: MemTable, +key: String, +val: String) -> {get(put(tab, key, 
       ryw_core(entries, key, val)
 
 # Lemma: reading a freshly-deleted key answers None (tombstone freezes).
-def del_core(+entries: List<&2, Entry>, +key: String) -> {scan_go(List.length(&2, Entry, Con{Entry{key, None{}}, entries}), key, (False{}, None{}), Con{Entry{key, None{}}, entries}) == None{} : Maybe<&2, String>}:
+def del_core(
+  +entries: List<&2, Entry>,
+  +key: String,
+) -> {scan_go(List.length(&2, Entry, Con{Entry{key, None{}}, entries}), key, (False{}, None{}), Con{Entry{key, None{}}, entries}) == None{} : Maybe<&2, String>}:
   %Equal.sym(Bool, Keys.eq(key, key), True{}, Keys.str_eq_refl(key)) : {scan_go(List.length(&2, Entry, entries), key, scan_step(False{}, _, None{}, None{}), entries) == None{} : Maybe<&2, String>}
   %frozen_lemma(List.length(&2, Entry, entries), key, None{}, entries) : {scan_go(List.length(&2, Entry, entries), key, (True{}, None{}), entries) == _ : Maybe<&2, String>}
   {==}
@@ -143,7 +150,11 @@ def frozen_hit_lemma(fuel: Nat, key: String, ans: Maybe<&2, Maybe<&2, String>>, 
           {==}
 
 # Lemma: hit-reading a freshly-put key answers a value hit.
-def ryw_hit_core(+entries: List<&2, Entry>, +key: String, val: String) -> {scan_hit(List.length(&2, Entry, Con{Entry{key, Some{val}}, entries}), key, (False{}, None{}), Con{Entry{key, Some{val}}, entries}) == Some{Some{val}} : Maybe<&2, Maybe<&2, String>>}:
+def ryw_hit_core(
+  +entries: List<&2, Entry>,
+  +key: String,
+  val: String,
+) -> {scan_hit(List.length(&2, Entry, Con{Entry{key, Some{val}}, entries}), key, (False{}, None{}), Con{Entry{key, Some{val}}, entries}) == Some{Some{val}} : Maybe<&2, Maybe<&2, String>>}:
   %Equal.sym(Bool, Keys.eq(key, key), True{}, Keys.str_eq_refl(key)) : {scan_hit(List.length(&2, Entry, entries), key, scan_hit_step(False{}, _, Some{val}, None{}), entries) == Some{Some{val}} : Maybe<&2, Maybe<&2, String>>}
   %frozen_hit_lemma(List.length(&2, Entry, entries), key, Some{Some{val}}, entries) : {scan_hit(List.length(&2, Entry, entries), key, (True{}, Some{Some{val}}), entries) == _ : Maybe<&2, Maybe<&2, String>>}
   {==}
@@ -154,7 +165,10 @@ def hit_ryw_bridge(tab: MemTable, +key: String, +val: String) -> {get_hit(put(ta
       ryw_hit_core(entries, key, val)
 
 # Lemma: hit-reading a freshly-deleted key answers a tombstone hit.
-def del_hit_core(+entries: List<&2, Entry>, +key: String) -> {scan_hit(List.length(&2, Entry, Con{Entry{key, None{}}, entries}), key, (False{}, None{}), Con{Entry{key, None{}}, entries}) == Some{None{}} : Maybe<&2, Maybe<&2, String>>}:
+def del_hit_core(
+  +entries: List<&2, Entry>,
+  +key: String,
+) -> {scan_hit(List.length(&2, Entry, Con{Entry{key, None{}}, entries}), key, (False{}, None{}), Con{Entry{key, None{}}, entries}) == Some{None{}} : Maybe<&2, Maybe<&2, String>>}:
   %Equal.sym(Bool, Keys.eq(key, key), True{}, Keys.str_eq_refl(key)) : {scan_hit(List.length(&2, Entry, entries), key, scan_hit_step(False{}, _, None{}, None{}), entries) == Some{None{}} : Maybe<&2, Maybe<&2, String>>}
   %frozen_hit_lemma(List.length(&2, Entry, entries), key, Some{None{}}, entries) : {scan_hit(List.length(&2, Entry, entries), key, (True{}, Some{None{}}), entries) == _ : Maybe<&2, Maybe<&2, String>>}
   {==}

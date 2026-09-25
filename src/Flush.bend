@@ -137,7 +137,18 @@ def ensure_dir(+path: String) -> IO(Result<&1, &1, U32 & String, Unit>):
 
 # --- Flush chain (defined bottom-up: tails first, entry last) ---
 
-def flush_goB(+dir: String, +mpath: String, +mtmp: String, +m2: Manifest.Manifest, +tbl: Sstable.Table, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, Db.BEntry>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def flush_goB(
+  +dir: String,
+  +mpath: String,
+  +mtmp: String,
+  +m2: Manifest.Manifest,
+  +tbl: Sstable.Table,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +frozen: MemTable.MemTable,
+  +batch_cap: Nat,
+  +bcache: List<&2, Db.BEntry>,
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
     _v1 : Unit <- IO.try(Unit, write_file(mtmp, Manifest.serialize(m2)))
     _cp1 : Unit <- IO.try(Unit, CrashPoint.hit("flush.manifest_synced"))
@@ -147,14 +158,43 @@ def flush_goB(+dir: String, +mpath: String, +mtmp: String, +m2: Manifest.Manifes
     _rm : Result<&1, &1, U32 & String, Unit> <- Fs.remove(Db.wal_path(dir))
     return Done{Db.Db{dir, MemTable.MT{Nil{}}, frozen, batch_cap, bcache, l0_add(levels, tbl), Nat.add(flushed, 1n), Manifest.serialize(m2)}}
 
-def flush_drift(ok: Bool, +dir: String, +mpath: String, +mtmp: String, +mfst: Manifest.Manifest, +tbl: Sstable.Table, +name: String, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, Db.BEntry>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def flush_drift(
+  ok: Bool,
+  +dir: String,
+  +mpath: String,
+  +mtmp: String,
+  +mfst: Manifest.Manifest,
+  +tbl: Sstable.Table,
+  +name: String,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +frozen: MemTable.MemTable,
+  +batch_cap: Nat,
+  +bcache: List<&2, Db.BEntry>,
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match ok:
     case False{}:
       IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{(U32.from_nat(2n), "manifest drift")})
     case True{}:
       flush_goB(dir, mpath, mtmp, mfst_add(mfst, name), tbl, levels, flushed, frozen, batch_cap, bcache)
 
-def flush_goA(+dir: String, +l0dir: String, +tmp: String, +final: String, +mpath: String, +mtmp: String, +content: String, +tbl: Sstable.Table, +name: String, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, Db.BEntry>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def flush_goA(
+  +dir: String,
+  +l0dir: String,
+  +tmp: String,
+  +final: String,
+  +mpath: String,
+  +mtmp: String,
+  +content: String,
+  +tbl: Sstable.Table,
+  +name: String,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +manifest_token: String,
+  +frozen: MemTable.MemTable,
+  +batch_cap: Nat,
+  +bcache: List<&2, Db.BEntry>,
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
     _u1 : Unit <- IO.try(Unit, ensure_dir(l0dir))
     _u2 : Unit <- IO.try(Unit, write_file(tmp, content))
@@ -165,7 +205,16 @@ def flush_goA(+dir: String, +l0dir: String, +tmp: String, +final: String, +mpath
     +m : Manifest.Manifest <- IO.try(Manifest.Manifest, load_mfst(mpath))
     flush_drift(String.eq(Manifest.serialize(m), manifest_token), dir, mpath, mtmp, m, tbl, name, levels, flushed, frozen, batch_cap, bcache)
 
-def flush_pre(+dir: String, +entries: List<&2, MemTable.Entry>, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, Db.BEntry>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def flush_pre(
+  +dir: String,
+  +entries: List<&2, MemTable.Entry>,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +manifest_token: String,
+  +frozen: MemTable.MemTable,
+  +batch_cap: Nat,
+  +bcache: List<&2, Db.BEntry>,
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   +tbl = Sstable.build(entries, 0n, List.length(&2, MemTable.Entry, entries))
   +name = table_name(flushed)
   +l0dir = dir ++ "/l0"

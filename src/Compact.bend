@@ -216,7 +216,14 @@ def finish_runs(+l0_runs: List<&2, List<&2, MemTable.Entry>>, +l1_runs: List<&2,
 
 # Closure rounds retain the original L1 list so the final absorbed runs are
 # selected in exact stored read order, independent of the round that found them.
-def closed_runs_go(major: Nat, +lo: Maybe<&2, String>, +hi: Maybe<&2, String>, +l0_runs: List<&2, List<&2, MemTable.Entry>>, +all_l1: List<&2, Sstable.Table>, +rest: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
+def closed_runs_go(
+  major: Nat,
+  +lo: Maybe<&2, String>,
+  +hi: Maybe<&2, String>,
+  +l0_runs: List<&2, List<&2, MemTable.Entry>>,
+  +all_l1: List<&2, Sstable.Table>,
+  +rest: List<&2, Sstable.Table>,
+) -> List<&2, Sstable.Table>:
   match major:
     case 0n:
       finish_runs(l0_runs, table_runs(filter_pos(all_l1, lo, hi)), rest)
@@ -420,7 +427,19 @@ def remove_list(names: List<&2, String>) -> IO(Result<&1, &1, U32 & String, Unit
         _rm : Result<&1, &1, U32 & String, Unit> <- Fs.remove(n)
         remove_list(t)
 
-def compact_goB(+dir: String, +mpath: String, +mtmp: String, +m2: Manifest.Manifest, +dels: List<&2, String>, +mem: MemTable.MemTable, +levels2: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, Db.BEntry>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def compact_goB(
+  +dir: String,
+  +mpath: String,
+  +mtmp: String,
+  +m2: Manifest.Manifest,
+  +dels: List<&2, String>,
+  +mem: MemTable.MemTable,
+  +levels2: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +frozen: MemTable.MemTable,
+  +batch_cap: Nat,
+  +bcache: List<&2, Db.BEntry>,
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
     _v1 : Unit <- IO.try(Unit, Flush.write_file(mtmp, Manifest.serialize(m2)))
     _cp1 : Unit <- IO.try(Unit, CrashPoint.hit("compact.manifest_synced"))
@@ -440,14 +459,47 @@ def prefix_go(names: List<&2, String>, +dir: String, +acc: List<&2, String>) -> 
 def prefix(+names: List<&2, String>, +dir: String) -> List<&2, String>:
   prefix_go(names, dir, Nil{})
 
-def drift_go(ok: Bool, +dir: String, +mpath: String, +mtmp: String, +mfst: Manifest.Manifest, +oldl1: List<&2, Sstable.Table>, +remt: List<&2, Sstable.Table>, +outname: String, +mem: MemTable.MemTable, +levels2: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, Db.BEntry>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def drift_go(
+  ok: Bool,
+  +dir: String,
+  +mpath: String,
+  +mtmp: String,
+  +mfst: Manifest.Manifest,
+  +oldl1: List<&2, Sstable.Table>,
+  +remt: List<&2, Sstable.Table>,
+  +outname: String,
+  +mem: MemTable.MemTable,
+  +levels2: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +frozen: MemTable.MemTable,
+  +batch_cap: Nat,
+  +bcache: List<&2, Db.BEntry>,
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match ok:
     case True{}:
       compact_goB(dir, mpath, mtmp, mfst_new(mfst, rem_names(oldl1, ml1(mfst), remt), outname), List.append(&2, String, prefix(ml0(mfst), dir ++ "/l0"), prefix(abs_names(oldl1, ml1(mfst), remt), dir ++ "/l1")), mem, levels2, flushed, frozen, batch_cap, bcache)
     case False{}:
       IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{(U32.from_nat(2n), "manifest drift")})
 
-def compact_goA(+dir: String, +l1dir: String, +tmp: String, +final: String, +mpath: String, +mtmp: String, +content: String, +outname: String, +mem: MemTable.MemTable, +levels2: List<&2, List<&2, Sstable.Table>>, +oldl1: List<&2, Sstable.Table>, +remt: List<&2, Sstable.Table>, +flushed: Nat, +manifest_token: String, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, Db.BEntry>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def compact_goA(
+  +dir: String,
+  +l1dir: String,
+  +tmp: String,
+  +final: String,
+  +mpath: String,
+  +mtmp: String,
+  +content: String,
+  +outname: String,
+  +mem: MemTable.MemTable,
+  +levels2: List<&2, List<&2, Sstable.Table>>,
+  +oldl1: List<&2, Sstable.Table>,
+  +remt: List<&2, Sstable.Table>,
+  +flushed: Nat,
+  +manifest_token: String,
+  +frozen: MemTable.MemTable,
+  +batch_cap: Nat,
+  +bcache: List<&2, Db.BEntry>,
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
     _u1 : Unit <- IO.try(Unit, Flush.ensure_dir(l1dir))
     _u2 : Unit <- IO.try(Unit, Flush.write_file(tmp, content))
@@ -458,7 +510,16 @@ def compact_goA(+dir: String, +l1dir: String, +tmp: String, +final: String, +mpa
     +m : Manifest.Manifest <- IO.try(Manifest.Manifest, Flush.load_mfst(mpath))
     drift_go(String.eq(Manifest.serialize(m), manifest_token), dir, mpath, mtmp, m, oldl1, remt, outname, mem, levels2, flushed, frozen, batch_cap, bcache)
 
-def compact_pre(+dir: String, +mem: MemTable.MemTable, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, Db.BEntry>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def compact_pre(
+  +dir: String,
+  +mem: MemTable.MemTable,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +manifest_token: String,
+  +frozen: MemTable.MemTable,
+  +batch_cap: Nat,
+  +bcache: List<&2, Db.BEntry>,
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   +levels2 = compact_levels(levels)
   +newl1 = l1list(levels2)
   +out = hd_tbl(newl1)
@@ -467,7 +528,17 @@ def compact_pre(+dir: String, +mem: MemTable.MemTable, +levels: List<&2, List<&2
   +outname = "l1-" ++ Nat.show(flushed) ++ ".tbl"
   compact_goA(dir, l1dir, l1dir ++ "/" ++ outname ++ ".tmp", l1dir ++ "/" ++ outname, dir ++ "/MANIFEST", dir ++ "/MANIFEST.tmp", SstFile.serialize(Db.table_entries(out), 1n), outname, mem, levels2, l1list(levels), remt, flushed, manifest_token, frozen, batch_cap, bcache)
 
-def compact_trig(gt: Bool, +dir: String, +mem: MemTable.MemTable, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, Db.BEntry>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def compact_trig(
+  gt: Bool,
+  +dir: String,
+  +mem: MemTable.MemTable,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +manifest_token: String,
+  +frozen: MemTable.MemTable,
+  +batch_cap: Nat,
+  +bcache: List<&2, Db.BEntry>,
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match gt:
     case True{}:
       compact_pre(dir, mem, levels, flushed, manifest_token, frozen, batch_cap, bcache)

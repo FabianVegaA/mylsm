@@ -248,7 +248,11 @@ def add_assoc(n1: Nat, n2: Nat, n3: Nat) -> {Nat.add(Nat.add(n1, n2), n3) == Nat
       %add_assoc(m, n2, n3) : {1n+Nat.add(Nat.add(m, n2), n3) == 1n+_ : Nat}
       {==}
 
-def list_app_assoc(xs: List<&2, Mut>, ys: List<&2, Mut>, zs: List<&2, Mut>) -> {List.append(&2, Mut, List.append(&2, Mut, xs, ys), zs) == List.append(&2, Mut, xs, List.append(&2, Mut, ys, zs)) : List<&2, Mut>}:
+def list_app_assoc(
+  xs: List<&2, Mut>,
+  ys: List<&2, Mut>,
+  zs: List<&2, Mut>,
+) -> {List.append(&2, Mut, List.append(&2, Mut, xs, ys), zs) == List.append(&2, Mut, xs, List.append(&2, Mut, ys, zs)) : List<&2, Mut>}:
   match xs:
     case Nil{}:
       {==}
@@ -290,7 +294,15 @@ def jump_succ(num: Nat, num0: Nat) -> {jump(num, 1n+num0) == 1n+jump(num, num0) 
 
 # RLen dash-run skip (unified len phase; next stored, never matched here).
 # Fuel is len(span++tail): deconstructs with the Nat induction, tail opaque.
-def dashspan(num: Nat, tail: String, muts0: List<&2, Mut>, tag: Char, next: Phase, +num0: Nat, kacc0: String) -> {dec_run(String.length(dashes(num) ++ tail), dashes(num) ++ tail, DS{RLen{next}, muts0, tag, num0, kacc0, "", "", True{}}) == dec_run(String.length(tail), tail, DS{RLen{next}, muts0, tag, jump(num, num0), kacc0, "", "", True{}}) : DecState}:
+def dashspan(
+  num: Nat,
+  tail: String,
+  muts0: List<&2, Mut>,
+  tag: Char,
+  next: Phase,
+  +num0: Nat,
+  kacc0: String,
+) -> {dec_run(String.length(dashes(num) ++ tail), dashes(num) ++ tail, DS{RLen{next}, muts0, tag, num0, kacc0, "", "", True{}}) == dec_run(String.length(tail), tail, DS{RLen{next}, muts0, tag, jump(num, num0), kacc0, "", "", True{}}) : DecState}:
   match num:
     case 0n:
       {==}
@@ -300,7 +312,14 @@ def dashspan(num: Nat, tail: String, muts0: List<&2, Mut>, tag: Char, next: Phas
       {==}
 
 # PKEY take: consumes key bytes; kacc0 generalized. Fuel is len(key++tail).
-def keyspan(key: String, +kacc0: String, tail: String, muts0: List<&2, Mut>, tag: Char, vacc0: String) -> {dec_run(String.length(key ++ tail), key ++ tail, DS{PKey{}, muts0, tag, String.length(key), kacc0, vacc0, "", True{}}) == dec_run(String.length(tail), tail, DS{PKey{}, muts0, tag, 0n, kacc0 ++ key, vacc0, "", True{}}) : DecState}:
+def keyspan(
+  key: String,
+  +kacc0: String,
+  tail: String,
+  muts0: List<&2, Mut>,
+  tag: Char,
+  vacc0: String,
+) -> {dec_run(String.length(key ++ tail), key ++ tail, DS{PKey{}, muts0, tag, String.length(key), kacc0, vacc0, "", True{}}) == dec_run(String.length(tail), tail, DS{PKey{}, muts0, tag, 0n, kacc0 ++ key, vacc0, "", True{}}) : DecState}:
   match key:
     case SNil{}:
       %Equal.sym(String, kacc0 ++ "", kacc0, app_nil_r(kacc0)) : {dec_run(String.length(tail), tail, DS{PKey{}, muts0, tag, 0n, kacc0, vacc0, "", True{}}) == dec_run(String.length(tail), tail, DS{PKey{}, muts0, tag, 0n, _, vacc0, "", True{}}) : DecState}
@@ -311,7 +330,14 @@ def keyspan(key: String, +kacc0: String, tail: String, muts0: List<&2, Mut>, tag
       {==}
 
 # PVAL take: mirror for values.
-def valspan(val: String, +vacc0: String, tail: String, muts0: List<&2, Mut>, tag: Char, kacc: String) -> {dec_run(String.length(val ++ tail), val ++ tail, DS{PVal{}, muts0, tag, String.length(val), kacc, vacc0, "", True{}}) == dec_run(String.length(tail), tail, DS{PVal{}, muts0, tag, 0n, kacc, vacc0 ++ val, "", True{}}) : DecState}:
+def valspan(
+  val: String,
+  +vacc0: String,
+  tail: String,
+  muts0: List<&2, Mut>,
+  tag: Char,
+  kacc: String,
+) -> {dec_run(String.length(val ++ tail), val ++ tail, DS{PVal{}, muts0, tag, String.length(val), kacc, vacc0, "", True{}}) == dec_run(String.length(tail), tail, DS{PVal{}, muts0, tag, 0n, kacc, vacc0 ++ val, "", True{}}) : DecState}:
   match val:
     case SNil{}:
       %Equal.sym(String, vacc0 ++ "", vacc0, app_nil_r(vacc0)) : {dec_run(String.length(tail), tail, DS{PVal{}, muts0, tag, 0n, kacc, vacc0, "", True{}}) == dec_run(String.length(tail), tail, DS{PVal{}, muts0, tag, 0n, kacc, _, "", True{}}) : DecState}
@@ -322,7 +348,13 @@ def valspan(val: String, +vacc0: String, tail: String, muts0: List<&2, Mut>, tag
       {==}
 
 # DKEY take: mirror for delete keys.
-def dkeyspan(key: String, +kacc0: String, tail: String, muts0: List<&2, Mut>, tag: Char) -> {dec_run(String.length(key ++ tail), key ++ tail, DS{DKey{}, muts0, tag, String.length(key), kacc0, "", "", True{}}) == dec_run(String.length(tail), tail, DS{DKey{}, muts0, tag, 0n, kacc0 ++ key, "", "", True{}}) : DecState}:
+def dkeyspan(
+  key: String,
+  +kacc0: String,
+  tail: String,
+  muts0: List<&2, Mut>,
+  tag: Char,
+) -> {dec_run(String.length(key ++ tail), key ++ tail, DS{DKey{}, muts0, tag, String.length(key), kacc0, "", "", True{}}) == dec_run(String.length(tail), tail, DS{DKey{}, muts0, tag, 0n, kacc0 ++ key, "", "", True{}}) : DecState}:
   match key:
     case SNil{}:
       %Equal.sym(String, kacc0 ++ "", kacc0, app_nil_r(kacc0)) : {dec_run(String.length(tail), tail, DS{DKey{}, muts0, tag, 0n, kacc0, "", "", True{}}) == dec_run(String.length(tail), tail, DS{DKey{}, muts0, tag, 0n, _, "", "", True{}}) : DecState}

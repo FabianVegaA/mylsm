@@ -247,12 +247,21 @@ def table_count(tab: Table) -> Nat:
 
 # Open bridge: metadata is matched explicitly so the Bloom schedule projects
 # through `build` without relying on reduction of an open entry list.
-def table_bits_from_meta(+entries: List<&2, MemTable.Entry>, level: Nat, est_keys: Nat, meta: Metadata) -> {table_bits(from_sorted_unique_est_meta(entries, level, est_keys, meta)) == bloom_bits(level, est_keys) : Nat}:
+def table_bits_from_meta(
+  +entries: List<&2, MemTable.Entry>,
+  level: Nat,
+  est_keys: Nat,
+  meta: Metadata,
+) -> {table_bits(from_sorted_unique_est_meta(entries, level, est_keys, meta)) == bloom_bits(level, est_keys) : Nat}:
   match meta:
     case Meta{smallest, largest, count}:
       {==}
 
-def table_bits_build(+entries: List<&2, MemTable.Entry>, level: Nat, est_keys: Nat) -> {table_bits(build(entries, level, est_keys)) == bloom_bits(level, Nat.max(est_keys, List.length(&2, MemTable.Entry, entries))) : Nat}:
+def table_bits_build(
+  +entries: List<&2, MemTable.Entry>,
+  level: Nat,
+  est_keys: Nat,
+) -> {table_bits(build(entries, level, est_keys)) == bloom_bits(level, Nat.max(est_keys, List.length(&2, MemTable.Entry, entries))) : Nat}:
   +effective = Nat.max(est_keys, List.length(&2, MemTable.Entry, entries))
   table_bits_from_meta(SortedRun.sort_newest(entries), level, effective, metadata(SortedRun.sort_newest(entries)))
 

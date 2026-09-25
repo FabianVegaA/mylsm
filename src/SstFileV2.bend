@@ -346,7 +346,18 @@ def decoder_step_live(+phase: Phase, remaining: Nat, previous: Maybe<&2, String>
   +next_body = select_body(phase_bodies(phase), body_rev, ch)
   apply_transition(phase_step(phase, ch), remaining, previous, entries, level, declared, next_body, Nat.add(consumed, 1n))
 
-def decoder_step_bounded(within: Bool, phase: Phase, remaining: Nat, previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>, level: Nat, declared: Nat, body_rev: String, consumed: Nat, ch: Char) -> Decoder:
+def decoder_step_bounded(
+  within: Bool,
+  phase: Phase,
+  remaining: Nat,
+  previous: Maybe<&2, String>,
+  entries: List<&2, MemTable.Entry>,
+  level: Nat,
+  declared: Nat,
+  body_rev: String,
+  consumed: Nat,
+  ch: Char,
+) -> Decoder:
   match within:
     case False{}:
       DecoderRejected{FileTooLarge{}}
