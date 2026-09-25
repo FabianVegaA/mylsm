@@ -49,7 +49,11 @@ bench/
 Rename-only moves; moved `.bend` files re-point imports (`../../src/`,
 `../lib/common.bend`) and drop local helper copies; moved `.sh` files
 source `../lib/run.sh` and keep only post-processing; `bin/mylsm` updates
-the `fuzz` and `bench` command paths. Gates: per-file `--check-only`,
+the `fuzz` and `bench` command paths. Dead code in `bench/` MAY be deleted:
+unreachable helpers, harness logic superseded by `lib/`, one-off scripts
+with no gate or documentation pointing at them. Deletion is per-file
+explicit in the plan with its reason; anything with a live caller or a
+BASELINE.md reference stays. Gates: per-file `--check-only`,
 smokes run, `bash -n` + small-count run per script, bolt zero-new-findings,
 final `./proofs/run.sh` sanity (no src/laws/proofs edits expected).
 
