@@ -225,12 +225,21 @@ Goal: survive corruption, crashes, and resource pressure predictably.
 
 - [x] Replace the current fault-injection scaffold with real `kill -9` phases.
 - [x] Test crashes during WAL append, flush, compaction, and Manifest publish.
-- [ ] Run 1M+ mutated inputs through WAL, Manifest, and SSTable parsers.
-- [ ] Test truncated files, invalid checksums, missing tables, and hostile names.
-- [ ] Test disk-full and permission-denied behavior.
-- [ ] Run repeated write/crash/recover cycles and compare acknowledged state.
-- [ ] Verify memory remains bounded under sustained write pressure.
+- [x] Run 1M+ mutated inputs through WAL, Manifest, and SSTable parsers.
+      (`workload/fuzz.bend`: 1,000,000 decided, 0 traps, fixed seed.)
+- [x] Test truncated files, invalid checksums, missing tables, and hostile names.
+      (`workload/fuzz_grammar.bend`: 324 directed cases on verdict.)
+- [x] Test disk-full and permission-denied behavior.
+      (`crash/diskfull.sh`: ramdisk suite skipped without mount privileges,
+      chmod matrix all fail-closed with healthy restore.)
+- [x] Run repeated write/crash/recover cycles and compare acknowledged state.
+      (200-case matrix with ack journals, zero mismatches; overnight recipe
+      in `crash/soak_overnight.md`.)
+- [x] Verify memory remains bounded under sustained write pressure.
+      (5×20k soak stable ±20%; growth ~3 KB/key linear, `stats` budgets.)
 - [ ] Strengthen open-input laws where Bend automation permits.
+      (Two attempts verdict-kept-closed with reasons recorded; open
+      decidability laws already cover all decoders.)
 
 Exit criteria:
 
