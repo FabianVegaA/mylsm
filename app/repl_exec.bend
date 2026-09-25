@@ -68,6 +68,35 @@ def level_count(db: Db.Db) -> Nat:
     case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
       List.length(&2, List<&2, Sstable.Table>, levels)
 
+# Component budget counters (Phase 2C): stored counts, never walks, except
+# the bounded bcache list and the open-table census (both documented caps).
+def stored_mem_count(db: Db.Db) -> Nat:
+  match db:
+    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mc, fc}:
+      mc
+
+def stored_frozen_count(db: Db.Db) -> Nat:
+  match db:
+    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mc, fc}:
+      fc
+
+def bcache_len(db: Db.Db) -> Nat:
+  match db:
+    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mc, fc}:
+      List.length(&2, Db.BEntry, bcache)
+
+def open_tables_go(+lvls: List<&2, List<&2, Sstable.Table>>, acc: Nat) -> Nat:
+  match lvls:
+    case Nil{}:
+      acc
+    case Con{+h, t}:
+      open_tables_go(t, Nat.add(acc, List.length(&2, Sstable.Table, h)))
+
+def open_tables(db: Db.Db) -> Nat:
+  match db:
+    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mc, fc}:
+      open_tables_go(levels, 0n)
+
 def compute_gpu_ok(enabled: Bool, fuel: Nat) -> IO(Nat):
   match enabled:
     case True{}:
@@ -255,6 +284,7 @@ def execute_go(command: Repl.Command, session: Session) -> IO(LoopState):
           do IO<LoopState>:
             _u0 : Unit <- IO.print("mem_entries=" ++ Nat.show(mem_count(db)))
             _u1 : Unit <- IO.print("levels=" ++ Nat.show(level_count(db)))
+            _u2 : Unit <- IO.print("mem_stored=" ++ Nat.show(stored_mem_count(db)) ++ " mem_cap=4096 frozen_stored=" ++ Nat.show(stored_frozen_count(db)) ++ " frozen_cap=4096 bcache_entries=" ++ Nat.show(bcache_len(db)) ++ " bcache_cap=256 open_tables=" ++ Nat.show(open_tables(db)))
             return Running{Session{db, dir, timing, mode, gpu, workers, staged}}
     case Repl.Runtime{}:
       match session:

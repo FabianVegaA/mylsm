@@ -152,3 +152,19 @@ default cap 1). Datasets fit in RAM: not yet publication-grade comparisons.
   (9.8 s at 4,096 writes, 13.8 s at 20,485, 16.0 s at 1M) while table bytes
   grow 0 → 29 MB, pointing at fixed open-path overhead rather than
   data-proportional cost. Not investigated yet.
+
+## Phase 2 memory observations (single points + soak gate)
+
+`bench/crash/mem_soak.sh` (5 cycles × 20k fresh keys, Darwin arm64,
+`/usr/bin/time -l` max RSS): 51,527,680 / 46,055,424 / 43,532,288 /
+51,937,280 / 51,331,072 bytes → cycles 2..5 median 48,693,248, all inside
+±20% → MEMSOAK STABLE (no cycle-over-cycle leak; cycle 1 warmup highest
+is normal allocator behavior).
+Growth single points (same machine): 100k → 294,453,248 bytes;
+500k → 1,680,392,192; 1M → 2,704,474,112 — roughly constant ~3 KB per
+key against ~19 logical bytes/key. Linear in dataset with a large
+constant (full WAL replay in mem plus HVM heap overhead), not a leak, but
+far from a budgeted store: open tables are fully materialized by design
+(see the Phase 2 spec known gap). Component budgets enforced structurally:
+mem/frozen caps (4096 exact counts), bcache 256 FIFO, `stats` surfaces
+mem_stored/frozen_stored/bcache_entries/open_tables.
