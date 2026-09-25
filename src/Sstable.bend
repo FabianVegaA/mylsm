@@ -193,6 +193,45 @@ def bloom_of(entries: List<&2, MemTable.Entry>, +blm: Bloom) -> Bloom:
         case MemTable.Entry{key, val}:
           bloom_of(t, bloom_add(blm, key))
 
+def bloom_union_trees(+abits: BitTree.BitTree, +bbits: BitTree.BitTree, size: Nat) -> Bloom:
+  match abits:
+    case BitTree.BT{aroot, awords, acap, aheight}:
+      match bbits:
+        case BitTree.BT{broot, bwords, bcap, bheight}:
+          Blm{BitTree.BT{BitTree.union_bits(aroot, broot), awords, acap, aheight}, size}
+
+def bloom_union(ba: Bloom, bb: Bloom) -> Bloom:
+  match ba:
+    case Blm{abits, asize}:
+      match bb:
+        case Blm{bbits, bsize}:
+          bloom_union_trees(abits, bbits, Nat.max(asize, bsize))
+
+def bloom_of_chunk(+chunk: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
+  bloom_of(chunk, bloom_new(nb))
+
+def bloom_chunks(+chunks: List<&2, List<&2, MemTable.Entry>>, +nb: Nat, acc: Bloom) -> Bloom:
+  match chunks:
+    case Nil{}:
+      acc
+    case Con{c, Nil{}}:
+      bloom_union(acc, bloom_of_chunk(c, nb))
+    case Con{c, Con{d, t}}:
+      left right = bloom_of_chunk(c, nb) bloom_chunks(Con{d, t}, nb, acc)
+      bloom_union(left, right)
+
+# GPU variant: same treemap with parallel calls handed to the device.
+# Semantically identical; the agreement law pins it.
+def bloom_chunks_gpu(+chunks: List<&2, List<&2, MemTable.Entry>>, +nb: Nat, acc: Bloom) -> Bloom:
+  match chunks:
+    case Nil{}:
+      acc
+    case Con{c, Nil{}}:
+      bloom_union(acc, bloom_of_chunk!(c, nb))
+    case Con{c, Con{d, t}}:
+      left right = bloom_of_chunk!(c, nb) bloom_chunks_gpu(Con{d, t}, nb, acc)
+      bloom_union(left, right)
+
 def metadata_tail(entries: List<&2, MemTable.Entry>, +first: String, last: String, +count: Nat) -> Metadata:
   match entries:
     case Nil{}:
