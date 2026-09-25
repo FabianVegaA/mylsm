@@ -245,6 +245,19 @@ def table_count(tab: Table) -> Nat:
     case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
       count
 
+# Total table identity for the read cache: smallest|largest|count.
+def opt_name(+opt: Maybe<&2, String>) -> String:
+  match opt:
+    case None{}:
+      "<none>"
+    case Some{s}:
+      s
+
+def table_id(tab: Table) -> String:
+  match tab:
+    case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
+      opt_name(smallest) ++ "|" ++ opt_name(largest) ++ "|" ++ Nat.show(count)
+
 # Open bridge: metadata is matched explicitly so the Bloom schedule projects
 # through `build` without relying on reduction of an open entry list.
 def table_bits_from_meta(

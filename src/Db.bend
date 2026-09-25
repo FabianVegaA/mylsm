@@ -134,6 +134,101 @@ def db_get(+db: Db, +key: String) -> Maybe<&2, String>:
     case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
       flatten_opt(hits_first(Con{MemTable.get_hit(mem, key), Con{MemTable.get_hit(frozen, key), levels_hits(levels, key)}}))
 
+# --- Phase A3: table-identity read cache (assoc-list, bounded FIFO) ---
+# LRU verdict (spike-by-inspection, 2026-09-25): hub lru has no simple public
+# put, reads hand the cache back, and every op needs a W.U64 clock — adopting
+# it threads time through the pure read path and changes db_get's shape for a
+# marginal gain over this list. Custom assoc-list wins; see the Task 3 commit.
+
+def pick_hit(hit: Bool, ans: Maybe<&2, String>, best: Maybe<&2, Maybe<&2, String>>) -> Maybe<&2, Maybe<&2, String>>:
+  match hit:
+    case True{}:
+      Some{ans}
+    case False{}:
+      best
+
+def bcache_go(+cache: List<&2, BEntry>, +tab: String, +key: String, +best: Maybe<&2, Maybe<&2, String>>) -> Maybe<&2, Maybe<&2, String>>:
+  match cache:
+    case Nil{}:
+      best
+    case Con{BEntry{t, ky, val}, rest}:
+      bcache_go(rest, tab, key, pick_hit(Bool.and(String.eq(t, tab), String.eq(ky, key)), val, best))
+
+def bcache_lookup(+cache: List<&2, BEntry>, +tab: String, +key: String) -> Maybe<&2, Maybe<&2, String>>:
+  bcache_go(cache, tab, key, None{})
+
+def bcache_push_all(+fresh: List<&2, BEntry>, +old: List<&2, BEntry>) -> List<&2, BEntry>:
+  List.take(&2, BEntry, List.append(&2, BEntry, fresh, old), bcache_bound())
+
+def probe_fill(hit: Maybe<&2, Maybe<&2, String>>, +tab: String, +key: String) -> (Maybe<&2, Maybe<&2, String>> & List<&2, BEntry>):
+  match hit:
+    case None{}:
+      (None{}, Nil{})
+    case Some{+inner}:
+      (Some{inner}, Con{BEntry{tab, key, inner}, Nil{}})
+
+def probe_cached(cached: Maybe<&2, Maybe<&2, String>>, +tab: Sstable.Table, +key: String) -> (Maybe<&2, Maybe<&2, String>> & List<&2, BEntry>):
+  match cached:
+    case None{}:
+      probe_fill(table_hit(tab, key), Sstable.table_id(tab), key)
+    case Some{ans}:
+      (Some{ans}, Nil{})
+
+def table_probe(+tab: Sstable.Table, +key: String, +cache: List<&2, BEntry>) -> (Maybe<&2, Maybe<&2, String>> & List<&2, BEntry>):
+  probe_cached(bcache_lookup(cache, Sstable.table_id(tab), key), tab, key)
+
+def tables_cons(cur: (Maybe<&2, Maybe<&2, String>> & List<&2, BEntry>), rest: (List<&2, Maybe<&2, Maybe<&2, String>>> & List<&2, BEntry>)) -> (List<&2, Maybe<&2, Maybe<&2, String>>> & List<&2, BEntry>):
+  match cur:
+    case (hit, delta):
+      match rest:
+        case (rhits, rdelta):
+          (Con{hit, rhits}, List.append(&2, BEntry, delta, rdelta))
+
+def tables_walk(+tabs: List<&2, Sstable.Table>, +key: String, +cache: List<&2, BEntry>) -> (List<&2, Maybe<&2, Maybe<&2, String>>> & List<&2, BEntry>):
+  match tabs:
+    case Nil{}:
+      (Nil{}, Nil{})
+    case Con{+h, t}:
+      tables_cons(table_probe(h, key, cache), tables_walk(t, key, cache))
+
+def levels_cons(cur: (List<&2, Maybe<&2, Maybe<&2, String>>> & List<&2, BEntry>), rest: (List<&2, Maybe<&2, Maybe<&2, String>>> & List<&2, BEntry>)) -> (List<&2, Maybe<&2, Maybe<&2, String>>> & List<&2, BEntry>):
+  match cur:
+    case (chits, cdelta):
+      match rest:
+        case (rhits, rdelta):
+          (List.append(&2, Maybe<&2, Maybe<&2, String>>, chits, rhits), List.append(&2, BEntry, cdelta, rdelta))
+
+def levels_cached(+lvls: List<&2, List<&2, Sstable.Table>>, +key: String, +cache: List<&2, BEntry>) -> (List<&2, Maybe<&2, Maybe<&2, String>>> & List<&2, BEntry>):
+  match lvls:
+    case Nil{}:
+      (Nil{}, Nil{})
+    case Con{+h, t}:
+      levels_cons(tables_walk(h, key, cache), levels_cached(t, key, cache))
+
+def cached_levels(lr: (List<&2, Maybe<&2, Maybe<&2, String>>> & List<&2, BEntry>), +dir: String, +mem: MemTable.MemTable, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, BEntry>, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String) -> Db & Maybe<&2, String>:
+  match lr:
+    case (hits, delta):
+      (Db{dir, mem, frozen, batch_cap, bcache_push_all(delta, bcache), levels, flushed, manifest_token}, flatten_opt(hits_first(hits)))
+
+def cached_frozen(fhit: Maybe<&2, Maybe<&2, String>>, +dir: String, +mem: MemTable.MemTable, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, BEntry>, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String, +key: String) -> Db & Maybe<&2, String>:
+  match fhit:
+    case Some{found}:
+      (Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}, flatten_opt(Some{found}))
+    case None{}:
+      cached_levels(levels_cached(levels, key, bcache), dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token)
+
+def cached_mem(mhit: Maybe<&2, Maybe<&2, String>>, +dir: String, +mem: MemTable.MemTable, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, BEntry>, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String, +key: String) -> Db & Maybe<&2, String>:
+  match mhit:
+    case Some{found}:
+      (Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}, flatten_opt(Some{found}))
+    case None{}:
+      cached_frozen(MemTable.get_hit(frozen, key), dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, key)
+
+def db_get_cached(+db: Db, +key: String) -> Db & Maybe<&2, String>:
+  match db:
+    case Db{dir, +mem, +frozen, +batch_cap, +bcache, +levels, +flushed, +manifest_token}:
+      cached_mem(MemTable.get_hit(mem, key), dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, key)
+
 # WAL framing v1 is applied here (see Recover): each batch is stored as
 # dashes(len) ++ ";" ++ encode(batch) so replay can stream frames and
 # truncate a torn tail. Files are permissioned 0600 at creation.

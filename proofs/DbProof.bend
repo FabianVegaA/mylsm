@@ -21,3 +21,12 @@ def Laws.db_get_tombstone_hides():
 
 def Laws.db_get_miss():
   {==}
+
+def Laws.db_cache_transparent_hit():
+  {==}
+
+def Laws.db_cache_transparent_tomb():
+  {==}
+
+def Laws.db_cache_transparent_miss():
+  {==}

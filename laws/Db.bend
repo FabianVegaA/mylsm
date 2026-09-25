@@ -74,3 +74,25 @@ law db_get_tombstone_hides:
 # LAW: absent key misses everywhere (closed)
 law db_get_miss:
   {Db.db_get(two_level_db(), "zzz") == None{} : Maybe<&2, String>}
+
+# --- db_get_cached transparency (Phase A3): closed vectors ---
+
+def cached_snd(pair: (Db.Db & Maybe<&2, String>)) -> Maybe<&2, String>:
+  match pair:
+    case (db2, v):
+      v
+
+def cached_val(+db: Db.Db, +key: String) -> Maybe<&2, String>:
+  cached_snd(Db.db_get_cached(db, key))
+
+# LAW: cached reads agree with uncached reads (closed)
+law db_cache_transparent_hit:
+  {cached_val(two_level_db(), "l0") == Db.db_get(two_level_db(), "l0") : Maybe<&2, String>}
+
+# LAW: cached tombstone still hides (closed)
+law db_cache_transparent_tomb:
+  {cached_val(tomb_db(), "x") == Db.db_get(tomb_db(), "x") : Maybe<&2, String>}
+
+# LAW: cached miss agrees (closed)
+law db_cache_transparent_miss:
+  {cached_val(two_level_db(), "zzz") == Db.db_get(two_level_db(), "zzz") : Maybe<&2, String>}

@@ -101,7 +101,7 @@ def batch_go(+db: Db.Db, +muts: List<&2, Wal.Mut>) -> Db.Db:
       Db.Db{dir, Db.apply_batch(muts, mem), frozen, batch_cap, bcache, levels, flushed, manifest_token}
 
 def sget_go(+db: Db.Db, +key: String) -> Db.Db & Maybe<&2, String>:
-  (db, Db.db_get(db, key))
+  Db.db_get_cached(db, key)
 
 def sput(+key: String, +val: String) -> Sess<&2, Unit>:
   Sess{db => (put_go(db, key, val), Unit{})}
