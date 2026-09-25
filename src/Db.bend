@@ -267,6 +267,28 @@ def db_write(+db: Db, +batch: Wal.Batch) -> IO(Result<&1, &1, U32 & String, Db>)
 def db_put(+db: Db, +key: String, +val: String) -> IO(Result<&1, &1, U32 & String, Db>):
   db_write(db, Wal.Batch{Con{Wal.Put{key, val}, Nil{}}})
 
+def batch_cap_of(+db: Db) -> Nat:
+  match db:
+    case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
+      batch_cap
+
+def with_batch_cap(+db: Db, +cap: Nat) -> Db:
+  match db:
+    case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
+      Db{dir, mem, frozen, cap, bcache, levels, flushed, manifest_token}
+
+def staged_muts(+staged: List<&2, Wal.Batch>) -> List<&2, Wal.Mut>:
+  match staged:
+    case Nil{}:
+      Nil{}
+    case Con{Wal.Batch{muts}, t}:
+      List.append(&2, Wal.Mut, muts, staged_muts(t))
+
+def db_write_staged(+db: Db, +staged: List<&2, Wal.Batch>) -> IO(Result<&1, &1, U32 & String, Db>):
+  match db:
+    case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
+      db_write(Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}, Wal.Batch{staged_muts(List.reverse(&2, Wal.Batch, staged))})
+
 def db_del(+db: Db, +key: String) -> IO(Result<&1, &1, U32 & String, Db>):
   db_write(db, Wal.Batch{Con{Wal.Del{key}, Nil{}}})
 

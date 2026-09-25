@@ -16,7 +16,7 @@ import ./repl_types.bend as Repl
 import ./repl_parser.bend as Parser
 
 type Session is Data:
-  Session{db: Db.Db, dir: String, timing: Repl.TimingMode, mode: Repl.ComputeMode, gpu: Bool, workers: Nat}
+  Session{db: Db.Db, dir: String, timing: Repl.TimingMode, mode: Repl.ComputeMode, gpu: Bool, workers: Nat, staged: List<&2, Wal.Batch>}
 
 type LoopState is Data:
   Running{session: Session}
@@ -129,22 +129,22 @@ def import_decoded(decoded: Maybe<&2, List<&2, MemTable.Entry>>, session: Sessio
         return Running{session}
     case Some{entries}:
       match session:
-        case Session{db, dir, timing, mode, gpu, workers}:
+        case Session{db, dir, timing, mode, gpu, workers, staged}:
           do IO<LoopState>:
             db2 : Db.Db <- IO.try(Db.Db, Recover.write(db, Wal.Batch{Interchange.muts_of_entries(entries)}))
             _u : Unit <- IO.print("OK import")
-            return Running{Session{db2, dir, timing, mode, gpu, workers}}
+            return Running{Session{db2, dir, timing, mode, gpu, workers, staged}}
 
 def replace_mode(+new_mode: Repl.ComputeMode, session: Session) -> IO(LoopState):
   match session:
-    case Session{db, dir, timing, mode, gpu, workers}:
+    case Session{db, dir, timing, mode, gpu, workers, staged}:
       do IO<LoopState>:
         _u : Unit <- IO.print("mode=" ++ mode_name(new_mode))
-        return Running{Session{db, dir, timing, new_mode, gpu, workers}}
+        return Running{Session{db, dir, timing, new_mode, gpu, workers, staged}}
 
 def gpu_enabled(session: Session) -> Bool:
   match session:
-    case Session{db, dir, timing, mode, gpu, workers}:
+    case Session{db, dir, timing, mode, gpu, workers, staged}:
       gpu
 
 def set_gpu_mode(enabled: Bool, session: Session) -> IO(LoopState):
@@ -192,107 +192,113 @@ def restart_runtime(native: Bool, +count: Nat, +current: Nat, +dir: String, sess
 def restart_env(runtime: String, count: Nat, current: Nat, dir: String, session: Session) -> IO(LoopState):
   restart_runtime(String.eq(runtime, "native"), count, current, dir, session)
 
-def execute(command: Repl.Command, session: Session) -> IO(LoopState):
+def put_flush(full: Bool, +staged: List<&2, Wal.Batch>, +db: Db.Db, +dir: String, +timing: Repl.TimingMode, +mode: Repl.ComputeMode, +gpu: Bool, +workers: Nat) -> IO(LoopState):
+  match full:
+    case True{}:
+      do IO<LoopState>:
+        db2 : Db.Db <- IO.try(Db.Db, Db.db_write_staged(db, staged))
+        _u : Unit <- IO.print("OK")
+        return Running{Session{db2, dir, timing, mode, gpu, workers, Nil{}}}
+    case False{}:
+      do IO<LoopState>:
+        _u : Unit <- IO.print("QUEUED")
+        return Running{Session{db, dir, timing, mode, gpu, workers, staged}}
+
+def execute_go(command: Repl.Command, session: Session) -> IO(LoopState):
   match command:
     case Repl.Noop{}:
       return_session(session)
     case Repl.Put{key, value}:
       match session:
-        case Session{db, dir, timing, mode, gpu, workers}:
-          do IO<LoopState>:
-            db2 : Db.Db <- IO.try(Db.Db, Recover.write(db, Wal.Batch{Con{Wal.Put{key, value}, Nil{}}}))
-            _u : Unit <- IO.print("OK")
-            return Running{Session{db2, dir, timing, mode, gpu, workers}}
+        case Session{+db, dir, timing, mode, gpu, workers, +staged}:
+          put_flush(Nat.is_le(Db.batch_cap_of(db), Nat.add(List.length(&2, Wal.Batch, staged), 1n)), Wal.stage(staged, Wal.Batch{Con{Wal.Put{key, value}, Nil{}}}), db, dir, timing, mode, gpu, workers)
     case Repl.Get{key}:
       match session:
-        case Session{+db, dir, timing, mode, gpu, workers}:
+        case Session{+db, dir, timing, mode, gpu, workers, staged}:
           do IO<LoopState>:
             _u : Unit <- IO.print(Demo.show_maybe(Db.db_get(db, key)))
-            return Running{Session{db, dir, timing, mode, gpu, workers}}
+            return Running{Session{db, dir, timing, mode, gpu, workers, staged}}
     case Repl.Del{key}:
       match session:
-        case Session{db, dir, timing, mode, gpu, workers}:
-          do IO<LoopState>:
-            db2 : Db.Db <- IO.try(Db.Db, Recover.write(db, Wal.Batch{Con{Wal.Del{key}, Nil{}}}))
-            _u : Unit <- IO.print("OK")
-            return Running{Session{db2, dir, timing, mode, gpu, workers}}
+        case Session{+db, dir, timing, mode, gpu, workers, +staged}:
+          put_flush(Nat.is_le(Db.batch_cap_of(db), Nat.add(List.length(&2, Wal.Batch, staged), 1n)), Wal.stage(staged, Wal.Batch{Con{Wal.Del{key}, Nil{}}}), db, dir, timing, mode, gpu, workers)
     case Repl.Scan{lo, hi}:
       match session:
-        case Session{+db, dir, timing, mode, gpu, workers}:
+        case Session{+db, dir, timing, mode, gpu, workers, staged}:
           do IO<LoopState>:
             _u : Unit <- print_entries(MergeIter.scan(Db.all_entries(db), lo, hi))
-            return Running{Session{db, dir, timing, mode, gpu, workers}}
+            return Running{Session{db, dir, timing, mode, gpu, workers, staged}}
     case Repl.Flush{}:
       match session:
-        case Session{db, dir, timing, mode, gpu, workers}:
+        case Session{db, dir, timing, mode, gpu, workers, staged}:
           do IO<LoopState>:
             db2 : Db.Db <- IO.try(Db.Db, Flush.flush(db))
             _u : Unit <- IO.print("OK flush")
-            return Running{Session{db2, dir, timing, mode, gpu, workers}}
+            return Running{Session{db2, dir, timing, mode, gpu, workers, staged}}
     case Repl.Compact{}:
       match session:
-        case Session{db, dir, timing, mode, gpu, workers}:
+        case Session{db, dir, timing, mode, gpu, workers, staged}:
           do IO<LoopState>:
             db2 : Db.Db <- IO.try(Db.Db, Compact.compact(db))
             _u : Unit <- IO.print("OK compact")
-            return Running{Session{db2, dir, timing, mode, gpu, workers}}
+            return Running{Session{db2, dir, timing, mode, gpu, workers, staged}}
     case Repl.Maintain{}:
       match session:
-        case Session{db, dir, timing, mode, gpu, workers}:
+        case Session{db, dir, timing, mode, gpu, workers, staged}:
           do IO<LoopState>:
             db2 : Db.Db <- IO.try(Db.Db, Recover.maintain(db))
             _u : Unit <- IO.print("OK maintain")
-            return Running{Session{db2, dir, timing, mode, gpu, workers}}
+            return Running{Session{db2, dir, timing, mode, gpu, workers, staged}}
     case Repl.Stats{}:
       match session:
-        case Session{+db, dir, timing, mode, gpu, workers}:
+        case Session{+db, dir, timing, mode, gpu, workers, staged}:
           do IO<LoopState>:
             _u0 : Unit <- IO.print("mem_entries=" ++ Nat.show(mem_count(db)))
             _u1 : Unit <- IO.print("levels=" ++ Nat.show(level_count(db)))
-            return Running{Session{db, dir, timing, mode, gpu, workers}}
+            return Running{Session{db, dir, timing, mode, gpu, workers, staged}}
     case Repl.Runtime{}:
       match session:
-        case Session{db, dir, timing, +mode, +gpu, +workers}:
+        case Session{db, dir, timing, +mode, +gpu, +workers, staged}:
           do IO<LoopState>:
             _u0 : Unit <- IO.print("mode=" ++ mode_name(mode))
             _u1 : Unit <- IO.print("gpu_enabled=" ++ bool_name(gpu))
             _u2 : Unit <- IO.print("threads=" ++ Nat.show(workers))
             _u3 : Unit <- IO.print("storage=cpu/io")
-            return Running{Session{db, dir, timing, mode, gpu, workers}}
+            return Running{Session{db, dir, timing, mode, gpu, workers, staged}}
     case Repl.Timing{new_timing}:
       match session:
-        case Session{db, dir, timing, mode, gpu, workers}:
+        case Session{db, dir, timing, mode, gpu, workers, staged}:
           do IO<LoopState>:
             _u : Unit <- IO.print("timing updated")
-            return Running{Session{db, dir, new_timing, mode, gpu, workers}}
+            return Running{Session{db, dir, new_timing, mode, gpu, workers, staged}}
     case Repl.Mode{new_mode}:
       update_mode(new_mode, session)
     case Repl.Threads{+count}:
       match session:
-        case Session{db, +dir, timing, mode, gpu, +workers}:
+        case Session{db, +dir, timing, mode, gpu, +workers, staged}:
           do IO<LoopState>:
             runtime : String <- IO.try(String, Console.get_env("MYLSM_RUNTIME"))
-            restart_env(runtime, count, workers, dir, Session{db, dir, timing, mode, gpu, workers})
+            restart_env(runtime, count, workers, dir, Session{db, dir, timing, mode, gpu, workers, staged})
     case Repl.Compute{fuel}:
       match session:
-        case Session{db, dir, timing, +mode, +gpu, workers}:
+        case Session{db, dir, timing, +mode, +gpu, workers, staged}:
           do IO<LoopState>:
             value : Nat <- compute(mode, gpu, fuel)
             _u : Unit <- IO.print("compute=" ++ Nat.show(value))
-            return Running{Session{db, dir, timing, mode, gpu, workers}}
+            return Running{Session{db, dir, timing, mode, gpu, workers, staged}}
     case Repl.Import{path}:
       do IO<LoopState>:
         data : String <- IO.try(String, Flush.read_file(path))
         import_decoded(Interchange.parse(data), session)
     case Repl.Export{+path}:
       match session:
-        case Session{+db, dir, timing, mode, gpu, workers}:
+        case Session{+db, dir, timing, mode, gpu, workers, staged}:
           do IO<LoopState>:
             _u0 : Unit <- IO.try(Unit, Flush.write_file(path ++ ".tmp", Interchange.serialize(export_entries(db))))
             _u1 : Unit <- IO.try(Unit, Fs.rename(path ++ ".tmp", path))
             _u2 : Unit <- IO.try(Unit, Fs.fsync(parent_path(path)))
             _u3 : Unit <- IO.print("OK export")
-            return Running{Session{db, dir, timing, mode, gpu, workers}}
+            return Running{Session{db, dir, timing, mode, gpu, workers, staged}}
     case Repl.Time{inner}:
       do IO<LoopState>:
         _u : Unit <- IO.print("use 'timing once' before the command: " ++ inner)
@@ -313,14 +319,28 @@ def execute(command: Repl.Command, session: Session) -> IO(LoopState):
         _u : Unit <- IO.print("error: " ++ message)
         return Running{session}
 
+def execute_flushed(command: Repl.Command, +db: Db.Db, +dir: String, +timing: Repl.TimingMode, +mode: Repl.ComputeMode, +gpu: Bool, +workers: Nat, +staged: List<&2, Wal.Batch>) -> IO(LoopState):
+  match staged:
+    case Nil{}:
+      execute_go(command, Session{db, dir, timing, mode, gpu, workers, Nil{}})
+    case Con{_, _}:
+      do IO<LoopState>:
+        db2 : Db.Db <- IO.try(Db.Db, Db.db_write_staged(db, staged))
+        execute_go(command, Session{db2, dir, timing, mode, gpu, workers, Nil{}})
+
+def execute(command: Repl.Command, session: Session) -> IO(LoopState):
+  match session:
+    case Session{db, dir, timing, mode, gpu, workers, staged}:
+      execute_flushed(command, db, dir, timing, mode, gpu, workers, staged)
+
 def reset_once_state(once: Bool, state: LoopState) -> LoopState:
   match once state:
     case False{} _:
       state
     case True{} Stopped{}:
       Stopped{}
-    case True{} Running{Session{db, dir, timing, mode, gpu, workers}}:
-      Running{Session{db, dir, Repl.TimingOff{}, mode, gpu, workers}}
+    case True{} Running{Session{db, dir, timing, mode, gpu, workers, staged}}:
+      Running{Session{db, dir, Repl.TimingOff{}, mode, gpu, workers, staged}}
 
 def timed_run(once: Bool, command: Repl.Command, session: Session) -> IO(LoopState):
   do IO<LoopState>:
@@ -337,8 +357,8 @@ def timed_dispatch(enabled: Bool, once: Bool, command: Repl.Command, session: Se
 
 def run_regular(command: Repl.Command, session: Session) -> IO(LoopState):
   match session:
-    case Session{db, dir, +timing, mode, gpu, workers}:
-      timed_dispatch(timing_should(timing), timing_once(timing), command, Session{db, dir, timing, mode, gpu, workers})
+    case Session{db, dir, +timing, mode, gpu, workers, staged}:
+      timed_dispatch(timing_should(timing), timing_once(timing), command, Session{db, dir, timing, mode, gpu, workers, staged})
 
 def run_time(inner: String, session: Session) -> IO(LoopState):
   timed_dispatch(True{}, False{}, Parser.parse_command(inner), session)

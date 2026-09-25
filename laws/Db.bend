@@ -96,3 +96,12 @@ law db_cache_transparent_tomb:
 # LAW: cached miss agrees (closed)
 law db_cache_transparent_miss:
   {cached_val(two_level_db(), "zzz") == Db.db_get(two_level_db(), "zzz") : Maybe<&2, String>}
+
+# --- grouped commits (Phase B1): closed vectors ---
+
+def stage_two() -> List<&2, Wal.Batch>:
+  Con{Wal.Batch{Con{Wal.Put{"b", "2"}, Nil{}}}, Con{Wal.Batch{Con{Wal.Put{"a", "1"}, Nil{}}}, Nil{}}}
+
+# LAW: staged fold applies oldest batch first, equal to sequential writes (closed)
+law db_staged_order:
+  {Db.apply_batch(Db.staged_muts(List.reverse(&2, Wal.Batch, stage_two())), MemTable.empty()) == Db.apply_batch(Con{Wal.Put{"b", "2"}, Nil{}}, Db.apply_batch(Con{Wal.Put{"a", "1"}, Nil{}}, MemTable.empty())) : MemTable.MemTable}

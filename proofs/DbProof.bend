@@ -30,3 +30,6 @@ def Laws.db_cache_transparent_tomb():
 
 def Laws.db_cache_transparent_miss():
   {==}
+
+def Laws.db_staged_order():
+  {==}

@@ -29,6 +29,7 @@ Commands:
 Environment:
   MYLSM_DEVICE=auto|cpu|gpu   execution policy (default: auto)
   MYLSM_THREADS=N              native CPU thread count (1..256)
+  MYLSM_BATCH_CAP=N            REPL grouped-commit batch bound (1..1024, default 1)
   MYLSM_GPU_MEMORY=SIZE        Bend GPU memory budget (default: 4GB)
   MYLSM_DIR=PATH               REPL database directory
 USAGE
