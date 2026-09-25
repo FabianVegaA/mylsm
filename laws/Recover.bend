@@ -1,6 +1,7 @@
 import Base
 import ../src/Wal.bend as Wal
 import ../src/MemTable.bend as MemTable
+import ../src/Db.bend as Db
 import ../src/Recover.bend as Recover
 
 # Small local fixture duplicated from the WAL domain.
@@ -13,13 +14,13 @@ def batch_put1() -> Wal.Batch:
 law frame_len_ok:
   {Recover.frame_len(Recover.frame_of("abc")) == Some{3n} : Maybe<&2, Nat>}
 
-# LAW: single-frame replay applies the batch (closed; composes wal_rt)
+# LAW: single-frame replay applies the batch, frozen stays empty (closed; composes wal_rt)
 law replay_single:
-  {Recover.replay_mem(Recover.frame_of(Wal.encode(batch_put1()))) == MemTable.MT{Con{MemTable.Entry{"k", Some{"v"}}, Nil{}}} : MemTable.MemTable}
+  {Recover.replay_mem(Recover.frame_of(Wal.encode(batch_put1()))) == (MemTable.MT{Con{MemTable.Entry{"k", Some{"v"}}, Nil{}}}, MemTable.empty()) : MemTable.MemTable & MemTable.MemTable}
 
 # LAW: torn tail replays to the valid prefix — here empty (closed)
 law replay_torn:
-  {Recover.replay_mem("---;ab") == MemTable.empty() : MemTable.MemTable}
+  {Recover.replay_mem("---;ab") == (MemTable.empty(), MemTable.empty()) : MemTable.MemTable & MemTable.MemTable}
 
 def nf_mem2() -> MemTable.MemTable:
   MemTable.MT{Con{MemTable.Entry{"a", Some{"1"}}, Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}}}
@@ -47,6 +48,11 @@ law generation_shape_branches:
   {(Recover.gen_valid_read(Some{12n}), Recover.gen_valid_read(None{})) == (True{}, False{}) : Bool & Bool}
 
 
+def replayed_db(p: (MemTable.MemTable & MemTable.MemTable)) -> Db.Db:
+  match p:
+    case (mem, frozen):
+      Db.Db{"/d", mem, frozen, 1n, Nil{}, Nil{}, 0n, ""}
+
 # LAW: recovery equivalence — replayed reads equal pre-crash reads (closed)
 law recover_equiv:
-  {MemTable.get(Recover.replay_mem(Recover.frame_of(Wal.encode(batch_put1()))), "k") == MemTable.get(MemTable.MT{Con{MemTable.Entry{"k", Some{"v"}}, Nil{}}}, "k") : Maybe<&2, String>}
+  {Db.db_get(replayed_db(Recover.replay_mem(Recover.frame_of(Wal.encode(batch_put1())))), "k") == MemTable.get(MemTable.MT{Con{MemTable.Entry{"k", Some{"v"}}, Nil{}}}, "k") : Maybe<&2, String>}

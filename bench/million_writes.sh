@@ -106,9 +106,9 @@ grep -q '^phase=pre_recovery samples=pass$' "$RUN_RESULT" || { echo "correctness
 grep -q '^phase=post_recovery samples=pass$' "$RUN_RESULT" || { echo "correctness gate failed: post-recovery samples" >&2; exit 1; }
 
 case "$COUNT" in
-  4096) EXPECTED_SHAPE='mem_entries=4096 l0_tables=0 l1_tables=0' ;;
-  4097) EXPECTED_SHAPE='mem_entries=0 l0_tables=1 l1_tables=0' ;;
-  20485) EXPECTED_SHAPE='mem_entries=0 l0_tables=0 l1_tables=1' ;;
+  4096) EXPECTED_SHAPE='mem_entries=0 frozen_entries=4096 l0_tables=0 l1_tables=0' ;;
+  4097) EXPECTED_SHAPE='mem_entries=1 frozen_entries=4096 l0_tables=0 l1_tables=0' ;;
+  20485) EXPECTED_SHAPE='mem_entries=3 frozen_entries=4096 l0_tables=2 l1_tables=0' ;;
   *) EXPECTED_SHAPE='' ;;
 esac
 if [[ -n "$EXPECTED_SHAPE" ]]; then

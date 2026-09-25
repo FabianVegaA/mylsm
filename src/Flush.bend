@@ -2,6 +2,7 @@ import Base
 import ./Keys.bend as Keys
 import ./MemTable.bend as MemTable
 import ./Sstable.bend as Sstable
+import ./SortedRun.bend as SortedRun
 import ./SstFile.bend as SstFile
 import ./Wal.bend as Wal
 import ./Manifest.bend as Manifest
@@ -145,7 +146,7 @@ def flush_goB(
   +tbl: Sstable.Table,
   +levels: List<&2, List<&2, Sstable.Table>>,
   +flushed: Nat,
-  +frozen: MemTable.MemTable,
+  +mem: MemTable.MemTable,
   +batch_cap: Nat,
 ) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
@@ -155,7 +156,7 @@ def flush_goB(
     _v3 : Unit <- IO.try(Unit, Fs.fsync(dir))
     _cp2 : Unit <- IO.try(Unit, CrashPoint.hit("flush.manifest_published"))
     _rm : Result<&1, &1, U32 & String, Unit> <- Fs.remove(Db.wal_path(dir))
-    return Done{Db.Db{dir, MemTable.MT{Nil{}}, frozen, batch_cap, Nil{}, l0_add(levels, tbl), Nat.add(flushed, 1n), Manifest.serialize(m2)}}
+    return Done{Db.Db{dir, mem, MemTable.MT{Nil{}}, batch_cap, Nil{}, l0_add(levels, tbl), Nat.add(flushed, 1n), Manifest.serialize(m2)}}
 
 def flush_drift(
   ok: Bool,
@@ -167,14 +168,14 @@ def flush_drift(
   +name: String,
   +levels: List<&2, List<&2, Sstable.Table>>,
   +flushed: Nat,
-  +frozen: MemTable.MemTable,
+  +mem: MemTable.MemTable,
   +batch_cap: Nat,
 ) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match ok:
     case False{}:
       IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{(U32.from_nat(2n), "manifest drift")})
     case True{}:
-      flush_goB(dir, mpath, mtmp, mfst_add(mfst, name), tbl, levels, flushed, frozen, batch_cap)
+      flush_goB(dir, mpath, mtmp, mfst_add(mfst, name), tbl, levels, flushed, mem, batch_cap)
 
 def flush_goA(
   +dir: String,
@@ -189,7 +190,7 @@ def flush_goA(
   +levels: List<&2, List<&2, Sstable.Table>>,
   +flushed: Nat,
   +manifest_token: String,
-  +frozen: MemTable.MemTable,
+  +mem: MemTable.MemTable,
   +batch_cap: Nat,
 ) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
@@ -200,7 +201,7 @@ def flush_goA(
     _u4 : Unit <- IO.try(Unit, Fs.fsync(l0dir))
     _cp2 : Unit <- IO.try(Unit, CrashPoint.hit("flush.table_published"))
     +m : Manifest.Manifest <- IO.try(Manifest.Manifest, load_mfst(mpath))
-    flush_drift(String.eq(Manifest.serialize(m), manifest_token), dir, mpath, mtmp, m, tbl, name, levels, flushed, frozen, batch_cap)
+    flush_drift(String.eq(Manifest.serialize(m), manifest_token), dir, mpath, mtmp, m, tbl, name, levels, flushed, mem, batch_cap)
 
 def flush_pre(
   +dir: String,
@@ -208,23 +209,54 @@ def flush_pre(
   +levels: List<&2, List<&2, Sstable.Table>>,
   +flushed: Nat,
   +manifest_token: String,
-  +frozen: MemTable.MemTable,
   +batch_cap: Nat,
 ) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   +tbl = Sstable.build(entries, 0n, List.length(&2, MemTable.Entry, entries))
   +name = table_name(flushed)
   +l0dir = dir ++ "/l0"
-  flush_goA(dir, l0dir, l0dir ++ "/" ++ name ++ ".tmp", l0dir ++ "/" ++ name, dir ++ "/MANIFEST", dir ++ "/MANIFEST.tmp", SstFile.serialize(Db.table_entries(tbl), 0n), tbl, name, levels, flushed, manifest_token, frozen, batch_cap)
+  flush_goA(dir, l0dir, l0dir ++ "/" ++ name ++ ".tmp", l0dir ++ "/" ++ name, dir ++ "/MANIFEST", dir ++ "/MANIFEST.tmp", SstFile.serialize(Db.table_entries(tbl), 0n), tbl, name, levels, flushed, manifest_token, MemTable.MT{Nil{}}, batch_cap)
+
+# Frozen-path flush MERGES mem (newer) over frozen (older) into one L0 table
+# and drains both: the WAL is truncated on publish, so anything left in mem
+# would otherwise exist nowhere on disk (loss window caught by 20485 smoke).
+def flush_frozen(
+  +dir: String,
+  +mem: MemTable.MemTable,
+  +entries: List<&2, MemTable.Entry>,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +manifest_token: String,
+  +batch_cap: Nat,
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+  match mem:
+    case MemTable.MT{live}:
+      +merged = SortedRun.merge_many_newest(Con{live, Con{entries, Nil{}}})
+      +tbl = Sstable.build(merged, 0n, List.length(&2, MemTable.Entry, merged))
+      +name = table_name(flushed)
+      +l0dir = dir ++ "/l0"
+      flush_goA(dir, l0dir, l0dir ++ "/" ++ name ++ ".tmp", l0dir ++ "/" ++ name, dir ++ "/MANIFEST", dir ++ "/MANIFEST.tmp", SstFile.serialize(Db.table_entries(tbl), 0n), tbl, name, levels, flushed, manifest_token, MemTable.MT{Nil{}}, batch_cap)
+
+def flush_pick(
+  +frozen: MemTable.MemTable,
+  +mem: MemTable.MemTable,
+  +dir: String,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +manifest_token: String,
+  +batch_cap: Nat,
+  +bcache: List<&2, Db.BEntry>,
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+  match frozen mem:
+    case MemTable.MT{Nil{}} MemTable.MT{Nil{}}:
+      IO.pure(Result<&1, &1, U32 & String, Db.Db>, Done{Db.Db{dir, MemTable.MT{Nil{}}, MemTable.MT{Nil{}}, batch_cap, bcache, levels, flushed, manifest_token}})
+    case MemTable.MT{Nil{}} MemTable.MT{Con{e, t}}:
+      flush_pre(dir, Con{e, t}, levels, flushed, manifest_token, batch_cap)
+    case MemTable.MT{Con{fe, ft}} _:
+      flush_frozen(dir, mem, Con{fe, ft}, levels, flushed, manifest_token, batch_cap)
 
 def flush(+db: Db.Db) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match db:
     case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
-      match mem:
-        case MemTable.MT{entries}:
-          match entries:
-            case Nil{}:
-              IO.pure(Result<&1, &1, U32 & String, Db.Db>, Done{Db.Db{dir, MemTable.MT{Nil{}}, frozen, batch_cap, bcache, levels, flushed, manifest_token}})
-            case Con{_, _}:
-              flush_pre(dir, entries, levels, flushed, manifest_token, frozen, batch_cap)
+      flush_pick(frozen, mem, dir, levels, flushed, manifest_token, batch_cap, bcache)
 
 # --- Closed-vector laws live in laws/Flush.bend (spec law 6) ---

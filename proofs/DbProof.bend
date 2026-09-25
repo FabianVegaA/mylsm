@@ -33,3 +33,15 @@ def Laws.db_cache_transparent_miss():
 
 def Laws.db_staged_order():
   {==}
+
+def Laws.rotate_below_cap():
+  {==}
+
+def Laws.rotate_fires():
+  {==}
+
+def Laws.rotate_preserves():
+  {==}
+
+def Laws.frozen_empty_branches():
+  {==}

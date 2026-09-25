@@ -49,6 +49,11 @@ def mem_count(db: Db.Db) -> Nat:
     case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
       MemTable.count(mem)
 
+def frozen_count(db: Db.Db) -> Nat:
+  match db:
+    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
+      MemTable.count(frozen)
+
 def first_level(levels: List<&2, List<&2, Sstable.Table>>) -> List<&2, Sstable.Table>:
   match levels:
     case Nil{}: Nil{}
@@ -69,7 +74,7 @@ def level_count(db: Db.Db, level: Nat) -> Nat:
           List.length(&2, Sstable.Table, first_level(rest_levels(levels)))
 
 def print_shape(+phase: String, +db: Db.Db) -> IO(Unit):
-  IO.print("phase=" ++ phase ++ " mem_entries=" ++ Nat.show(mem_count(db)) ++ " l0_tables=" ++ Nat.show(level_count(db, 0n)) ++ " l1_tables=" ++ Nat.show(level_count(db, 1n)))
+  IO.print("phase=" ++ phase ++ " mem_entries=" ++ Nat.show(mem_count(db)) ++ " frozen_entries=" ++ Nat.show(frozen_count(db)) ++ " l0_tables=" ++ Nat.show(level_count(db, 0n)) ++ " l1_tables=" ++ Nat.show(level_count(db, 1n)))
 
 def write_many(fuel: Nat, +index: Nat, db: Db.Db) -> IO(Db.Db):
   match fuel:

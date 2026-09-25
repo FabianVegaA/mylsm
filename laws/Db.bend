@@ -105,3 +105,34 @@ def stage_two() -> List<&2, Wal.Batch>:
 # LAW: staged fold applies oldest batch first, equal to sequential writes (closed)
 law db_staged_order:
   {Db.apply_batch(Db.staged_muts(List.reverse(&2, Wal.Batch, stage_two())), MemTable.empty()) == Db.apply_batch(Con{Wal.Put{"b", "2"}, Nil{}}, Db.apply_batch(Con{Wal.Put{"a", "1"}, Nil{}}, MemTable.empty())) : MemTable.MemTable}
+
+# --- active/frozen rotation (Phase B2): closed vectors ---
+
+def small_mem() -> MemTable.MemTable:
+  MemTable.MT{Con{MemTable.Entry{"a", Some{"1"}}, Nil{}}}
+
+def mem_entries(tab: MemTable.MemTable) -> List<&2, MemTable.Entry>:
+  match tab:
+    case MemTable.MT{entries}:
+      entries
+
+def pair_entries(pair: (MemTable.MemTable & MemTable.MemTable)) -> List<&2, MemTable.Entry>:
+  match pair:
+    case (mem2, frozen2):
+      List.append(&2, MemTable.Entry, mem_entries(mem2), mem_entries(frozen2))
+
+# LAW: no rotation below cap keeps tables in place (closed)
+law rotate_below_cap:
+  {Db.rotate_dec(False{}, small_mem(), MemTable.empty()) == (small_mem(), MemTable.empty()) : MemTable.MemTable & MemTable.MemTable}
+
+# LAW: rotation moves a full memtable to frozen (closed)
+law rotate_fires:
+  {Db.rotate_dec(True{}, small_mem(), MemTable.empty()) == (MemTable.empty(), small_mem()) : MemTable.MemTable & MemTable.MemTable}
+
+# LAW: rotation preserves every entry (closed)
+law rotate_preserves:
+  {pair_entries(Db.apply_and_rotate(db_muts2(), MemTable.empty(), MemTable.empty())) == mem_entries(Db.apply_batch(db_muts2(), MemTable.empty())) : List<&2, MemTable.Entry>}
+
+# LAW: frozen emptiness detector (closed)
+law frozen_empty_branches:
+  {(Db.frozen_empty(MemTable.empty()), Db.frozen_empty(small_mem())) == (True{}, False{}) : Bool & Bool}

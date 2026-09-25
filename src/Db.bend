@@ -255,6 +255,36 @@ def wal_append(+dir: String, +data: String) -> IO(Result<&1, &1, U32 & String, U
     fr : (File & Result<&1, &1, U32 & String, Unit>) <- File.write(f, wal_frame(data))
     wal_tail(fr, dir)
 
+def rotate_dec(full: Bool, +mem: MemTable.MemTable, +frozen: MemTable.MemTable) -> MemTable.MemTable & MemTable.MemTable:
+  match full:
+    case True{}:
+      (MemTable.empty(), mem)
+    case False{}:
+      (mem, frozen)
+
+def frozen_empty(+frozen: MemTable.MemTable) -> Bool:
+  match frozen:
+    case MemTable.MT{entries}:
+      match entries:
+        case Nil{}:
+          True{}
+        case Con{_, _}:
+          False{}
+
+def rotate_after(+grown: MemTable.MemTable, +frozen: MemTable.MemTable) -> MemTable.MemTable & MemTable.MemTable:
+  rotate_dec(Bool.and(Nat.is_le(4096n, MemTable.count(grown)), frozen_empty(frozen)), grown, frozen)
+
+def apply_and_rotate(+muts: List<&2, Wal.Mut>, +mem: MemTable.MemTable, +frozen: MemTable.MemTable) -> MemTable.MemTable & MemTable.MemTable:
+  rotate_after(apply_batch(muts, mem), frozen)
+
+def apply_done(rm: (MemTable.MemTable & MemTable.MemTable), +dir: String, +batch_cap: Nat, +bcache: List<&2, BEntry>, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String) -> Db:
+  match rm:
+    case (mem2, frozen2):
+      Db{dir, mem2, frozen2, batch_cap, bcache, levels, flushed, manifest_token}
+
+def rot_done(rm: (MemTable.MemTable & MemTable.MemTable), +dir: String, +batch_cap: Nat, +bcache: List<&2, BEntry>, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String) -> Result<&1, &1, U32 & String, Db>:
+  Done{apply_done(rm, dir, batch_cap, bcache, levels, flushed, manifest_token)}
+
 def db_write(+db: Db, +batch: Wal.Batch) -> IO(Result<&1, &1, U32 & String, Db>):
   match db:
     case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
@@ -262,7 +292,7 @@ def db_write(+db: Db, +batch: Wal.Batch) -> IO(Result<&1, &1, U32 & String, Db>)
         case Wal.Batch{muts}:
           do IO<Result<&1, &1, U32 & String, Db>>:
             _res : Unit <- IO.try(Unit, wal_append(dir, Wal.encode(Wal.Batch{muts})))
-            return Done{Db{dir, apply_batch(muts, mem), frozen, batch_cap, bcache, levels, flushed, manifest_token}}
+            return rot_done(apply_and_rotate(muts, mem, frozen), dir, batch_cap, bcache, levels, flushed, manifest_token)
 
 def db_put(+db: Db, +key: String, +val: String) -> IO(Result<&1, &1, U32 & String, Db>):
   db_write(db, Wal.Batch{Con{Wal.Put{key, val}, Nil{}}})

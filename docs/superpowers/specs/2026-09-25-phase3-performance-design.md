@@ -35,7 +35,7 @@ One commit fixing every A+B interface; all bodies delegate to current logic; gat
 ## 4. Phase B — Writes
 
 - Grouped commits: app/REPL path stages up to `batch_cap` batches via `Wal.stage`, then one `db_write` (one `wal_append` + one fsync). Law: staged-then-write == sequential writes (the existing `Db` batch-fold property, cited not re-proved).
-- Active/frozen: writes go to `mem`; at the 4096 cap, `mem` rotates into `frozen` (instead of blocking) and a fresh `mem` opens; flush drains `frozen`. Reads search mem then frozen (phase A path covers it). Laws: rotation preserves newest-wins; flush-pre/post `db_get` agreement (extends existing `laws/Flush.bend` properties).
+- Active/frozen: writes go to `mem`; at the 4096 cap, `mem` rotates into `frozen` (instead of blocking) and a fresh `mem` opens; flush drains `frozen` merged newest-first with the live `mem` tail into one L0 table and clears both (merged drain is load-bearing: the WAL is truncated on publish, so a mem-only carryover would exist nowhere on disk). Reads search mem then frozen (phase A path covers it). Laws: rotation preserves newest-wins; flush-pre/post `db_get` agreement (extends existing `laws/Flush.bend` properties).
 - Flush/compaction "background": honest scope — Bend pure code has no OS threads, so true background IO needs host-effect work (out of scope). What lands here: non-blocking writer rotation above + disjoint-range compaction parallelism via parallel-let (already the pattern in `merge_round`). Documented as such; no thread claims.
 - `batch_cap` configurable through `bin/mylsm` env (`MYLSM_BATCH_CAP`, default preserves current single-batch behavior).
 
