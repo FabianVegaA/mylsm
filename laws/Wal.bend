@@ -39,3 +39,8 @@ law wal_rt_multi:
 law wal_fail_closed:
   for +s: String
   {Wal.is_decided(Wal.decode(s)) == True{} : Bool}
+
+# LAW: concatenated encodings decode as one merged batch (closed; sequence
+# semantics — the framing layer owns boundaries, decode consumes sequences).
+law wal_concat_merges:
+  {Wal.decode(Wal.encode(batch_put1()) ++ Wal.encode(batch_del1())) == Some{Wal.Batch{Con{Wal.Put{"k", "v"}, Con{Wal.Del{"k"}, Nil{}}}}} : Maybe<&2, Wal.Batch>}
