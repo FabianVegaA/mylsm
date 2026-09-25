@@ -34,7 +34,7 @@ def feed_v2(rest: String, decoder: V2.Decoder) -> V2.Decoder:
 def unknown_v2(is_v2: Bool, +text: String) -> Mode:
   match is_v2:
     case True{}:
-      Current{feed_v2(text, V2.Dec{V2.NeedS{}, 0n, None{}, Nil{}, 0n, 0n, 7, 0n})}
+      Current{feed_v2(text, V2.Dec{V2.NeedS{}, 0n, None{}, Nil{}, 0n, 0n, "", 0n})}
     case False{}:
       Unknown{}
 
