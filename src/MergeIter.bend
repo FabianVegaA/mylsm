@@ -11,27 +11,27 @@ import ./SortedRun.bend as SortedRun
 # so the key survives the keep/drop decision with no clone primitive.
 # Order of defs is load-bearing (Bend 2: only backward references).
 
-def scan_put2(q: (String & String) & Cmp, +v: String, acc: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
-  match q:
+def scan_put2(pair: (String & String) & Cmp, +val: String, acc: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
+  match pair:
     case ((k3, _), c):
       match c:
         case LT{}:
-          Con{MemTable.Entry{k3, Some{v}}, acc}
+          Con{MemTable.Entry{k3, Some{val}}, acc}
         case EQ{}:
           acc
         case GT{}:
           acc
 
-def scan_put(p: (String & String) & Cmp, +hi: String, +v: String, acc: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
-  match p:
+def scan_put(pair: (String & String) & Cmp, +hi: String, +val: String, acc: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
+  match pair:
     case ((k2, _), c):
       match c:
         case LT{}:
           acc
         case EQ{}:
-          scan_put2(String.cmp(k2, hi), v, acc)
+          scan_put2(String.cmp(k2, hi), val, acc)
         case GT{}:
-          scan_put2(String.cmp(k2, hi), v, acc)
+          scan_put2(String.cmp(k2, hi), val, acc)
 
 def scan_go(fuel: Nat, +lo: String, +hi: String, acc: List<&2, MemTable.Entry>, xs: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
   match fuel:

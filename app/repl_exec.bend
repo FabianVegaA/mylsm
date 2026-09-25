@@ -44,8 +44,8 @@ def bool_name(value: Bool) -> String:
     case True{}: "yes"
     case False{}: "no"
 
-def entry_line(e: MemTable.Entry) -> String:
-  match e:
+def entry_line(entry: MemTable.Entry) -> String:
+  match entry:
     case MemTable.Entry{key, val}:
       key ++ "=" ++ Demo.show_maybe(val)
 

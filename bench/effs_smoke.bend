@@ -10,8 +10,8 @@ def print_all(xs: List<String>) -> IO(Unit):
         IO.print(h)
         print_all(t)
 
-def close_checked(p: (File & Result<&1, &1, U32 & String, Unit>)) -> IO(Unit):
-  match p:
+def close_checked(pair: (File & Result<&1, &1, U32 & String, Unit>)) -> IO(Unit):
+  match pair:
     case (a, b):
       do IO<Unit>:
         _u : Unit <- IO.try(Unit, IO.pure(Result<&1, &1, U32 & String, Unit>, b))

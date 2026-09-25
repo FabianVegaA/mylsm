@@ -35,8 +35,8 @@ def l0_add(+levels: List<&2, List<&2, Sstable.Table>>, +tbl: Sstable.Table) -> L
     case Con{l0, rest}:
       Con{Con{tbl, l0}, rest}
 
-def mfst_add(+m: Manifest.Manifest, +name: String) -> Manifest.Manifest:
-  match m:
+def mfst_add(+mfst: Manifest.Manifest, +name: String) -> Manifest.Manifest:
+  match mfst:
     case Manifest.M{lvs}:
       match lvs:
         case Nil{}:
@@ -79,15 +79,15 @@ def read_file(+path: String) -> IO(Result<&1, &1, U32 & String, String>):
     fr : (File & Result<&1, &1, U32 & String, String>) <- File.read(f, U32.from_nat(4294967295n))
     read_tail3(fr)
 
-def mfst_parsed(+m: Maybe<&2, Manifest.Manifest>) -> Result<&1, &1, U32 & String, Manifest.Manifest>:
-  match m:
+def mfst_parsed(+opt: Maybe<&2, Manifest.Manifest>) -> Result<&1, &1, U32 & String, Manifest.Manifest>:
+  match opt:
     case None{}:
       Fail{(U32.from_nat(1n), "bad manifest")}
     case Some{mm}:
       Done{mm}
 
-def mfst_tail(r: Result<&1, &1, U32 & String, String>) -> IO(Result<&1, &1, U32 & String, Manifest.Manifest>):
-  match r:
+def mfst_tail(res: Result<&1, &1, U32 & String, String>) -> IO(Result<&1, &1, U32 & String, Manifest.Manifest>):
+  match res:
     case Fail{e}:
       IO.pure(Result<&1, &1, U32 & String, Manifest.Manifest>, Fail{e})
     case Done{s}:
@@ -96,14 +96,14 @@ def mfst_tail(r: Result<&1, &1, U32 & String, String>) -> IO(Result<&1, &1, U32 
 # A stat-confirmed absent manifest means a fresh database. Metadata, open, read,
 # and parse errors for an existing manifest propagate fail-closed; they must
 # never be reinterpreted as an empty database and overwritten.
-def mread_tail(f: File) -> IO(Result<&1, &1, U32 & String, Manifest.Manifest>):
+def mread_tail(file: File) -> IO(Result<&1, &1, U32 & String, Manifest.Manifest>):
   do IO<Result<&1, &1, U32 & String, Manifest.Manifest>>:
-    fr : (File & Result<&1, &1, U32 & String, String>) <- File.read(f, U32.mul(U32.from_nat(1024n), U32.from_nat(1024n)))
+    fr : (File & Result<&1, &1, U32 & String, String>) <- File.read(file, U32.mul(U32.from_nat(1024n), U32.from_nat(1024n)))
     r : Result<&1, &1, U32 & String, String> <- read_tail3(fr)
     mfst_tail(r)
 
-def mopen_tail(r: Result<&1, &1, U32 & String, File>) -> IO(Result<&1, &1, U32 & String, Manifest.Manifest>):
-  match r:
+def mopen_tail(res: Result<&1, &1, U32 & String, File>) -> IO(Result<&1, &1, U32 & String, Manifest.Manifest>):
+  match res:
     case Fail{e}:
       IO.pure(Result<&1, &1, U32 & String, Manifest.Manifest>, Fail{e})
     case Done{f}:
@@ -123,8 +123,8 @@ def load_mfst(+path: String) -> IO(Result<&1, &1, U32 & String, Manifest.Manifes
     present : Bool <- IO.try(Bool, Fs.exists(path))
     load_mfst_exists(present, path)
 
-def dir_tail(r: Result<&1, &1, U32 & String, Nat>, +path: String) -> IO(Result<&1, &1, U32 & String, Unit>):
-  match r:
+def dir_tail(res: Result<&1, &1, U32 & String, Nat>, +path: String) -> IO(Result<&1, &1, U32 & String, Unit>):
+  match res:
     case Done{n}:
       IO.pure(Result<&1, &1, U32 & String, Unit>, Done{Unit{}})
     case Fail{e}:
@@ -147,12 +147,12 @@ def flush_goB(+dir: String, +mpath: String, +mtmp: String, +m2: Manifest.Manifes
     _rm : Result<&1, &1, U32 & String, Unit> <- Fs.remove(Db.wal_path(dir))
     return Done{Db.Db{dir, MemTable.MT{Nil{}}, frozen, batch_cap, bcache, l0_add(levels, tbl), Nat.add(flushed, 1n), Manifest.serialize(m2)}}
 
-def flush_drift(ok: Bool, +dir: String, +mpath: String, +mtmp: String, +m: Manifest.Manifest, +tbl: Sstable.Table, +name: String, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, Db.BEntry>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def flush_drift(ok: Bool, +dir: String, +mpath: String, +mtmp: String, +mfst: Manifest.Manifest, +tbl: Sstable.Table, +name: String, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, Db.BEntry>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match ok:
     case False{}:
       IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{(U32.from_nat(2n), "manifest drift")})
     case True{}:
-      flush_goB(dir, mpath, mtmp, mfst_add(m, name), tbl, levels, flushed, frozen, batch_cap, bcache)
+      flush_goB(dir, mpath, mtmp, mfst_add(mfst, name), tbl, levels, flushed, frozen, batch_cap, bcache)
 
 def flush_goA(+dir: String, +l0dir: String, +tmp: String, +final: String, +mpath: String, +mtmp: String, +content: String, +tbl: Sstable.Table, +name: String, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, Db.BEntry>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:

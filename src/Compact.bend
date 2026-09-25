@@ -32,15 +32,15 @@ import ./CrashPoint.bend as CrashPoint
 # it in the hull and in a hull-disjoint range — contradiction); keys inside
 # resolve to the same newest version (subset order == read order).
 
-def ov_and(a: Bool, b: Bool) -> Bool:
-  match a:
+def ov_and(lhs: Bool, rhs: Bool) -> Bool:
+  match lhs:
     case True{}:
-      b
+      rhs
     case False{}:
       False{}
 
-def le_cmp(c: Cmp) -> Bool:
-  match c:
+def le_cmp(ord: Cmp) -> Bool:
+  match ord:
     case LT{}:
       True{}
     case EQ{}:
@@ -58,18 +58,18 @@ def ov12(fa: Maybe<&2, String>, lb: Maybe<&2, String>) -> Bool:
       le_cmp(Keys.cmp(x, y))
 
 
-def table_overlap(+a: Sstable.Table, +b: Sstable.Table) -> Bool:
-  ov_and(ov12(Sstable.table_smallest(a), Sstable.table_largest(b)), ov12(Sstable.table_smallest(b), Sstable.table_largest(a)))
+def table_overlap(+ta: Sstable.Table, +tb: Sstable.Table) -> Bool:
+  ov_and(ov12(Sstable.table_smallest(ta), Sstable.table_largest(tb)), ov12(Sstable.table_smallest(tb), Sstable.table_largest(ta)))
 
 # Hull bound folds (pump+fuel+leaf; single-Maybe state, no pairs).
-def pick_lo(c: Cmp, a: String, b: String) -> Maybe<&2, String>:
-  match c:
+def pick_lo(ord: Cmp, k1: String, k2: String) -> Maybe<&2, String>:
+  match ord:
     case LT{}:
-      Some{a}
+      Some{k1}
     case EQ{}:
-      Some{a}
+      Some{k1}
     case GT{}:
-      Some{b}
+      Some{k2}
 
 def min_step(fm: Maybe<&2, String>, cur: Maybe<&2, String>) -> Maybe<&2, String>:
   match fm cur:
@@ -94,14 +94,14 @@ def min_go(fuel: Nat, +cur: Maybe<&2, String>, tabs: List<&2, Sstable.Table>) ->
 def min_first(+tabs: List<&2, Sstable.Table>) -> Maybe<&2, String>:
   min_go(List.length(&2, Sstable.Table, tabs), None{}, tabs)
 
-def pick_hi(c: Cmp, a: String, b: String) -> Maybe<&2, String>:
-  match c:
+def pick_hi(ord: Cmp, k1: String, k2: String) -> Maybe<&2, String>:
+  match ord:
     case LT{}:
-      Some{b}
+      Some{k2}
     case EQ{}:
-      Some{b}
+      Some{k2}
     case GT{}:
-      Some{a}
+      Some{k1}
 
 def max_step(lm: Maybe<&2, String>, cur: Maybe<&2, String>) -> Maybe<&2, String>:
   match lm cur:
@@ -127,22 +127,22 @@ def max_last(+tabs: List<&2, Sstable.Table>) -> Maybe<&2, String>:
   max_go(List.length(&2, Sstable.Table, tabs), None{}, tabs)
 
 # Overlap of one table against a hull (bounds as params).
-def hull_step(keep: Bool, +t: Sstable.Table, +acc: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
+def hull_step(keep: Bool, +tab: Sstable.Table, +acc: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
   match keep:
     case True{}:
-      Con{t, acc}
+      Con{tab, acc}
     case False{}:
       acc
 
-def hull_neg(keep: Bool, +t: Sstable.Table, +acc: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
+def hull_neg(keep: Bool, +tab: Sstable.Table, +acc: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
   match keep:
     case True{}:
       acc
     case False{}:
-      Con{t, acc}
+      Con{tab, acc}
 
-def ov_hull(+t: Sstable.Table, +lo: Maybe<&2, String>, +hi: Maybe<&2, String>) -> Bool:
-  ov_and(ov12(Sstable.table_smallest(t), hi), ov12(lo, Sstable.table_largest(t)))
+def ov_hull(+tab: Sstable.Table, +lo: Maybe<&2, String>, +hi: Maybe<&2, String>) -> Bool:
+  ov_and(ov12(Sstable.table_smallest(tab), hi), ov12(lo, Sstable.table_largest(tab)))
 
 def filt_go(fuel: Nat, +lo: Maybe<&2, String>, +hi: Maybe<&2, String>, +acc: List<&2, Sstable.Table>, rest: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
   match fuel:
@@ -174,8 +174,8 @@ def filter_neg(+rest: List<&2, Sstable.Table>, +lo: Maybe<&2, String>, +hi: Mayb
 
 # The production policy is conservative: every winning tombstone is retained
 # regardless of the lower-level shadow list.
-def drop_none(+k: String, +_shadow: List<&2, MemTable.Entry>, +acc: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
-  Con{MemTable.Entry{k, None{}}, acc}
+def drop_none(+key: String, +_shadow: List<&2, MemTable.Entry>, +acc: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
+  Con{MemTable.Entry{key, None{}}, acc}
 
 def drop_go(fuel: Nat, +shadow: List<&2, MemTable.Entry>, +acc: List<&2, MemTable.Entry>, xs: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
   match fuel:
@@ -259,7 +259,7 @@ def or_leaf(+hit: Bool, +acc: Bool) -> Bool:
     case False{}:
       acc
 
-def in_go(fuel: Nat, +t: Sstable.Table, +acc: Bool, rem: List<&2, Sstable.Table>) -> Bool:
+def in_go(fuel: Nat, +tab: Sstable.Table, +acc: Bool, rem: List<&2, Sstable.Table>) -> Bool:
   match fuel:
     case 0n:
       acc
@@ -268,17 +268,17 @@ def in_go(fuel: Nat, +t: Sstable.Table, +acc: Bool, rem: List<&2, Sstable.Table>
         case Nil{}:
           acc
         case Con{h, tt}:
-          in_go(f, t, or_leaf(table_overlap(t, h), acc), tt)
+          in_go(f, tab, or_leaf(table_overlap(tab, h), acc), tt)
 
-def in_rem(+t: Sstable.Table, +rem: List<&2, Sstable.Table>) -> Bool:
-  in_go(List.length(&2, Sstable.Table, rem), t, False{}, rem)
+def in_rem(+tab: Sstable.Table, +rem: List<&2, Sstable.Table>) -> Bool:
+  in_go(List.length(&2, Sstable.Table, rem), tab, False{}, rem)
 
-def abs_pick(+inr: Bool, +n: String, +acc: List<&2, String>) -> List<&2, String>:
+def abs_pick(+inr: Bool, +name: String, +acc: List<&2, String>) -> List<&2, String>:
   match inr:
     case True{}:
       acc
     case False{}:
-      Con{n, acc}
+      Con{name, acc}
 
 def abs_go(fuel: Nat, +rem: List<&2, Sstable.Table>, +acc: List<&2, String>, tabs: List<&2, Sstable.Table>, names: List<&2, String>) -> List<&2, String>:
   match fuel:
@@ -298,10 +298,10 @@ def abs_go(fuel: Nat, +rem: List<&2, Sstable.Table>, +acc: List<&2, String>, tab
 def abs_names(+tabs: List<&2, Sstable.Table>, +names: List<&2, String>, +rem: List<&2, Sstable.Table>) -> List<&2, String>:
   abs_go(List.length(&2, Sstable.Table, tabs), rem, Nil{}, tabs, names)
 
-def rem_pick(+inr: Bool, +n: String, +acc: List<&2, String>) -> List<&2, String>:
+def rem_pick(+inr: Bool, +name: String, +acc: List<&2, String>) -> List<&2, String>:
   match inr:
     case True{}:
-      Con{n, acc}
+      Con{name, acc}
     case False{}:
       acc
 
@@ -353,22 +353,22 @@ def l0list(lvls: List<&2, List<&2, Sstable.Table>>) -> List<&2, Sstable.Table>:
     case Con{l0, r1}:
       l0
 
-def hd_tbl(l: List<&2, Sstable.Table>) -> Sstable.Table:
-  match l:
+def hd_tbl(tabs: List<&2, Sstable.Table>) -> Sstable.Table:
+  match tabs:
     case Nil{}:
       Sstable.from_sorted_unique(Nil{}, 1n)
     case Con{h, t}:
       h
 
-def tail_of(l: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
-  match l:
+def tail_of(tabs: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
+  match tabs:
     case Nil{}:
       Nil{}
     case Con{h, t}:
       t
 
-def ml0(m: Manifest.Manifest) -> List<&2, String>:
-  match m:
+def ml0(mfst: Manifest.Manifest) -> List<&2, String>:
+  match mfst:
     case Manifest.M{lvs}:
       match lvs:
         case Nil{}:
@@ -383,8 +383,8 @@ def ml1b(r1: List<&2, List<&2, String>>) -> List<&2, String>:
     case Con{l1n, below}:
       l1n
 
-def ml1(m: Manifest.Manifest) -> List<&2, String>:
-  match m:
+def ml1(mfst: Manifest.Manifest) -> List<&2, String>:
+  match mfst:
     case Manifest.M{lvs}:
       match lvs:
         case Nil{}:
@@ -399,8 +399,8 @@ def mbelb(r1: List<&2, List<&2, String>>) -> List<&2, List<&2, String>>:
     case Con{l1n, below}:
       below
 
-def mbelow(m: Manifest.Manifest) -> List<&2, List<&2, String>>:
-  match m:
+def mbelow(mfst: Manifest.Manifest) -> List<&2, List<&2, String>>:
+  match mfst:
     case Manifest.M{lvs}:
       match lvs:
         case Nil{}:
@@ -408,8 +408,8 @@ def mbelow(m: Manifest.Manifest) -> List<&2, List<&2, String>>:
         case Con{l0n, r1}:
           mbelb(r1)
 
-def mfst_new(+m: Manifest.Manifest, +remnames: List<&2, String>, +outname: String) -> Manifest.Manifest:
-  Manifest.M{Con{Nil{}, Con{Con{outname, remnames}, mbelow(m)}}}
+def mfst_new(+mfst: Manifest.Manifest, +remnames: List<&2, String>, +outname: String) -> Manifest.Manifest:
+  Manifest.M{Con{Nil{}, Con{Con{outname, remnames}, mbelow(mfst)}}}
 
 def remove_list(names: List<&2, String>) -> IO(Result<&1, &1, U32 & String, Unit>):
   match names:
@@ -440,10 +440,10 @@ def prefix_go(names: List<&2, String>, +dir: String, +acc: List<&2, String>) -> 
 def prefix(+names: List<&2, String>, +dir: String) -> List<&2, String>:
   prefix_go(names, dir, Nil{})
 
-def drift_go(ok: Bool, +dir: String, +mpath: String, +mtmp: String, +m: Manifest.Manifest, +oldl1: List<&2, Sstable.Table>, +remt: List<&2, Sstable.Table>, +outname: String, +mem: MemTable.MemTable, +levels2: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, Db.BEntry>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def drift_go(ok: Bool, +dir: String, +mpath: String, +mtmp: String, +mfst: Manifest.Manifest, +oldl1: List<&2, Sstable.Table>, +remt: List<&2, Sstable.Table>, +outname: String, +mem: MemTable.MemTable, +levels2: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, Db.BEntry>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match ok:
     case True{}:
-      compact_goB(dir, mpath, mtmp, mfst_new(m, rem_names(oldl1, ml1(m), remt), outname), List.append(&2, String, prefix(ml0(m), dir ++ "/l0"), prefix(abs_names(oldl1, ml1(m), remt), dir ++ "/l1")), mem, levels2, flushed, frozen, batch_cap, bcache)
+      compact_goB(dir, mpath, mtmp, mfst_new(mfst, rem_names(oldl1, ml1(mfst), remt), outname), List.append(&2, String, prefix(ml0(mfst), dir ++ "/l0"), prefix(abs_names(oldl1, ml1(mfst), remt), dir ++ "/l1")), mem, levels2, flushed, frozen, batch_cap, bcache)
     case False{}:
       IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{(U32.from_nat(2n), "manifest drift")})
 

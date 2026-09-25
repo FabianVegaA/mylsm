@@ -19,28 +19,28 @@ type Batch is Data:
 
 # --- Encode (structural, no fuel) ---
 
-def dashes(n: Nat) -> String:
-  match n:
+def dashes(num: Nat) -> String:
+  match num:
     case 0n:
       ""
     case 1n+m:
       SCon{'-', dashes(m)}
 
-def hash_str(s: String, h: U32) -> U32:
-  match s:
+def hash_str(str: String, acc: U32) -> U32:
+  match str:
     case SNil{}:
-      h
+      acc
     case SCon{c, t}:
-      hash_str(t, U32.add(U32.mul(h, 31), Char.to_u32(c)))
+      hash_str(t, U32.add(U32.mul(acc, 31), Char.to_u32(c)))
 
 def hash3(tag: Char, key: String, val: String) -> U32:
   hash_str(val, hash_str(key, hash_str(SCon{tag, SNil{}}, 7)))
 
-def chk4(+h: U32) -> String:
-  SCon{Char.from_u32(U32.and(h, 255)), SCon{Char.from_u32(U32.and(U32.shrn(h, 8n), 255)), SCon{Char.from_u32(U32.and(U32.shrn(h, 16n), 255)), SCon{Char.from_u32(U32.and(U32.shrn(h, 24n), 255)), SNil{}}}}}
+def chk4(+word: U32) -> String:
+  SCon{Char.from_u32(U32.and(word, 255)), SCon{Char.from_u32(U32.and(U32.shrn(word, 8n), 255)), SCon{Char.from_u32(U32.and(U32.shrn(word, 16n), 255)), SCon{Char.from_u32(U32.and(U32.shrn(word, 24n), 255)), SNil{}}}}}
 
-def enc_mut(m: Mut) -> String:
-  match m:
+def enc_mut(mut: Mut) -> String:
+  match mut:
     case Put{+key, +val}:
       "P" ++ dashes(String.length(key)) ++ ":" ++ key ++ dashes(String.length(val)) ++ ":" ++ val ++ chk4(hash3('P', key, val)) ++ ";"
     case Del{+key}:
@@ -53,13 +53,13 @@ def enc_muts(muts: List<&2, Mut>) -> String:
     case Con{m, t}:
       enc_mut(m) ++ enc_muts(t)
 
-def encode(b: Batch) -> String:
-  match b:
+def encode(batch: Batch) -> String:
+  match batch:
     case Batch{muts}:
       enc_muts(muts)
 
-def stage(+staged: List<&2, Batch>, +b: Batch) -> List<&2, Batch>:
-  Con{b, staged}
+def stage(+staged: List<&2, Batch>, +batch: Batch) -> List<&2, Batch>:
+  Con{batch, staged}
 
 # --- Decode pump (fuel + state; Nat counters; unified dash phase) ---
 
@@ -109,24 +109,24 @@ def semi_step(semi: Bool, put: Bool, +muts: List<&2, Mut>, +key: String, +val: S
     case False{}:
       DS{PTag{}, muts, 'P', 0n, "", "", "", False{}}
 
-def phase_router(phase: Phase, +muts: List<&2, Mut>, +tag: Char, +num: Nat, +kacc: String, +vacc: String, +cacc: String, +h: Char) -> DecState:
+def phase_router(phase: Phase, +muts: List<&2, Mut>, +tag: Char, +num: Nat, +kacc: String, +vacc: String, +cacc: String, +ch: Char) -> DecState:
   match phase:
     case PTag{}:
-      tag_dispatch(Char.is_eq(h, 'P'), Char.is_eq(h, 'D'), muts)
+      tag_dispatch(Char.is_eq(ch, 'P'), Char.is_eq(ch, 'D'), muts)
     case RLen{next}:
-      dash_step(Char.is_eq(h, '-'), Char.is_eq(h, ':'), next, muts, tag, num, kacc, vacc, cacc)
+      dash_step(Char.is_eq(ch, '-'), Char.is_eq(ch, ':'), next, muts, tag, num, kacc, vacc, cacc)
     case PKey{}:
       match num:
         case 0n:
-          dash_step(Char.is_eq(h, '-'), Char.is_eq(h, ':'), PVal{}, muts, tag, 0n, kacc, vacc, cacc)
+          dash_step(Char.is_eq(ch, '-'), Char.is_eq(ch, ':'), PVal{}, muts, tag, 0n, kacc, vacc, cacc)
         case 1n+m:
-          DS{PKey{}, muts, tag, m, kacc ++ SCon{h, SNil{}}, vacc, cacc, True{}}
+          DS{PKey{}, muts, tag, m, kacc ++ SCon{ch, SNil{}}, vacc, cacc, True{}}
     case PVal{}:
       match num:
         case 0n:
-          DS{PChk{}, muts, tag, 1n+(1n+(1n+0n)), kacc, vacc, SCon{h, SNil{}}, True{}}
+          DS{PChk{}, muts, tag, 1n+(1n+(1n+0n)), kacc, vacc, SCon{ch, SNil{}}, True{}}
         case 1n+m:
-          DS{PVal{}, muts, tag, m, kacc, vacc ++ SCon{h, SNil{}}, cacc, True{}}
+          DS{PVal{}, muts, tag, m, kacc, vacc ++ SCon{ch, SNil{}}, cacc, True{}}
     case PChk{}:
       match num:
         case 0n:
@@ -134,17 +134,17 @@ def phase_router(phase: Phase, +muts: List<&2, Mut>, +tag: Char, +num: Nat, +kac
         case 1n+m:
           match m:
             case 0n:
-              chk_next(String.eq(cacc ++ SCon{h, SNil{}}, chk4(hash3(tag, kacc, vacc))), PSemi{}, muts, tag, kacc, vacc)
+              chk_next(String.eq(cacc ++ SCon{ch, SNil{}}, chk4(hash3(tag, kacc, vacc))), PSemi{}, muts, tag, kacc, vacc)
             case 1n+p:
-              DS{PChk{}, muts, tag, 1n+p, kacc, vacc, cacc ++ SCon{h, SNil{}}, True{}}
+              DS{PChk{}, muts, tag, 1n+p, kacc, vacc, cacc ++ SCon{ch, SNil{}}, True{}}
     case PSemi{}:
-      semi_step(Char.is_eq(h, ';'), True{}, muts, kacc, vacc)
+      semi_step(Char.is_eq(ch, ';'), True{}, muts, kacc, vacc)
     case DKey{}:
       match num:
         case 0n:
-          DS{DChk{}, muts, tag, 1n+(1n+(1n+0n)), kacc, vacc, SCon{h, SNil{}}, True{}}
+          DS{DChk{}, muts, tag, 1n+(1n+(1n+0n)), kacc, vacc, SCon{ch, SNil{}}, True{}}
         case 1n+m:
-          DS{DKey{}, muts, tag, m, kacc ++ SCon{h, SNil{}}, vacc, cacc, True{}}
+          DS{DKey{}, muts, tag, m, kacc ++ SCon{ch, SNil{}}, vacc, cacc, True{}}
     case DChk{}:
       match num:
         case 0n:
@@ -152,20 +152,20 @@ def phase_router(phase: Phase, +muts: List<&2, Mut>, +tag: Char, +num: Nat, +kac
         case 1n+m:
           match m:
             case 0n:
-              chk_next(String.eq(cacc ++ SCon{h, SNil{}}, chk4(hash3(tag, kacc, ""))), DSemi{}, muts, tag, kacc, "")
+              chk_next(String.eq(cacc ++ SCon{ch, SNil{}}, chk4(hash3(tag, kacc, ""))), DSemi{}, muts, tag, kacc, "")
             case 1n+p:
-              DS{DChk{}, muts, tag, 1n+p, kacc, vacc, cacc ++ SCon{h, SNil{}}, True{}}
+              DS{DChk{}, muts, tag, 1n+p, kacc, vacc, cacc ++ SCon{ch, SNil{}}, True{}}
     case DSemi{}:
-      semi_step(Char.is_eq(h, ';'), False{}, muts, kacc, vacc)
+      semi_step(Char.is_eq(ch, ';'), False{}, muts, kacc, vacc)
 
-def dec_step(st: DecState, h: Char) -> DecState:
+def dec_step(st: DecState, ch: Char) -> DecState:
   match st:
     case DS{phase, muts, tag, num, kacc, vacc, cacc, ok}:
       match ok:
         case False{}:
           DS{PTag{}, muts, tag, 0n, "", "", "", False{}}
         case True{}:
-          phase_router(phase, muts, tag, num, kacc, vacc, cacc, h)
+          phase_router(phase, muts, tag, num, kacc, vacc, cacc, ch)
 
 def dec_finish(ok: Bool, phase: Phase, +muts: List<&2, Mut>) -> (List<&2, Mut> & Bool):
   match ok:
@@ -203,8 +203,8 @@ def dec_run(fuel: Nat, rest: String, st: DecState) -> DecState:
     case 1n+f SCon{h, +t}:
       dec_run(f, t, dec_step(st, h))
 
-def dec_wrap(p: (List<&2, Mut> & Bool)) -> Maybe<&2, Batch>:
-  match p:
+def dec_wrap(pair: (List<&2, Mut> & Bool)) -> Maybe<&2, Batch>:
+  match pair:
     case (muts, ok):
       match ok:
         case True{}:
@@ -212,48 +212,48 @@ def dec_wrap(p: (List<&2, Mut> & Bool)) -> Maybe<&2, Batch>:
         case False{}:
           None{}
 
-def decode(+s: String) -> Maybe<&2, Batch>:
-  dec_wrap(dec_go(Nat.add(String.length(s), 1n), s, DS{PTag{}, Nil{}, 'P', 0n, "", "", "", True{}}))
+def decode(+str: String) -> Maybe<&2, Batch>:
+  dec_wrap(dec_go(Nat.add(String.length(str), 1n), str, DS{PTag{}, Nil{}, 'P', 0n, "", "", "", True{}}))
 
 # --- Proof scaffolding ---
 
-def app_assoc(a: String, b: String, c: String) -> {((a ++ b) ++ c) == (a ++ (b ++ c)) : String}:
-  match a:
+def app_assoc(sa: String, sb: String, sc: String) -> {((sa ++ sb) ++ sc) == (sa ++ (sb ++ sc)) : String}:
+  match sa:
     case SNil{}:
       {==}
     case SCon{h, t}:
-      %app_assoc(t, b, c) : {SCon{h, (t ++ b) ++ c} == SCon{h, _} : String}
+      %app_assoc(t, sb, sc) : {SCon{h, (t ++ sb) ++ sc} == SCon{h, _} : String}
       {==}
 
-def app_nil_r(s: String) -> {(s ++ "") == s : String}:
-  match s:
+def app_nil_r(str: String) -> {(str ++ "") == str : String}:
+  match str:
     case SNil{}:
       {==}
     case SCon{h, t}:
       %app_nil_r(t) : {SCon{h, t ++ ""} == SCon{h, _} : String}
       {==}
-def len_append(a: String, b: String) -> {String.length(a ++ b) == Nat.add(String.length(a), String.length(b)) : Nat}:
-  match a:
+def len_append(sa: String, sb: String) -> {String.length(sa ++ sb) == Nat.add(String.length(sa), String.length(sb)) : Nat}:
+  match sa:
     case SNil{}:
       {==}
     case SCon{h, t}:
-      %len_append(t, b) : {1n+String.length(t ++ b) == 1n+_ : Nat}
+      %len_append(t, sb) : {1n+String.length(t ++ sb) == 1n+_ : Nat}
       {==}
 
-def add_assoc(a: Nat, b: Nat, c: Nat) -> {Nat.add(Nat.add(a, b), c) == Nat.add(a, Nat.add(b, c)) : Nat}:
-  match a:
+def add_assoc(n1: Nat, n2: Nat, n3: Nat) -> {Nat.add(Nat.add(n1, n2), n3) == Nat.add(n1, Nat.add(n2, n3)) : Nat}:
+  match n1:
     case 0n:
       {==}
     case 1n+m:
-      %add_assoc(m, b, c) : {1n+Nat.add(Nat.add(m, b), c) == 1n+_ : Nat}
+      %add_assoc(m, n2, n3) : {1n+Nat.add(Nat.add(m, n2), n3) == 1n+_ : Nat}
       {==}
 
-def list_app_assoc(a: List<&2, Mut>, b: List<&2, Mut>, c: List<&2, Mut>) -> {List.append(&2, Mut, List.append(&2, Mut, a, b), c) == List.append(&2, Mut, a, List.append(&2, Mut, b, c)) : List<&2, Mut>}:
-  match a:
+def list_app_assoc(xs: List<&2, Mut>, ys: List<&2, Mut>, zs: List<&2, Mut>) -> {List.append(&2, Mut, List.append(&2, Mut, xs, ys), zs) == List.append(&2, Mut, xs, List.append(&2, Mut, ys, zs)) : List<&2, Mut>}:
+  match xs:
     case Nil{}:
       {==}
     case Con{h, t}:
-      %list_app_assoc(t, b, c) : {Con{h, List.append(&2, Mut, List.append(&2, Mut, t, b), c)} == Con{h, _} : List<&2, Mut>}
+      %list_app_assoc(t, ys, zs) : {Con{h, List.append(&2, Mut, List.append(&2, Mut, t, ys), zs)} == Con{h, _} : List<&2, Mut>}
       {==}
 
 def append_nil_r(+xs: List<&2, Mut>) -> {List.append(&2, Mut, xs, Nil{}) == xs : List<&2, Mut>}:
@@ -265,23 +265,23 @@ def append_nil_r(+xs: List<&2, Mut>) -> {List.append(&2, Mut, xs, Nil{}) == xs :
       {==}
 
 # Unary counter: jump(n, num0) = num0 + n as 1n-chains (no appends, no assoc).
-def jump(n: Nat, num0: Nat) -> Nat:
-  match n:
+def jump(num: Nat, num0: Nat) -> Nat:
+  match num:
     case 0n:
       num0
     case 1n+m:
       1n+jump(m, num0)
 
-def jump_zero(n: Nat) -> {jump(n, 0n) == n : Nat}:
-  match n:
+def jump_zero(num: Nat) -> {jump(num, 0n) == num : Nat}:
+  match num:
     case 0n:
       {==}
     case 1n+m:
       %jump_zero(m) : {1n+jump(m, 0n) == 1n+_ : Nat}
       {==}
 
-def jump_succ(m: Nat, num0: Nat) -> {jump(m, 1n+num0) == 1n+jump(m, num0) : Nat}:
-  match m:
+def jump_succ(num: Nat, num0: Nat) -> {jump(num, 1n+num0) == 1n+jump(num, num0) : Nat}:
+  match num:
     case 0n:
       {==}
     case 1n+p:
@@ -290,8 +290,8 @@ def jump_succ(m: Nat, num0: Nat) -> {jump(m, 1n+num0) == 1n+jump(m, num0) : Nat}
 
 # RLen dash-run skip (unified len phase; next stored, never matched here).
 # Fuel is len(span++tail): deconstructs with the Nat induction, tail opaque.
-def dashspan(n: Nat, tail: String, muts0: List<&2, Mut>, tag: Char, next: Phase, +num0: Nat, kacc0: String) -> {dec_run(String.length(dashes(n) ++ tail), dashes(n) ++ tail, DS{RLen{next}, muts0, tag, num0, kacc0, "", "", True{}}) == dec_run(String.length(tail), tail, DS{RLen{next}, muts0, tag, jump(n, num0), kacc0, "", "", True{}}) : DecState}:
-  match n:
+def dashspan(num: Nat, tail: String, muts0: List<&2, Mut>, tag: Char, next: Phase, +num0: Nat, kacc0: String) -> {dec_run(String.length(dashes(num) ++ tail), dashes(num) ++ tail, DS{RLen{next}, muts0, tag, num0, kacc0, "", "", True{}}) == dec_run(String.length(tail), tail, DS{RLen{next}, muts0, tag, jump(num, num0), kacc0, "", "", True{}}) : DecState}:
+  match num:
     case 0n:
       {==}
     case 1n++m:

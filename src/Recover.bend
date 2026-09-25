@@ -49,67 +49,67 @@ def dash_snd(st: (Bool & Nat)) -> Nat:
     case (d, a):
       a
 
-def dash_step_fst(st: (Bool & Nat), +h: Char) -> (Bool & Nat):
+def dash_step_fst(st: (Bool & Nat), +ch: Char) -> (Bool & Nat):
   match st:
     case (done, acc):
-      dash_step(done, Char.is_eq(h, Char.from_u32(45)), acc)
+      dash_step(done, Char.is_eq(ch, Char.from_u32(45)), acc)
 
-def dash_go(fuel: Nat, st: (Bool & Nat), s: String) -> Nat:
+def dash_go(fuel: Nat, st: (Bool & Nat), str: String) -> Nat:
   match fuel:
     case 0n:
       dash_snd(st)
     case 1n+f:
-      match s:
+      match str:
         case SNil{}:
           dash_snd(st)
         case SCon{h, t}:
           dash_go(f, dash_step_fst(st, h), t)
 
-def dashes_len(+s: String) -> Nat:
-  dash_go(Nat.add(String.length(s), 1n), (False{}, 0n), s)
+def dashes_len(+str: String) -> Nat:
+  dash_go(Nat.add(String.length(str), 1n), (False{}, 0n), str)
 
-def semi_eq(+b: Bool, +n: Nat) -> Maybe<&2, Nat>:
-  match b:
+def semi_eq(+ok: Bool, +num: Nat) -> Maybe<&2, Nat>:
+  match ok:
     case True{}:
-      Some{n}
+      Some{num}
     case False{}:
       None{}
 
-def semi_go(+h: Char, +n: Nat) -> Maybe<&2, Nat>:
-  semi_eq(Char.is_eq(h, Char.from_u32(59)), n)
+def semi_go(+ch: Char, +num: Nat) -> Maybe<&2, Nat>:
+  semi_eq(Char.is_eq(ch, Char.from_u32(59)), num)
 
-def sc_go(dropped: String, +n: Nat) -> Maybe<&2, Nat>:
+def sc_go(dropped: String, +num: Nat) -> Maybe<&2, Nat>:
   match dropped:
     case SNil{}:
       None{}
     case SCon{h, t}:
-      semi_go(h, n)
+      semi_go(h, num)
 
-def frame_len_go(+n: Nat, +s: String) -> Maybe<&2, Nat>:
-  sc_go(String.drop(s, n), n)
+def frame_len_go(+num: Nat, +str: String) -> Maybe<&2, Nat>:
+  sc_go(String.drop(str, num), num)
 
-def frame_len(+s: String) -> Maybe<&2, Nat>:
-  frame_len_go(dashes_len(s), s)
+def frame_len(+str: String) -> Maybe<&2, Nat>:
+  frame_len_go(dashes_len(str), str)
 
-def frame_of(+w: String) -> String:
-  Wal.dashes(String.length(w)) ++ ";" ++ w
+def frame_of(+raw: String) -> String:
+  Wal.dashes(String.length(raw)) ++ ";" ++ raw
 
-def consumed(+n: Nat) -> Nat:
-  Nat.add(String.length(Wal.dashes(n)), Nat.add(1n, n))
+def consumed(+num: Nat) -> Nat:
+  Nat.add(String.length(Wal.dashes(num)), Nat.add(1n, num))
 
-def clip_go(+mlen: Maybe<&2, Nat>, +s: String) -> String:
+def clip_go(+mlen: Maybe<&2, Nat>, +str: String) -> String:
   match mlen:
     case None{}:
-      s
+      str
     case Some{n}:
-      String.take(String.drop(s, Nat.add(String.length(Wal.dashes(n)), 1n)), n)
+      String.take(String.drop(str, Nat.add(String.length(Wal.dashes(n)), 1n)), n)
 
-def drop_after(+mlen: Maybe<&2, Nat>, +s: String) -> String:
+def drop_after(+mlen: Maybe<&2, Nat>, +str: String) -> String:
   match mlen:
     case None{}:
-      s
+      str
     case Some{n}:
-      String.drop(s, consumed(n))
+      String.drop(str, consumed(n))
 
 def dec_apply(+m2: Maybe<&2, Wal.Batch>, +mem: MemTable.MemTable) -> MemTable.MemTable:
   match m2:
@@ -120,16 +120,16 @@ def dec_apply(+m2: Maybe<&2, Wal.Batch>, +mem: MemTable.MemTable) -> MemTable.Me
 
 # Fuel-only drivers (no s-match: fuel bounds the walk; torn/empty tails
 # are fixpoints that burn fuel and return the valid-prefix accumulation).
-def replay_mem_go(fuel: Nat, +mem: MemTable.MemTable, +s: String) -> MemTable.MemTable:
+def replay_mem_go(fuel: Nat, +mem: MemTable.MemTable, +str: String) -> MemTable.MemTable:
   match fuel:
     case 0n:
       mem
     case 1n+g:
-      +fl = frame_len(s)
-      replay_mem_go(g, dec_apply(Wal.decode(clip_go(fl, s)), mem), drop_after(fl, s))
+      +fl = frame_len(str)
+      replay_mem_go(g, dec_apply(Wal.decode(clip_go(fl, str)), mem), drop_after(fl, str))
 
-def replay_mem(+s: String) -> MemTable.MemTable:
-  replay_mem_go(Nat.add(String.length(s), 1n), MemTable.empty(), s)
+def replay_mem(+str: String) -> MemTable.MemTable:
+  replay_mem_go(Nat.add(String.length(str), 1n), MemTable.empty(), str)
 
 def valid_add(+mlen: Maybe<&2, Nat>, +acc: Nat) -> Nat:
   match mlen:
@@ -138,28 +138,28 @@ def valid_add(+mlen: Maybe<&2, Nat>, +acc: Nat) -> Nat:
     case Some{n}:
       Nat.add(acc, consumed(n))
 
-def replay_valid_go(fuel: Nat, +acc: Nat, +s: String) -> Nat:
+def replay_valid_go(fuel: Nat, +acc: Nat, +str: String) -> Nat:
   match fuel:
     case 0n:
       acc
     case 1n+g:
-      +fl = frame_len(s)
-      replay_valid_go(g, valid_add(fl, acc), drop_after(fl, s))
+      +fl = frame_len(str)
+      replay_valid_go(g, valid_add(fl, acc), drop_after(fl, str))
 
-def replay_valid(+s: String) -> Nat:
-  replay_valid_go(Nat.add(String.length(s), 1n), 0n, s)
+def replay_valid(+str: String) -> Nat:
+  replay_valid_go(Nat.add(String.length(str), 1n), 0n, str)
 
 # --- Flush-counter restore (pure) ---
 
-def mid_and(a: Bool, b: Bool) -> Bool:
-  match a:
+def mid_and(lhs: Bool, rhs: Bool) -> Bool:
+  match lhs:
     case True{}:
-      b
+      rhs
     case False{}:
       False{}
 
-def shape_mid(a: Bool, b: Bool, c: Bool) -> Bool:
-  mid_and(a, mid_and(b, c))
+def shape_mid(first: Bool, second: Bool, third: Bool) -> Bool:
+  mid_and(first, mid_and(second, third))
 
 # Table generations are compact decimal only. Unparsable middles are invalid
 # (no unary-dash legacy reads: no retrocompat).
@@ -249,8 +249,8 @@ def cmax(names: List<&2, String>, +cur: Nat) -> Nat:
 def count_gen(+lvls: List<&2, List<&2, String>>) -> Nat:
   Nat.add(cmax(names_all(lvls), 0n), 1n)
 
-def mfst_lists(+m: Manifest.Manifest) -> List<&2, List<&2, String>>:
-  match m:
+def mfst_lists(+mfst: Manifest.Manifest) -> List<&2, List<&2, String>>:
+  match mfst:
     case Manifest.M{lvs}:
       lvs
 
@@ -297,8 +297,8 @@ def load_tables(names: List<&2, String>, +ldir: String, +dir: String, +acc: List
         tbl : Sstable.Table <- IO.try(Sstable.Table, SstStream.read_table(dir ++ "/" ++ ldir ++ "/" ++ n))
         load_tables(t, ldir, dir, Con{tbl, acc})
 
-def ldir_io(+m: Maybe<&2, String>) -> IO(String):
-  match m:
+def ldir_io(+opt: Maybe<&2, String>) -> IO(String):
+  match opt:
     case None{}:
       IO.die(String, U32.from_nat(4n), "too many levels")
     case Some{d}:
@@ -342,12 +342,12 @@ def trunc_go(short: Bool, +dir: String, +prefix: String) -> IO(Result<&1, &1, U3
     case False{}:
       IO.pure(Result<&1, &1, U32 & String, Unit>, Done{Unit{}})
 
-def mem_tail_snd(+s: String, +dir: String) -> IO(Result<&1, &1, U32 & String, MemTable.MemTable>):
-  +valid = replay_valid(s)
-  +ln = String.length(s)
+def mem_tail_snd(+str: String, +dir: String) -> IO(Result<&1, &1, U32 & String, MemTable.MemTable>):
+  +valid = replay_valid(str)
+  +ln = String.length(str)
   do IO<Result<&1, &1, U32 & String, MemTable.MemTable>>:
-    _u : Unit <- IO.try(Unit, trunc_go(Nat.is_lt(valid, ln), dir, String.take(s, valid)))
-    return Done{replay_mem(s)}
+    _u : Unit <- IO.try(Unit, trunc_go(Nat.is_lt(valid, ln), dir, String.take(str, valid)))
+    return Done{replay_mem(str)}
 
 def mem_tail_fst(fr: (File & Result<&1, &1, U32 & String, String>), +dir: String) -> IO(Result<&1, &1, U32 & String, MemTable.MemTable>):
   match fr:
@@ -357,13 +357,13 @@ def mem_tail_fst(fr: (File & Result<&1, &1, U32 & String, String>), +dir: String
         s : String <- IO.try(String, IO.pure(Result<&1, &1, U32 & String, String>, r1))
         mem_tail_snd(s, dir)
 
-def wal_read(f: File, +dir: String) -> IO(Result<&1, &1, U32 & String, MemTable.MemTable>):
+def wal_read(file: File, +dir: String) -> IO(Result<&1, &1, U32 & String, MemTable.MemTable>):
   do IO<Result<&1, &1, U32 & String, MemTable.MemTable>>:
-    fr : (File & Result<&1, &1, U32 & String, String>) <- File.read(f, U32.mul(U32.from_nat(1024n), U32.from_nat(1024n)))
+    fr : (File & Result<&1, &1, U32 & String, String>) <- File.read(file, U32.mul(U32.from_nat(1024n), U32.from_nat(1024n)))
     mem_tail_fst(fr, dir)
 
-def wal_open(r: Result<&1, &1, U32 & String, File>, +dir: String) -> IO(Result<&1, &1, U32 & String, MemTable.MemTable>):
-  match r:
+def wal_open(res: Result<&1, &1, U32 & String, File>, +dir: String) -> IO(Result<&1, &1, U32 & String, MemTable.MemTable>):
+  match res:
     case Fail{e}:
       IO.pure(Result<&1, &1, U32 & String, MemTable.MemTable>, Done{MemTable.empty()})
     case Done{f}:
@@ -371,17 +371,17 @@ def wal_open(r: Result<&1, &1, U32 & String, File>, +dir: String) -> IO(Result<&
 
 # --- Tmp sweep (best-effort) ---
 
-def tmp_pick(keep: Bool, +h: String, +acc: List<&2, String>) -> List<&2, String>:
+def tmp_pick(keep: Bool, +name: String, +acc: List<&2, String>) -> List<&2, String>:
   match keep:
     case True{}:
-      Con{h, acc}
+      Con{name, acc}
     case False{}:
       acc
 
-def tmp_some(+b: Bool, +h: String) -> Maybe<&2, String>:
-  match b:
+def tmp_some(+ok: Bool, +name: String) -> Maybe<&2, String>:
+  match ok:
     case True{}:
-      Some{h}
+      Some{name}
     case False{}:
       None{}
 
@@ -406,8 +406,8 @@ def cat_go(xs: List<&2, Maybe<&2, String>>) -> List<&2, String>:
 def tmp_names(xs: List<&1, String>) -> List<&2, String>:
   cat_go(tmp_map_list(xs))
 
-def sweep_one(r: Result<&1, &1, U32 & String, List<String>>, +dir: String) -> IO(Unit):
-  match r:
+def sweep_one(res: Result<&1, &1, U32 & String, List<String>>, +dir: String) -> IO(Unit):
+  match res:
     case Fail{e}:
       IO.pure(Unit, Unit{})
     case Done{ns}:
@@ -420,8 +420,8 @@ def sweep_get(+dir: String, +sub: String) -> IO(Unit):
     r : Result<&1, &1, U32 & String, List<String>> <- Fs.read_dir(dir ++ "/" ++ sub)
     sweep_one(r, dir ++ "/" ++ sub)
 
-def sweep_cnt(c: Result<&1, &1, U32 & String, Nat>, +dir: String, +sub: String) -> IO(Unit):
-  match c:
+def sweep_cnt(res: Result<&1, &1, U32 & String, Nat>, +dir: String, +sub: String) -> IO(Unit):
+  match res:
     case Fail{e}:
       IO.pure(Unit, Unit{})
     case Done{n}:
@@ -439,24 +439,24 @@ def wal_part(+dir: String) -> IO(Result<&1, &1, U32 & String, MemTable.MemTable>
     r : Result<&1, &1, U32 & String, File> <- File.open(Db.wal_path(dir), "r")
     wal_open(r, dir)
 
-def open_levels_checked(ok: Bool, +dir: String, +m: Manifest.Manifest, levels: List<&2, List<&2, Sstable.Table>>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def open_levels_checked(ok: Bool, +dir: String, +mfst: Manifest.Manifest, levels: List<&2, List<&2, Sstable.Table>>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match ok:
     case False{}:
       IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{(U32.from_nat(6n), "overlapping tables in L1+ manifest")})
     case True{}:
       do IO<Result<&1, &1, U32 & String, Db.Db>>:
         mem : MemTable.MemTable <- IO.try(MemTable.MemTable, wal_part(dir))
-        return Done{Db.Db{dir, mem, MemTable.empty(), Db.default_batch_cap(), Nil{}, levels, count_gen(mfst_lists(m)), Manifest.serialize(m)}}
+        return Done{Db.Db{dir, mem, MemTable.empty(), Db.default_batch_cap(), Nil{}, levels, count_gen(mfst_lists(mfst)), Manifest.serialize(mfst)}}
 
-def open_levels(+dir: String, +m: Manifest.Manifest) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def open_levels(+dir: String, +mfst: Manifest.Manifest) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
-    +levels : List<&2, List<&2, Sstable.Table>> <- load_levels(mfst_lists(m), 0n, dir, Nil{})
-    open_levels_checked(l1_plus_disjoint(levels), dir, m, levels)
+    +levels : List<&2, List<&2, Sstable.Table>> <- load_levels(mfst_lists(mfst), 0n, dir, Nil{})
+    open_levels_checked(l1_plus_disjoint(levels), dir, mfst, levels)
 
-def open_names_go(ok: Bool, +dir: String, +m: Manifest.Manifest) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def open_names_go(ok: Bool, +dir: String, +mfst: Manifest.Manifest) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match ok:
     case True{}:
-      open_levels(dir, m)
+      open_levels(dir, mfst)
     case False{}:
       IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{(U32.from_nat(5n), "bad manifest names")})
 
@@ -465,8 +465,8 @@ def sweep_root_go(+dir: String) -> IO(Unit):
     r : Result<&1, &1, U32 & String, List<String>> <- Fs.read_dir(dir)
     sweep_one(r, dir)
 
-def sweep_root_cnt(c: Result<&1, &1, U32 & String, Nat>, +dir: String) -> IO(Unit):
-  match c:
+def sweep_root_cnt(res: Result<&1, &1, U32 & String, Nat>, +dir: String) -> IO(Unit):
+  match res:
     case Fail{e}:
       IO.pure(Unit, Unit{})
     case Done{n}:
@@ -534,22 +534,22 @@ def maintain(+db: Db.Db) -> IO(Result<&1, &1, U32 & String, Db.Db>):
     f : Db.Db <- IO.try(Db.Db, flush_gate(d))
     Compact.compact(f)
 
-def maintain_unwrap(r: Result<&1, &1, U32 & String, Db.Db>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
-  match r:
+def maintain_unwrap(res: Result<&1, &1, U32 & String, Db.Db>) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+  match res:
     case Fail{e}:
       IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{e})
     case Done{db}:
       maintain(db)
 
-def write(+db: Db.Db, +b: Wal.Batch) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+def write(+db: Db.Db, +batch: Wal.Batch) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
-    r : Result<&1, &1, U32 & String, Db.Db> <- Db.db_write(db, b)
+    r : Result<&1, &1, U32 & String, Db.Db> <- Db.db_write(db, batch)
     maintain_unwrap(r)
 
-def put(+db: Db.Db, +k: String, +v: String) -> IO(Result<&1, &1, U32 & String, Db.Db>):
-  write(db, Wal.Batch{Con{Wal.Put{k, v}, Nil{}}})
+def put(+db: Db.Db, +key: String, +val: String) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+  write(db, Wal.Batch{Con{Wal.Put{key, val}, Nil{}}})
 
-def del(+db: Db.Db, +k: String) -> IO(Result<&1, &1, U32 & String, Db.Db>):
-  write(db, Wal.Batch{Con{Wal.Del{k}, Nil{}}})
+def del(+db: Db.Db, +key: String) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+  write(db, Wal.Batch{Con{Wal.Del{key}, Nil{}}})
 
 # --- Closed-vector laws live in laws/Recover.bend (spec law 7) ---

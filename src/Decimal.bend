@@ -26,8 +26,8 @@ type Scan is Data:
   Finished{value: Nat}
   Failed{error: Error}
 
-def render(n: Nat) -> String:
-  Nat.show(n)
+def render(num: Nat) -> String:
+  Nat.show(num)
 
 def is_digit_code(+code: U32) -> Bool:
   Bool.and(U32.is_le(48, code), U32.is_le(code, 57))
@@ -39,8 +39,8 @@ def digit_dec(ok: Bool, code: U32) -> Maybe<&2, Nat>:
     case True{}:
       Some{U32.to_nat(U32.sub(code, 48))}
 
-def digit_of(c: Char) -> Maybe<&2, Nat>:
-  +code = Char.to_u32(c)
+def digit_of(ch: Char) -> Maybe<&2, Nat>:
+  +code = Char.to_u32(ch)
   digit_dec(is_digit_code(code), code)
 
 def within_digit_limit(digit_ok: Bool, acc: Nat, digit: Nat, limit: Nat) -> Bool:
@@ -99,14 +99,14 @@ def finish_field(started: Bool, acc: Nat) -> Scan:
     case True{}:
       Finished{acc}
 
-def delimited_step(is_delimiter: Bool, c: Char, acc: Nat, started: Bool, leading_zero: Bool, limit: Nat) -> Scan:
+def delimited_step(is_delimiter: Bool, ch: Char, acc: Nat, started: Bool, leading_zero: Bool, limit: Nat) -> Scan:
   match is_delimiter:
     case True{}:
       finish_field(started, acc)
     case False{}:
-      next_digit(digit_of(c), started, leading_zero, acc, limit)
+      next_digit(digit_of(ch), started, leading_zero, acc, limit)
 
-def scan_step(+c: Char, st: Scan, limit: Nat, stop: Stop) -> Scan:
+def scan_step(+ch: Char, st: Scan, limit: Nat, stop: Stop) -> Scan:
   match st:
     case Finished{value}:
       Finished{value}
@@ -115,9 +115,9 @@ def scan_step(+c: Char, st: Scan, limit: Nat, stop: Stop) -> Scan:
     case Reading{value, started, leading_zero}:
       match stop:
         case Complete{}:
-          next_digit(digit_of(c), started, leading_zero, value, limit)
+          next_digit(digit_of(ch), started, leading_zero, value, limit)
         case Delimited{delimiter}:
-          delimited_step(Char.is_eq(c, delimiter), c, value, started, leading_zero, limit)
+          delimited_step(Char.is_eq(ch, delimiter), ch, value, started, leading_zero, limit)
 
 def complete_end(started: Bool, value: Nat, rest: String) -> Parse:
   match started:
@@ -150,30 +150,30 @@ def scan(rest: String, st: Scan, +limit: Nat, +stop: Stop) -> Parse:
     case SCon{c, t} Reading{value, started, leading_zero}:
       scan(t, scan_step(c, Reading{value, started, leading_zero}, limit, stop), limit, stop)
 
-def parse_with_stop(s: String, limit: Nat, stop: Stop) -> Parse:
-  scan(s, Reading{0n, False{}, False{}}, limit, stop)
+def parse_with_stop(str: String, limit: Nat, stop: Stop) -> Parse:
+  scan(str, Reading{0n, False{}, False{}}, limit, stop)
 
-def parse_delimited(s: String, limit: Nat, delimiter: Char) -> Parse:
-  parse_with_stop(s, limit, Delimited{delimiter})
+def parse_delimited(str: String, limit: Nat, delimiter: Char) -> Parse:
+  parse_with_stop(str, limit, Delimited{delimiter})
 
-def parse_semicolon(s: String, limit: Nat) -> Parse:
-  parse_delimited(s, limit, ';')
+def parse_semicolon(str: String, limit: Nat) -> Parse:
+  parse_delimited(str, limit, ';')
 
-def parse_complete(s: String, limit: Nat) -> Parse:
-  parse_with_stop(s, limit, Complete{})
+def parse_complete(str: String, limit: Nat) -> Parse:
+  parse_with_stop(str, limit, Complete{})
 
-def parsed_value(p: Parsed) -> Nat:
-  match p:
+def parsed_value(parsed: Parsed) -> Nat:
+  match parsed:
     case Dec{value, rest}:
       value
 
-def parsed_rest(p: Parsed) -> String:
-  match p:
+def parsed_rest(parsed: Parsed) -> String:
+  match parsed:
     case Dec{value, rest}:
       rest
 
-def is_accepted(p: Parse) -> Bool:
-  match p:
+def is_accepted(outcome: Parse) -> Bool:
+  match outcome:
     case Rejected{error}:
       False{}
     case Accepted{parsed}:

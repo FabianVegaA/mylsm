@@ -13,15 +13,15 @@ import ../src/Manifest.bend as Manifest
 def version_marker() -> String:
   "MYLSM-EXPORT-1"
 
-def bool_and(a: Bool, b: Bool) -> Bool:
-  match a:
+def bool_and(lhs: Bool, rhs: Bool) -> Bool:
+  match lhs:
     case True{}:
-      b
+      rhs
     case False{}:
       False{}
 
-def all_dash(s: String) -> Bool:
-  match s:
+def all_dash(str: String) -> Bool:
+  match str:
     case SNil{}:
       True{}
     case SCon{h, t}:
@@ -108,11 +108,11 @@ def parse_checked(ok: Bool, body: String) -> Maybe<&2, List<&2, MemTable.Entry>>
     case True{}:
       parse_body(body)
 
-def parse_split(p: (List<&2, String> & String)) -> Maybe<&2, List<&2, MemTable.Entry>>:
-  match p:
+def parse_split(pair: (List<&2, String> & String)) -> Maybe<&2, List<&2, MemTable.Entry>>:
+  match pair:
     case (body_parts, chk):
       +body = String.join(body_parts, "#")
       parse_checked(checksum_ok(chk, body), body)
 
-def parse(s: String) -> Maybe<&2, List<&2, MemTable.Entry>>:
-  parse_split(split_last_hash(String.split(s, '#'), Nil{}))
+def parse(str: String) -> Maybe<&2, List<&2, MemTable.Entry>>:
+  parse_split(split_last_hash(String.split(str, '#'), Nil{}))

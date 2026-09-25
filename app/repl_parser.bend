@@ -3,8 +3,8 @@ import ./repl_types.bend as Repl
 import ./repl_lexer.bend as Lexer
 
 # Base's total decimal parser already handles empty/invalid/overflow input.
-def parse_nat_token(s: String) -> Maybe<&2, Nat>:
-  Nat.read(s)
+def parse_nat_token(str: String) -> Maybe<&2, Nat>:
+  Nat.read(str)
 
 def parse_put_key(key: String, value: String, empty: Bool) -> Repl.Command:
   match empty:

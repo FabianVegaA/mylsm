@@ -15,8 +15,8 @@ type Mode is Data:
   Current{decoder: V2.Decoder}
 
 
-def chunk_parse(p: Decimal.Parse) -> Result<&1, &1, U32 & String, Chunk>:
-  match p:
+def chunk_parse(pair: Decimal.Parse) -> Result<&1, &1, U32 & String, Chunk>:
+  match pair:
     case Decimal.Rejected{error}:
       Fail{(U32.from_nat(8n), "bad UTF-8 chunk envelope")}
     case Decimal.Accepted{Decimal.Dec{value, rest}}:

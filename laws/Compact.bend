@@ -9,11 +9,11 @@ import ../src/Compact.bend as Compact
 # L1: [a=v0, z=vz] (absorbed: overlaps hull [a..m]) + [p=vp] (remainder).
 # L2 shadow: [x=v_old] (drops the Del x tombstone) + [q=vq].
 
-def cp_e1(k: String, v: String) -> List<&2, MemTable.Entry>:
-  Con{MemTable.Entry{k, Some{v}}, Nil{}}
+def cp_e1(key: String, val: String) -> List<&2, MemTable.Entry>:
+  Con{MemTable.Entry{key, Some{val}}, Nil{}}
 
-def cp_e_del(k: String) -> List<&2, MemTable.Entry>:
-  Con{MemTable.Entry{k, None{}}, Nil{}}
+def cp_e_del(key: String) -> List<&2, MemTable.Entry>:
+  Con{MemTable.Entry{key, None{}}, Nil{}}
 
 def cp_t0() -> Sstable.Table:
   Sstable.build(cp_e1("m", "vm"), 0n, 1n)

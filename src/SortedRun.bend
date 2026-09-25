@@ -5,24 +5,24 @@ import ./MemTable.bend as MemTable
 # Pure reference semantics and stable sorted-run merging. This module stays
 # independent of Sstable so table construction can depend on it later.
 
-def bool_not(b: Bool) -> Bool:
-  match b:
+def bool_not(rhs: Bool) -> Bool:
+  match rhs:
     case False{}:
       True{}
     case True{}:
       False{}
 
-def bool_and(a: Bool, b: Bool) -> Bool:
-  match a:
+def bool_and(lhs: Bool, rhs: Bool) -> Bool:
+  match lhs:
     case False{}:
       False{}
     case True{}:
-      b
+      rhs
 
-def bool_or(a: Bool, b: Bool) -> Bool:
-  match a:
+def bool_or(lhs: Bool, rhs: Bool) -> Bool:
+  match lhs:
     case False{}:
-      b
+      rhs
     case True{}:
       True{}
 
@@ -33,8 +33,8 @@ def entry_cmp(e1: MemTable.Entry, e2: MemTable.Entry) -> Cmp:
         case MemTable.Entry{k2, v2}:
           Keys.cmp(k1, k2)
 
-def entry_key_eq(e: MemTable.Entry, +key: String) -> Bool:
-  match e:
+def entry_key_eq(entry: MemTable.Entry, +key: String) -> Bool:
+  match entry:
     case MemTable.Entry{k, v}:
       Keys.eq(k, key)
 
@@ -150,8 +150,8 @@ def range_disjoint_bounds(
     case Some{a_first} Some{a_last} Some{b_first} Some{b_last}:
       bool_or(Keys.lt(a_last, b_first), Keys.lt(b_last, a_first))
 
-def range_disjoint(+a: List<&2, MemTable.Entry>, +b: List<&2, MemTable.Entry>) -> Bool:
-  range_disjoint_bounds(first_key(a), last_key(a), first_key(b), last_key(b))
+def range_disjoint(+xs: List<&2, MemTable.Entry>, +ys: List<&2, MemTable.Entry>) -> Bool:
+  range_disjoint_bounds(first_key(xs), last_key(xs), first_key(ys), last_key(ys))
 
 def disjoint_with(+run: List<&2, MemTable.Entry>, runs: List<&2, List<&2, MemTable.Entry>>) -> Bool:
   match runs:

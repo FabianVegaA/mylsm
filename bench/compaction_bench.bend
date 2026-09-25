@@ -25,15 +25,15 @@ def nat_default(value: Maybe<&2, Nat>, fallback: Nat) -> Nat:
     case None{}: fallback
     case Some{n}: n
 
-def zeros(n: Nat) -> String:
-  match n:
+def zeros(num: Nat) -> String:
+  match num:
     case 0n:
       ""
     case 1n+m:
       "0" ++ zeros(m)
 
-def padded(n: Nat) -> String:
-  +shown = Nat.show(n)
+def padded(num: Nat) -> String:
+  +shown = Nat.show(num)
   zeros(Nat.sub(10n, String.length(shown))) ++ shown
 
 def make_run(fuel: Nat, +index: Nat, +tag: String) -> List<&2, MemTable.Entry>:
@@ -55,9 +55,9 @@ def bool_text(ok: Bool) -> String:
     case True{}: "pass"
     case False{}: "fail"
 
-def bool_and(a: Bool, b: Bool) -> Bool:
-  match a:
-    case True{}: b
+def bool_and(lhs: Bool, rhs: Bool) -> Bool:
+  match lhs:
+    case True{}: rhs
     case False{}: False{}
 
 def maybe_value_eq(got: Maybe<&2, String>, +expected: String) -> Bool:
@@ -65,8 +65,8 @@ def maybe_value_eq(got: Maybe<&2, String>, +expected: String) -> Bool:
     case None{}: False{}
     case Some{value}: String.eq(value, expected)
 
-def table_get(t: Sstable.Table, +key: String) -> Maybe<&2, String>:
-  MemTable.get(MemTable.MT{Db.table_entries(t)}, key)
+def table_get(tab: Sstable.Table, +key: String) -> Maybe<&2, String>:
+  MemTable.get(MemTable.MT{Db.table_entries(tab)}, key)
 
 def merged_ok(+merged: List<&2, MemTable.Entry>, +entries: Nat, +runs: Nat) -> Bool:
   +last = Nat.sub(entries, 1n)
@@ -121,8 +121,8 @@ def odd_disjoint_ok() -> Bool:
         maybe_value_eq(MemTable.get(MemTable.MT{merged}, "d"), "d"),
         maybe_value_eq(MemTable.get(MemTable.MT{merged}, "e"), "e"))))
 
-def force_bloom(b: Sstable.Bloom) -> Nat:
-  match b:
+def force_bloom(rhs: Sstable.Bloom) -> Nat:
+  match rhs:
     case Sstable.Blm{bits, size}:
       Nat.add(size, BitTree.word_count(bits))
 

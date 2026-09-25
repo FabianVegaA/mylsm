@@ -7,9 +7,9 @@ import ../src/Recover.bend as Recover
 import ../src/Sstable.bend as Sstable
 import ../src/Wal.bend as Wal
 
-def bool_and(a: Bool, b: Bool) -> Bool:
-  match a:
-    case True{}: b
+def bool_and(lhs: Bool, rhs: Bool) -> Bool:
+  match lhs:
+    case True{}: rhs
     case False{}: False{}
 
 def require(ok: Bool, +message: String) -> IO(Unit):
@@ -26,8 +26,8 @@ def require_config(ok: Bool, +message: String) -> IO(Unit):
     case False{}:
       IO.die(Unit, U32.from_nat(2n), message)
 
-def nonempty(s: String) -> Bool:
-  match s:
+def nonempty(str: String) -> Bool:
+  match str:
     case SNil{}: False{}
     case SCon{_, _}: True{}
 

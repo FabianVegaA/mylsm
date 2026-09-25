@@ -6,11 +6,11 @@ import ./demo_helpers.bend as Demo
 def open_or_die(+dir: String) -> IO(Db.Db):
   IO.try(Db.Db, Recover.open_db(dir))
 
-def put_or_die(+db: Db.Db, +k: String, +v: String) -> IO(Db.Db):
-  IO.try(Db.Db, Db.db_put(db, k, v))
+def put_or_die(+db: Db.Db, +key: String, +val: String) -> IO(Db.Db):
+  IO.try(Db.Db, Db.db_put(db, key, val))
 
-def delete_or_die(+db: Db.Db, +k: String) -> IO(Db.Db):
-  IO.try(Db.Db, Db.db_del(db, k))
+def delete_or_die(+db: Db.Db, +key: String) -> IO(Db.Db):
+  IO.try(Db.Db, Db.db_del(db, key))
 
 def main() -> IO(Unit):
   do IO<Unit>:

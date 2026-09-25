@@ -28,13 +28,13 @@ def maybe_value_eq(got: Maybe<&2, String>, +expected: String) -> Bool:
     case Some{value}:
       String.eq(value, expected)
 
-def and3(a: Bool, b: Bool, c: Bool) -> Bool:
-  match a:
+def and3(first: Bool, second: Bool, third: Bool) -> Bool:
+  match first:
     case False{}: False{}
     case True{}:
-      match b:
+      match second:
         case False{}: False{}
-        case True{}: c
+        case True{}: third
 
 def samples_ok(+db: Db.Db, +count: Nat) -> Bool:
   +middle = Nat.div(count, 2n)

@@ -21,23 +21,23 @@ def db_muts2() -> List<&2, Wal.Mut>:
 def db_mem2() -> MemTable.MemTable:
   MemTable.MT{Con{MemTable.Entry{"c", Some{"3"}}, Con{MemTable.Entry{"b", None{}}, Con{MemTable.Entry{"a", Some{"1"}}, Nil{}}}}}
 
-def batch_muts(+b: Wal.Batch) -> List<&2, Wal.Mut>:
-  match b:
+def batch_muts(+batch: Wal.Batch) -> List<&2, Wal.Mut>:
+  match batch:
     case Wal.Batch{m}:
       m
 
-def db_decoded(+b: Wal.Batch) -> Maybe<&2, Wal.Batch>:
-  Wal.decode(Wal.encode(b))
+def db_decoded(+batch: Wal.Batch) -> Maybe<&2, Wal.Batch>:
+  Wal.decode(Wal.encode(batch))
 
-def db_replay_go(+m: Maybe<&2, Wal.Batch>) -> MemTable.MemTable:
-  match m:
+def db_replay_go(+opt: Maybe<&2, Wal.Batch>) -> MemTable.MemTable:
+  match opt:
     case None{}:
       MemTable.empty()
     case Some{Wal.Batch{muts}}:
       Db.apply_batch(muts, MemTable.empty())
 
-def db_replay(+b: Wal.Batch) -> MemTable.MemTable:
-  db_replay_go(db_decoded(b))
+def db_replay(+batch: Wal.Batch) -> MemTable.MemTable:
+  db_replay_go(db_decoded(batch))
 
 # LAW: read-your-writes through batch application (closed)
 law db_ryw:

@@ -47,8 +47,8 @@ def open_db(+dir: String) -> Db:
 
 # --- Pure write core (laws below pin batch == sequential) ---
 
-def apply_mut(+mem: MemTable.MemTable, +m: Wal.Mut) -> MemTable.MemTable:
-  match m:
+def apply_mut(+mem: MemTable.MemTable, +mut: Wal.Mut) -> MemTable.MemTable:
+  match mut:
     case Wal.Put{key, val}:
       MemTable.put(mem, key, val)
     case Wal.Del{key}:
@@ -63,8 +63,8 @@ def apply_batch(+muts: List<&2, Wal.Mut>, +mem: MemTable.MemTable) -> MemTable.M
 
 # --- Pure read core (concat newest-first, first match wins) ---
 
-def table_entries(+t: Sstable.Table) -> List<&2, MemTable.Entry>:
-  match t:
+def table_entries(+tab: Sstable.Table) -> List<&2, MemTable.Entry>:
+  match tab:
     case Sstable.Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
       entries
 
@@ -89,29 +89,29 @@ def all_entries(+db: Db) -> List<&2, MemTable.Entry>:
         case MemTable.MT{entries}:
           List.append(&2, MemTable.Entry, entries, all_level_entries(levels))
 
-def table_hit_if(present: Bool, t: Sstable.Table, +k: String) -> Maybe<&2, Maybe<&2, String>>:
+def table_hit_if(present: Bool, tab: Sstable.Table, +key: String) -> Maybe<&2, Maybe<&2, String>>:
   match present:
     case False{}:
       None{}
     case True{}:
-      Sstable.block_get_hit(t, k)
+      Sstable.block_get_hit(tab, key)
 
-def table_hit(+t: Sstable.Table, +k: String) -> Maybe<&2, Maybe<&2, String>>:
-  table_hit_if(Sstable.maybe_present(t, k), t, k)
+def table_hit(+tab: Sstable.Table, +key: String) -> Maybe<&2, Maybe<&2, String>>:
+  table_hit_if(Sstable.maybe_present(tab, key), tab, key)
 
-def tables_hits(+tabs: List<&2, Sstable.Table>, +k: String) -> List<&2, Maybe<&2, Maybe<&2, String>>>:
+def tables_hits(+tabs: List<&2, Sstable.Table>, +key: String) -> List<&2, Maybe<&2, Maybe<&2, String>>>:
   match tabs:
     case Nil{}:
       Nil{}
     case Con{+h, t}:
-      Con{table_hit(h, k), tables_hits(t, k)}
+      Con{table_hit(h, key), tables_hits(t, key)}
 
-def levels_hits(+lvls: List<&2, List<&2, Sstable.Table>>, +k: String) -> List<&2, Maybe<&2, Maybe<&2, String>>>:
+def levels_hits(+lvls: List<&2, List<&2, Sstable.Table>>, +key: String) -> List<&2, Maybe<&2, Maybe<&2, String>>>:
   match lvls:
     case Nil{}:
       Nil{}
     case Con{h, t}:
-      List.append(&2, Maybe<&2, Maybe<&2, String>>, tables_hits(h, k), levels_hits(t, k))
+      List.append(&2, Maybe<&2, Maybe<&2, String>>, tables_hits(h, key), levels_hits(t, key))
 
 def hits_first(+hits: List<&2, Maybe<&2, Maybe<&2, String>>>) -> Maybe<&2, Maybe<&2, String>>:
   match hits:
@@ -122,17 +122,17 @@ def hits_first(+hits: List<&2, Maybe<&2, Maybe<&2, String>>>) -> Maybe<&2, Maybe
     case Con{Some{found}, t}:
       Some{found}
 
-def flatten_opt(+m: Maybe<&2, Maybe<&2, String>>) -> Maybe<&2, String>:
-  match m:
+def flatten_opt(+opt: Maybe<&2, Maybe<&2, String>>) -> Maybe<&2, String>:
+  match opt:
     case None{}:
       None{}
     case Some{inner}:
       inner
 
-def db_get(+db: Db, +k: String) -> Maybe<&2, String>:
+def db_get(+db: Db, +key: String) -> Maybe<&2, String>:
   match db:
     case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
-      flatten_opt(hits_first(Con{MemTable.get_hit(mem, k), Con{MemTable.get_hit(frozen, k), levels_hits(levels, k)}}))
+      flatten_opt(hits_first(Con{MemTable.get_hit(mem, key), Con{MemTable.get_hit(frozen, key), levels_hits(levels, key)}}))
 
 # WAL framing v1 is applied here (see Recover): each batch is stored as
 # dashes(len) ++ ";" ++ encode(batch) so replay can stream frames and
@@ -160,19 +160,19 @@ def wal_append(+dir: String, +data: String) -> IO(Result<&1, &1, U32 & String, U
     fr : (File & Result<&1, &1, U32 & String, Unit>) <- File.write(f, wal_frame(data))
     wal_tail(fr, dir)
 
-def db_write(+db: Db, +b: Wal.Batch) -> IO(Result<&1, &1, U32 & String, Db>):
+def db_write(+db: Db, +batch: Wal.Batch) -> IO(Result<&1, &1, U32 & String, Db>):
   match db:
     case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
-      match b:
+      match batch:
         case Wal.Batch{muts}:
           do IO<Result<&1, &1, U32 & String, Db>>:
             _res : Unit <- IO.try(Unit, wal_append(dir, Wal.encode(Wal.Batch{muts})))
             return Done{Db{dir, apply_batch(muts, mem), frozen, batch_cap, bcache, levels, flushed, manifest_token}}
 
-def db_put(+db: Db, +k: String, +v: String) -> IO(Result<&1, &1, U32 & String, Db>):
-  db_write(db, Wal.Batch{Con{Wal.Put{k, v}, Nil{}}})
+def db_put(+db: Db, +key: String, +val: String) -> IO(Result<&1, &1, U32 & String, Db>):
+  db_write(db, Wal.Batch{Con{Wal.Put{key, val}, Nil{}}})
 
-def db_del(+db: Db, +k: String) -> IO(Result<&1, &1, U32 & String, Db>):
-  db_write(db, Wal.Batch{Con{Wal.Del{k}, Nil{}}})
+def db_del(+db: Db, +key: String) -> IO(Result<&1, &1, U32 & String, Db>):
+  db_write(db, Wal.Batch{Con{Wal.Del{key}, Nil{}}})
 
 # --- Closed-vector laws live in laws/Db.bend (spec laws 1, 2, 3, 7) ---
