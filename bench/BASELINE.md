@@ -117,3 +117,27 @@ bench/crash_point_overhead.sh compare .mylsm-crash-point-overhead
 This local before/after observation passes the repository's existing 0.90
 throughput floor. It is not a portable performance guarantee or a claim that
 environment lookup has zero cost.
+
+## Phase 3 observations (single runs, not medians — see methodology above)
+
+Measured with `bench/phase3_metrics.sh` on Darwin arm64, 12 logical CPUs,
+Bend 2.0.27, 41–42% free disk, from `feature/phase3-performance` after
+phases A+B (block reads, merged flush, grouped-commit code present with
+default cap 1). Datasets fit in RAM: not yet publication-grade comparisons.
+
+- 20,485 writes: 3,636 ms Bend-measured (5,633.94 ops/s); write
+  amplification 2.13 (405,827 WAL + 29 MANIFEST + 419,352 table bytes over
+  387,480 logical); recovery 13,760 ms; read p50/p95/p99 = 1/2/2 ms over
+  101 samples; pre/post first/middle/last samples pass.
+- 1,000,000 writes: 343,623 ms Bend-measured (2,910.17 ops/s); write
+  amplification 1.36 (48,587 WAL + 44 MANIFEST + 29,663,387 table bytes over
+  21,777,780 logical); recovery 16,008 ms; read p50/p95/p99 = 5/19/20 ms
+  over 101 samples; pre/post first/middle/last samples pass.
+- Prior 1M reference on the same machine class (pre-phase-3,
+  `bench/million_writes.sh`): 614,122 ms (1,628.34 ops/s). Same-machine,
+  same-disk, same-dataset direction, but single runs each — record two more
+  before claiming the ratio.
+- Anomaly for follow-up: recovery time is nearly flat across dataset sizes
+  (9.8 s at 4,096 writes, 13.8 s at 20,485, 16.0 s at 1M) while table bytes
+  grow 0 → 29 MB, pointing at fixed open-path overhead rather than
+  data-proportional cost. Not investigated yet.
