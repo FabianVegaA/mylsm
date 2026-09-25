@@ -33,3 +33,11 @@ law sstable_block_get_equiv:
 # LAW: block_get misses cleanly (closed)
 law sstable_block_get_missing:
   {Sstable.block_get(Sstable.build(sst_e2(), 0n, 2n), "zzz") == None{} : Maybe<&2, String>}
+
+# LAW: block_get_hit agrees with block_get on a hit (closed)
+law sstable_block_hit_equiv:
+  {Sstable.block_get_hit(Sstable.build(sst_e2(), 0n, 2n), "k") == Some{Some{"new"}} : Maybe<&2, Maybe<&2, String>>}
+
+# LAW: block_get_hit misses cleanly (closed)
+law sstable_block_hit_missing:
+  {Sstable.block_get_hit(Sstable.build(sst_e2(), 0n, 2n), "zzz") == None{} : Maybe<&2, Maybe<&2, String>>}

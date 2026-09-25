@@ -1,5 +1,6 @@
 import Base
 import ../src/MemTable.bend as MemTable
+import ../src/Sstable.bend as Sstable
 import ../src/Wal.bend as Wal
 import ../src/Db.bend as Db
 
@@ -53,3 +54,23 @@ law db_batch_atomic:
 # LAW: recovery replay equals direct application (closed; composes wal_rt)
 law db_recover:
   {db_replay(batch_multi()) == Db.apply_batch(batch_muts(batch_multi()), MemTable.empty()) : MemTable.MemTable}
+
+# --- db_get per-source search (Phase A2): closed vectors ---
+
+def two_level_db() -> Db.Db:
+  Db.Db{"/d", MemTable.MT{Con{MemTable.Entry{"m", Some{"mv"}}, Nil{}}}, MemTable.MT{Nil{}}, 1n, Nil{}, Con{Con{Sstable.build(Con{MemTable.Entry{"l0", Some{"l0v"}}, Nil{}}, 0n, 1n), Nil{}}, Con{Con{Sstable.build(Con{MemTable.Entry{"l1", Some{"l1v"}}, Nil{}}, 0n, 1n), Nil{}}, Nil{}}}, 2n, ""}
+
+def tomb_db() -> Db.Db:
+  Db.Db{"/d", MemTable.MT{Con{MemTable.Entry{"x", None{}}, Nil{}}}, MemTable.MT{Nil{}}, 1n, Nil{}, Con{Con{Sstable.build(Con{MemTable.Entry{"x", Some{"old"}}, Nil{}}, 0n, 1n), Nil{}}, Nil{}}, 1n, ""}
+
+# LAW: mem shadows L0 shadows L1 (closed)
+law db_get_newest_wins:
+  {(Db.db_get(two_level_db(), "m"), Db.db_get(two_level_db(), "l0"), Db.db_get(two_level_db(), "l1")) == (Some{"mv"}, Some{"l0v"}, Some{"l1v"}) : Maybe<&2, String> & Maybe<&2, String> & Maybe<&2, String>}
+
+# LAW: mem tombstone hides the L0 value (closed)
+law db_get_tombstone_hides:
+  {Db.db_get(tomb_db(), "x") == None{} : Maybe<&2, String>}
+
+# LAW: absent key misses everywhere (closed)
+law db_get_miss:
+  {Db.db_get(two_level_db(), "zzz") == None{} : Maybe<&2, String>}

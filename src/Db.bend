@@ -89,8 +89,50 @@ def all_entries(+db: Db) -> List<&2, MemTable.Entry>:
         case MemTable.MT{entries}:
           List.append(&2, MemTable.Entry, entries, all_level_entries(levels))
 
+def table_hit_if(present: Bool, t: Sstable.Table, +k: String) -> Maybe<&2, Maybe<&2, String>>:
+  match present:
+    case False{}:
+      None{}
+    case True{}:
+      Sstable.block_get_hit(t, k)
+
+def table_hit(+t: Sstable.Table, +k: String) -> Maybe<&2, Maybe<&2, String>>:
+  table_hit_if(Sstable.maybe_present(t, k), t, k)
+
+def tables_hits(+tabs: List<&2, Sstable.Table>, +k: String) -> List<&2, Maybe<&2, Maybe<&2, String>>>:
+  match tabs:
+    case Nil{}:
+      Nil{}
+    case Con{+h, t}:
+      Con{table_hit(h, k), tables_hits(t, k)}
+
+def levels_hits(+lvls: List<&2, List<&2, Sstable.Table>>, +k: String) -> List<&2, Maybe<&2, Maybe<&2, String>>>:
+  match lvls:
+    case Nil{}:
+      Nil{}
+    case Con{h, t}:
+      List.append(&2, Maybe<&2, Maybe<&2, String>>, tables_hits(h, k), levels_hits(t, k))
+
+def hits_first(+hits: List<&2, Maybe<&2, Maybe<&2, String>>>) -> Maybe<&2, Maybe<&2, String>>:
+  match hits:
+    case Nil{}:
+      None{}
+    case Con{None{}, t}:
+      hits_first(t)
+    case Con{Some{found}, t}:
+      Some{found}
+
+def flatten_opt(+m: Maybe<&2, Maybe<&2, String>>) -> Maybe<&2, String>:
+  match m:
+    case None{}:
+      None{}
+    case Some{inner}:
+      inner
+
 def db_get(+db: Db, +k: String) -> Maybe<&2, String>:
-  MemTable.get(MemTable.MT{all_entries(db)}, k)
+  match db:
+    case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
+      flatten_opt(hits_first(Con{MemTable.get_hit(mem, k), Con{MemTable.get_hit(frozen, k), levels_hits(levels, k)}}))
 
 # WAL framing v1 is applied here (see Recover): each batch is stored as
 # dashes(len) ++ ";" ++ encode(batch) so replay can stream frames and
@@ -105,11 +147,11 @@ def wal_tail(fr: (File & Result<&1, &1, U32 & String, Unit>), +dir: String) -> I
     case (f2, r):
       do IO<Result<&1, &1, U32 & String, Unit>>:
         res : Unit <- IO.try(Unit, IO.pure(Result<&1, &1, U32 & String, Unit>, r))
-        cp1 : Unit <- IO.try(Unit, CrashPoint.hit("wal.appended"))
-        cls : Unit <- File.close(f2)
-        syn : Unit <- IO.try(Unit, Fs.fsync(wal_path(dir)))
-        cp2 : Unit <- IO.try(Unit, CrashPoint.hit("wal.synced"))
-        prm : Unit <- IO.try(Unit, Fs.chmod(wal_path(dir), U32.from_nat(384n)))
+        _cp1 : Unit <- IO.try(Unit, CrashPoint.hit("wal.appended"))
+        _cls : Unit <- File.close(f2)
+        _syn : Unit <- IO.try(Unit, Fs.fsync(wal_path(dir)))
+        _cp2 : Unit <- IO.try(Unit, CrashPoint.hit("wal.synced"))
+        _prm : Unit <- IO.try(Unit, Fs.chmod(wal_path(dir), U32.from_nat(384n)))
         return Done{res}
 
 def wal_append(+dir: String, +data: String) -> IO(Result<&1, &1, U32 & String, Unit>):
@@ -124,7 +166,7 @@ def db_write(+db: Db, +b: Wal.Batch) -> IO(Result<&1, &1, U32 & String, Db>):
       match b:
         case Wal.Batch{muts}:
           do IO<Result<&1, &1, U32 & String, Db>>:
-            res : Unit <- IO.try(Unit, wal_append(dir, Wal.encode(Wal.Batch{muts})))
+            _res : Unit <- IO.try(Unit, wal_append(dir, Wal.encode(Wal.Batch{muts})))
             return Done{Db{dir, apply_batch(muts, mem), frozen, batch_cap, bcache, levels, flushed, manifest_token}}
 
 def db_put(+db: Db, +k: String, +v: String) -> IO(Result<&1, &1, U32 & String, Db>):

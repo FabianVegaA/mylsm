@@ -281,7 +281,7 @@ def bloom_size_stable(entries: List<&2, MemTable.Entry>, bits: BitTree.BitTree, 
 def pick_ix(bt: List<&2, String>, ct: List<&2, List<&2, MemTable.Entry>>, ix: Nat, +k: String, order: Cmp) -> Nat:
   match bt ct order:
     case _ _ GT{}:
-      ix
+      Nat.sub(ix, 1n)
     case Nil{} _ _:
       ix
     case _ Nil{} _:
@@ -289,7 +289,7 @@ def pick_ix(bt: List<&2, String>, ct: List<&2, List<&2, MemTable.Entry>>, ix: Na
     case Con{b2, bt2} Con{d2, ct2} LT{}:
       pick_ix(bt2, ct2, Nat.add(ix, 1n), k, Keys.cmp(b2, k))
     case Con{b2, bt2} Con{d2, ct2} EQ{}:
-      pick_ix(bt2, ct2, Nat.add(ix, 1n), k, Keys.cmp(b2, k))
+      ix
 
 def chunk_at_go(fuel: Nat, +chunks: List<&2, List<&2, MemTable.Entry>>, ix: Nat) -> List<&2, MemTable.Entry>:
   match fuel chunks:
@@ -325,6 +325,18 @@ def block_finish(picked: List<&2, MemTable.Entry>, +entries: List<&2, MemTable.E
       MemTable.get(MemTable.MT{entries}, k)
     case Con{e, t}:
       block_scan(Con{e, t}, k)
+
+def hit_finish(picked: List<&2, MemTable.Entry>, +entries: List<&2, MemTable.Entry>, +k: String) -> Maybe<&2, Maybe<&2, String>>:
+  match picked:
+    case Nil{}:
+      MemTable.get_hit(MemTable.MT{entries}, k)
+    case Con{e, t}:
+      MemTable.get_hit(MemTable.MT{Con{e, t}}, k)
+
+def block_get_hit(t: Table, +k: String) -> Maybe<&2, Maybe<&2, String>>:
+  match t:
+    case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
+      hit_finish(block_pick(chunks, blocks, k), entries, k)
 
 def block_get(t: Table, +k: String) -> Maybe<&2, String>:
   match t:

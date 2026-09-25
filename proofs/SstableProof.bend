@@ -18,3 +18,9 @@ def Laws.sstable_block_get_equiv():
 
 def Laws.sstable_block_get_missing():
   {==}
+
+def Laws.sstable_block_hit_equiv():
+  {==}
+
+def Laws.sstable_block_hit_missing():
+  {==}
