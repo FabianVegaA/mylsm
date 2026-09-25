@@ -37,13 +37,19 @@ def bcache_bound() -> Nat:
 # manifest_token is the exact serialized Manifest observed by this handle. Flush
 # and compaction compare it before publication to reject stale-handle drift.
 type Db is Data:
-  Db{dir: String, mem: MemTable.MemTable, frozen: MemTable.MemTable, batch_cap: Nat, bcache: List<&2, BEntry>, levels: List<&2, List<&2, Sstable.Table>>, flushed: Nat, manifest_token: String}
+  Db{dir: String, mem: MemTable.MemTable, frozen: MemTable.MemTable, batch_cap: Nat, bcache: List<&2, BEntry>, levels: List<&2, List<&2, Sstable.Table>>, flushed: Nat, manifest_token: String, mem_count: Nat, frozen_count: Nat}
+
+# Rotation result: both tables plus their exact counts, so no pass ever
+# walks a memtable to learn its size. Counts stay exact by construction
+# (open_db starts 0/0; every transition does arithmetic, never List.length).
+type RotRes is Data:
+  Rot{mem: MemTable.MemTable, frozen: MemTable.MemTable, mem_count: Nat, frozen_count: Nat}
 
 def wal_path(+dir: String) -> String:
   dir ++ "/wal.log"
 
 def open_db(+dir: String) -> Db:
-  Db{dir, MemTable.empty(), MemTable.empty(), default_batch_cap(), Nil{}, Nil{}, 0n, Manifest.serialize(Manifest.M{Nil{}})}
+  Db{dir, MemTable.empty(), MemTable.empty(), default_batch_cap(), Nil{}, Nil{}, 0n, Manifest.serialize(Manifest.M{Nil{}}), 0n, 0n}
 
 # --- Pure write core (laws below pin batch == sequential) ---
 
@@ -84,7 +90,7 @@ def all_level_entries(+lvls: List<&2, List<&2, Sstable.Table>>) -> List<&2, MemT
 
 def all_entries(+db: Db) -> List<&2, MemTable.Entry>:
   match db:
-    case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
+    case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
       match mem:
         case MemTable.MT{entries}:
           List.append(&2, MemTable.Entry, entries, all_level_entries(levels))
@@ -131,7 +137,7 @@ def flatten_opt(+opt: Maybe<&2, Maybe<&2, String>>) -> Maybe<&2, String>:
 
 def db_get(+db: Db, +key: String) -> Maybe<&2, String>:
   match db:
-    case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
+    case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
       flatten_opt(hits_first(Con{MemTable.get_hit(mem, key), Con{MemTable.get_hit(frozen, key), levels_hits(levels, key)}}))
 
 # --- Phase A3: table-identity read cache (assoc-list, bounded FIFO) ---
@@ -205,29 +211,29 @@ def levels_cached(+lvls: List<&2, List<&2, Sstable.Table>>, +key: String, +cache
     case Con{+h, t}:
       levels_cons(tables_walk(h, key, cache), levels_cached(t, key, cache))
 
-def cached_levels(lr: (List<&2, Maybe<&2, Maybe<&2, String>>> & List<&2, BEntry>), +dir: String, +mem: MemTable.MemTable, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, BEntry>, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String) -> Db & Maybe<&2, String>:
+def cached_levels(lr: (List<&2, Maybe<&2, Maybe<&2, String>>> & List<&2, BEntry>), +dir: String, +mem: MemTable.MemTable, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, BEntry>, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String, +mem_count: Nat, +frozen_count: Nat) -> Db & Maybe<&2, String>:
   match lr:
     case (hits, delta):
-      (Db{dir, mem, frozen, batch_cap, bcache_push_all(delta, bcache), levels, flushed, manifest_token}, flatten_opt(hits_first(hits)))
+      (Db{dir, mem, frozen, batch_cap, bcache_push_all(delta, bcache), levels, flushed, manifest_token, mem_count, frozen_count}, flatten_opt(hits_first(hits)))
 
-def cached_frozen(fhit: Maybe<&2, Maybe<&2, String>>, +dir: String, +mem: MemTable.MemTable, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, BEntry>, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String, +key: String) -> Db & Maybe<&2, String>:
+def cached_frozen(fhit: Maybe<&2, Maybe<&2, String>>, +dir: String, +mem: MemTable.MemTable, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, BEntry>, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String, +key: String, +mem_count: Nat, +frozen_count: Nat) -> Db & Maybe<&2, String>:
   match fhit:
     case Some{found}:
-      (Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}, flatten_opt(Some{found}))
+      (Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}, flatten_opt(Some{found}))
     case None{}:
-      cached_levels(levels_cached(levels, key, bcache), dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token)
+      cached_levels(levels_cached(levels, key, bcache), dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count)
 
-def cached_mem(mhit: Maybe<&2, Maybe<&2, String>>, +dir: String, +mem: MemTable.MemTable, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, BEntry>, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String, +key: String) -> Db & Maybe<&2, String>:
+def cached_mem(mhit: Maybe<&2, Maybe<&2, String>>, +dir: String, +mem: MemTable.MemTable, +frozen: MemTable.MemTable, +batch_cap: Nat, +bcache: List<&2, BEntry>, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String, +key: String, +mem_count: Nat, +frozen_count: Nat) -> Db & Maybe<&2, String>:
   match mhit:
     case Some{found}:
-      (Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}, flatten_opt(Some{found}))
+      (Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}, flatten_opt(Some{found}))
     case None{}:
-      cached_frozen(MemTable.get_hit(frozen, key), dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, key)
+      cached_frozen(MemTable.get_hit(frozen, key), dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, key, mem_count, frozen_count)
 
 def db_get_cached(+db: Db, +key: String) -> Db & Maybe<&2, String>:
   match db:
-    case Db{dir, +mem, +frozen, +batch_cap, +bcache, +levels, +flushed, +manifest_token}:
-      cached_mem(MemTable.get_hit(mem, key), dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, key)
+    case Db{dir, +mem, +frozen, +batch_cap, +bcache, +levels, +flushed, +manifest_token, +mem_count, +frozen_count}:
+      cached_mem(MemTable.get_hit(mem, key), dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, key, mem_count, frozen_count)
 
 # WAL framing v1 is applied here (see Recover): each batch is stored as
 # dashes(len) ++ ";" ++ encode(batch) so replay can stream frames and
@@ -255,12 +261,15 @@ def wal_append(+dir: String, +data: String) -> IO(Result<&1, &1, U32 & String, U
     fr : (File & Result<&1, &1, U32 & String, Unit>) <- File.write(f, wal_frame(data))
     wal_tail(fr, dir)
 
-def rotate_dec(full: Bool, +mem: MemTable.MemTable, +frozen: MemTable.MemTable) -> MemTable.MemTable & MemTable.MemTable:
+def batch_len(+muts: List<&2, Wal.Mut>) -> Nat:
+  List.length(&2, Wal.Mut, muts)
+
+def rotate_cnt(full: Bool, +grown: MemTable.MemTable, +frozen: MemTable.MemTable, +count: Nat, +fcount: Nat) -> RotRes:
   match full:
     case True{}:
-      (MemTable.empty(), mem)
+      Rot{MemTable.empty(), grown, 0n, count}
     case False{}:
-      (mem, frozen)
+      Rot{grown, frozen, count, fcount}
 
 def frozen_empty(+frozen: MemTable.MemTable) -> Bool:
   match frozen:
@@ -271,41 +280,41 @@ def frozen_empty(+frozen: MemTable.MemTable) -> Bool:
         case Con{_, _}:
           False{}
 
-def rotate_after(+grown: MemTable.MemTable, +frozen: MemTable.MemTable) -> MemTable.MemTable & MemTable.MemTable:
-  rotate_dec(Bool.and(Nat.is_le(4096n, MemTable.count(grown)), frozen_empty(frozen)), grown, frozen)
+def rotate_after(+grown: MemTable.MemTable, +frozen: MemTable.MemTable, +count: Nat, +fcount: Nat) -> RotRes:
+  rotate_cnt(Bool.and(Nat.is_le(4096n, count), frozen_empty(frozen)), grown, frozen, count, fcount)
 
-def apply_and_rotate(+muts: List<&2, Wal.Mut>, +mem: MemTable.MemTable, +frozen: MemTable.MemTable) -> MemTable.MemTable & MemTable.MemTable:
-  rotate_after(apply_batch(muts, mem), frozen)
+def apply_and_rotate(+muts: List<&2, Wal.Mut>, +mem: MemTable.MemTable, +frozen: MemTable.MemTable, +mem_count: Nat, +frozen_count: Nat) -> RotRes:
+  rotate_after(apply_batch(muts, mem), frozen, Nat.add(mem_count, batch_len(muts)), frozen_count)
 
-def apply_done(rm: (MemTable.MemTable & MemTable.MemTable), +dir: String, +batch_cap: Nat, +bcache: List<&2, BEntry>, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String) -> Db:
-  match rm:
-    case (mem2, frozen2):
-      Db{dir, mem2, frozen2, batch_cap, bcache, levels, flushed, manifest_token}
+def apply_done(res: RotRes, +dir: String, +batch_cap: Nat, +bcache: List<&2, BEntry>, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String) -> Db:
+  match res:
+    case Rot{mem2, frozen2, mc, fc}:
+      Db{dir, mem2, frozen2, batch_cap, bcache, levels, flushed, manifest_token, mc, fc}
 
-def rot_done(rm: (MemTable.MemTable & MemTable.MemTable), +dir: String, +batch_cap: Nat, +bcache: List<&2, BEntry>, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String) -> Result<&1, &1, U32 & String, Db>:
-  Done{apply_done(rm, dir, batch_cap, bcache, levels, flushed, manifest_token)}
+def rot_done(res: RotRes, +dir: String, +batch_cap: Nat, +bcache: List<&2, BEntry>, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String) -> Result<&1, &1, U32 & String, Db>:
+  Done{apply_done(res, dir, batch_cap, bcache, levels, flushed, manifest_token)}
 
 def db_write(+db: Db, +batch: Wal.Batch) -> IO(Result<&1, &1, U32 & String, Db>):
   match db:
-    case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
+    case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
       match batch:
         case Wal.Batch{muts}:
           do IO<Result<&1, &1, U32 & String, Db>>:
             _res : Unit <- IO.try(Unit, wal_append(dir, Wal.encode(Wal.Batch{muts})))
-            return rot_done(apply_and_rotate(muts, mem, frozen), dir, batch_cap, bcache, levels, flushed, manifest_token)
+            return rot_done(apply_and_rotate(muts, mem, frozen, mem_count, frozen_count), dir, batch_cap, bcache, levels, flushed, manifest_token)
 
 def db_put(+db: Db, +key: String, +val: String) -> IO(Result<&1, &1, U32 & String, Db>):
   db_write(db, Wal.Batch{Con{Wal.Put{key, val}, Nil{}}})
 
 def batch_cap_of(+db: Db) -> Nat:
   match db:
-    case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
+    case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
       batch_cap
 
 def with_batch_cap(+db: Db, +cap: Nat) -> Db:
   match db:
-    case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
-      Db{dir, mem, frozen, cap, bcache, levels, flushed, manifest_token}
+    case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
+      Db{dir, mem, frozen, cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}
 
 def staged_muts(+staged: List<&2, Wal.Batch>) -> List<&2, Wal.Mut>:
   match staged:
@@ -316,8 +325,8 @@ def staged_muts(+staged: List<&2, Wal.Batch>) -> List<&2, Wal.Mut>:
 
 def db_write_staged(+db: Db, +staged: List<&2, Wal.Batch>) -> IO(Result<&1, &1, U32 & String, Db>):
   match db:
-    case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
-      db_write(Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}, Wal.Batch{staged_muts(List.reverse(&2, Wal.Batch, staged))})
+    case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
+      db_write(Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}, Wal.Batch{staged_muts(List.reverse(&2, Wal.Batch, staged))})
 
 def db_del(+db: Db, +key: String) -> IO(Result<&1, &1, U32 & String, Db>):
   db_write(db, Wal.Batch{Con{Wal.Del{key}, Nil{}}})

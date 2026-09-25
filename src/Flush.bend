@@ -156,7 +156,7 @@ def flush_goB(
     _v3 : Unit <- IO.try(Unit, Fs.fsync(dir))
     _cp2 : Unit <- IO.try(Unit, CrashPoint.hit("flush.manifest_published"))
     _rm : Result<&1, &1, U32 & String, Unit> <- Fs.remove(Db.wal_path(dir))
-    return Done{Db.Db{dir, mem, MemTable.MT{Nil{}}, batch_cap, Nil{}, l0_add(levels, tbl), Nat.add(flushed, 1n), Manifest.serialize(m2)}}
+    return Done{Db.Db{dir, mem, MemTable.MT{Nil{}}, batch_cap, Nil{}, l0_add(levels, tbl), Nat.add(flushed, 1n), Manifest.serialize(m2), 0n, 0n}}
 
 def flush_drift(
   ok: Bool,
@@ -248,7 +248,7 @@ def flush_pick(
 ) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match frozen mem:
     case MemTable.MT{Nil{}} MemTable.MT{Nil{}}:
-      IO.pure(Result<&1, &1, U32 & String, Db.Db>, Done{Db.Db{dir, MemTable.MT{Nil{}}, MemTable.MT{Nil{}}, batch_cap, bcache, levels, flushed, manifest_token}})
+      IO.pure(Result<&1, &1, U32 & String, Db.Db>, Done{Db.Db{dir, MemTable.MT{Nil{}}, MemTable.MT{Nil{}}, batch_cap, bcache, levels, flushed, manifest_token, 0n, 0n}})
     case MemTable.MT{Nil{}} MemTable.MT{Con{e, t}}:
       flush_pre(dir, Con{e, t}, levels, flushed, manifest_token, batch_cap)
     case MemTable.MT{Con{fe, ft}} _:
@@ -256,7 +256,7 @@ def flush_pick(
 
 def flush(+db: Db.Db) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match db:
-    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
+    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
       flush_pick(frozen, mem, dir, levels, flushed, manifest_token, batch_cap, bcache)
 
 # --- Closed-vector laws live in laws/Flush.bend (spec law 6) ---

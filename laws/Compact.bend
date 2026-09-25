@@ -82,10 +82,10 @@ law compact_absorbed:
   {Compact.table_overlap(cp_t2(), cp_u0()) == True{} : Bool}
 
 def cp_db_pre() -> Db.Db:
-  Db.Db{"/d", MemTable.MT{Nil{}}, MemTable.MT{Nil{}}, 1n, Nil{}, cp_levels(), 5n, ""}
+  Db.Db{"/d", MemTable.MT{Nil{}}, MemTable.MT{Nil{}}, 1n, Nil{}, cp_levels(), 5n, "", 0n, 0n}
 
 def cp_db_post() -> Db.Db:
-  Db.Db{"/d", MemTable.MT{Nil{}}, MemTable.MT{Nil{}}, 1n, Nil{}, cp_post(), 6n, ""}
+  Db.Db{"/d", MemTable.MT{Nil{}}, MemTable.MT{Nil{}}, 1n, Nil{}, cp_post(), 6n, "", 0n, 0n}
 
 # LAW: post-compaction hit pinned (closed; anti-vacuity)
 law compact_hit:

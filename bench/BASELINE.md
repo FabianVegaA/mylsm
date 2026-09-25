@@ -143,6 +143,11 @@ default cap 1). Datasets fit in RAM: not yet publication-grade comparisons.
   **2,943.03 ops/s** (spread ±1.5% — the workload is throughput-stable under
   load). Ratio vs the pre-phase-3 single run: ~1.81x. All runs: samples pass,
   pre/post recovery identical, `level_shape=pass`.
+- Memtable-count threading follow-up (single run, same machine class,
+  `feature/phase3-performance`): 1M in 259,930 ms (**3,847.19 ops/s**),
+  20,485 in 2,278 ms (8,992.54 ops/s). Eliminating the per-write
+  `List.length` walks (stored `mem_count`/`frozen_count` in `Db`,
+  `RotRes`-threaded rotation) accounts for the step from 2,943.03.
 - Anomaly for follow-up: recovery time is nearly flat across dataset sizes
   (9.8 s at 4,096 writes, 13.8 s at 20,485, 16.0 s at 1M) while table bytes
   grow 0 → 29 MB, pointing at fixed open-path overhead rather than

@@ -58,10 +58,10 @@ law db_recover:
 # --- db_get per-source search (Phase A2): closed vectors ---
 
 def two_level_db() -> Db.Db:
-  Db.Db{"/d", MemTable.MT{Con{MemTable.Entry{"m", Some{"mv"}}, Nil{}}}, MemTable.MT{Nil{}}, 1n, Nil{}, Con{Con{Sstable.build(Con{MemTable.Entry{"l0", Some{"l0v"}}, Nil{}}, 0n, 1n), Nil{}}, Con{Con{Sstable.build(Con{MemTable.Entry{"l1", Some{"l1v"}}, Nil{}}, 0n, 1n), Nil{}}, Nil{}}}, 2n, ""}
+  Db.Db{"/d", MemTable.MT{Con{MemTable.Entry{"m", Some{"mv"}}, Nil{}}}, MemTable.MT{Nil{}}, 1n, Nil{}, Con{Con{Sstable.build(Con{MemTable.Entry{"l0", Some{"l0v"}}, Nil{}}, 0n, 1n), Nil{}}, Con{Con{Sstable.build(Con{MemTable.Entry{"l1", Some{"l1v"}}, Nil{}}, 0n, 1n), Nil{}}, Nil{}}}, 2n, "", 1n, 0n}
 
 def tomb_db() -> Db.Db:
-  Db.Db{"/d", MemTable.MT{Con{MemTable.Entry{"x", None{}}, Nil{}}}, MemTable.MT{Nil{}}, 1n, Nil{}, Con{Con{Sstable.build(Con{MemTable.Entry{"x", Some{"old"}}, Nil{}}, 0n, 1n), Nil{}}, Nil{}}, 1n, ""}
+  Db.Db{"/d", MemTable.MT{Con{MemTable.Entry{"x", None{}}, Nil{}}}, MemTable.MT{Nil{}}, 1n, Nil{}, Con{Con{Sstable.build(Con{MemTable.Entry{"x", Some{"old"}}, Nil{}}, 0n, 1n), Nil{}}, Nil{}}, 1n, "", 1n, 0n}
 
 # LAW: mem shadows L0 shadows L1 (closed)
 law db_get_newest_wins:
@@ -116,22 +116,22 @@ def mem_entries(tab: MemTable.MemTable) -> List<&2, MemTable.Entry>:
     case MemTable.MT{entries}:
       entries
 
-def pair_entries(pair: (MemTable.MemTable & MemTable.MemTable)) -> List<&2, MemTable.Entry>:
-  match pair:
-    case (mem2, frozen2):
+def pair_entries(res: Db.RotRes) -> List<&2, MemTable.Entry>:
+  match res:
+    case Db.Rot{mem2, frozen2, mc, fc}:
       List.append(&2, MemTable.Entry, mem_entries(mem2), mem_entries(frozen2))
 
-# LAW: no rotation below cap keeps tables in place (closed)
+# LAW: no rotation below cap keeps tables and counts in place (closed)
 law rotate_below_cap:
-  {Db.rotate_dec(False{}, small_mem(), MemTable.empty()) == (small_mem(), MemTable.empty()) : MemTable.MemTable & MemTable.MemTable}
+  {Db.rotate_cnt(False{}, small_mem(), MemTable.empty(), 3n, 0n) == Db.Rot{small_mem(), MemTable.empty(), 3n, 0n} : Db.RotRes}
 
-# LAW: rotation moves a full memtable to frozen (closed)
+# LAW: rotation moves a full memtable to frozen and zeroes its count (closed)
 law rotate_fires:
-  {Db.rotate_dec(True{}, small_mem(), MemTable.empty()) == (MemTable.empty(), small_mem()) : MemTable.MemTable & MemTable.MemTable}
+  {Db.rotate_cnt(True{}, small_mem(), MemTable.empty(), 3n, 0n) == Db.Rot{MemTable.empty(), small_mem(), 0n, 3n} : Db.RotRes}
 
 # LAW: rotation preserves every entry (closed)
 law rotate_preserves:
-  {pair_entries(Db.apply_and_rotate(db_muts2(), MemTable.empty(), MemTable.empty())) == mem_entries(Db.apply_batch(db_muts2(), MemTable.empty())) : List<&2, MemTable.Entry>}
+  {pair_entries(Db.apply_and_rotate(db_muts2(), MemTable.empty(), MemTable.empty(), 0n, 0n)) == mem_entries(Db.apply_batch(db_muts2(), MemTable.empty())) : List<&2, MemTable.Entry>}
 
 # LAW: frozen emptiness detector (closed)
 law frozen_empty_branches:

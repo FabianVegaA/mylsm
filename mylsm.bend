@@ -87,18 +87,18 @@ def open(+dir: String) -> Db.Db:
 
 def put_go(+db: Db.Db, +key: String, +val: String) -> Db.Db:
   match db:
-    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
-      Db.apply_done(Db.apply_and_rotate(Con{Wal.Put{key, val}, Nil{}}, mem, frozen), dir, batch_cap, bcache, levels, flushed, manifest_token)
+    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
+      Db.apply_done(Db.apply_and_rotate(Con{Wal.Put{key, val}, Nil{}}, mem, frozen, mem_count, frozen_count), dir, batch_cap, bcache, levels, flushed, manifest_token)
 
 def del_go(+db: Db.Db, +key: String) -> Db.Db:
   match db:
-    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
-      Db.apply_done(Db.apply_and_rotate(Con{Wal.Del{key}, Nil{}}, mem, frozen), dir, batch_cap, bcache, levels, flushed, manifest_token)
+    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
+      Db.apply_done(Db.apply_and_rotate(Con{Wal.Del{key}, Nil{}}, mem, frozen, mem_count, frozen_count), dir, batch_cap, bcache, levels, flushed, manifest_token)
 
 def batch_go(+db: Db.Db, +muts: List<&2, Wal.Mut>) -> Db.Db:
   match db:
-    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token}:
-      Db.apply_done(Db.apply_and_rotate(muts, mem, frozen), dir, batch_cap, bcache, levels, flushed, manifest_token)
+    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
+      Db.apply_done(Db.apply_and_rotate(muts, mem, frozen, mem_count, frozen_count), dir, batch_cap, bcache, levels, flushed, manifest_token)
 
 def sget_go(+db: Db.Db, +key: String) -> Db.Db & Maybe<&2, String>:
   Db.db_get_cached(db, key)
