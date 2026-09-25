@@ -77,7 +77,13 @@ git commit -m "chore: pin bend-collections 0x9ee2e9 and Bend 2.0.25 floor" -m "H
 - [ ] **Step 1: Confirm the V1 blast radius is contained**
 
 Run: `grep -rn "SstFileV1\|serialize_v1\|serialize_v2\|parse_v1\|parse_version\|feed_v1\|Legacy\|muts_of_entries" src/ app/ bench/ laws/ proofs/ mylsm.bend | cut -d: -f1 | sort | uniq -c`
-Expected: matches only in `src/SstFile.bend`, `src/SstStream.bend`, `src/SstFileV1Fast.bend`, `laws/SstFileV1Parser.bend`, `laws/SstFileV1Equivalence.bend`, `laws/SstFileDispatchV1.bend`, `laws/SstFileRoundtrip.bend`, `laws/SstFileDispatchV2.bend`, `laws/SstStream.bend`, and the four matching `proofs/` files. If any other file references these names, stop and extend the file lists in this task before deleting anything. (`mylsm.bend` uses only `SstFile.serialize`/`SstFile.parse`, which keep their names.)
+Expected: matches only in `src/SstFile.bend`, `src/SstStream.bend`, `src/SstFileV1Fast.bend`, `laws/SstFileV1Parser.bend`, `laws/SstFileV1Equivalence.bend`, `laws/SstFileDispatchV1.bend`, `laws/SstFileRoundtrip.bend`, `laws/SstFileDispatchV2.bend`, `laws/SstStream.bend`, the four matching `proofs/` files, plus: `app/interchange.bend` (its OWN unrelated `muts_of_entries` Entry→Mut helper — keep), and `SstFile.serialize_v2` call sites in `src/Compact.bend`, `src/Flush.bend`, `bench/compaction_bench.bend` (handled in Step 1b). If any file beyond these references the names, stop and extend this task before deleting anything. (`mylsm.bend` uses only `SstFile.serialize`/`SstFile.parse`, which keep their names.)
+
+- [ ] **Step 1b: Repoint `serialize_v2` callers at `serialize`**
+
+`SstFile.serialize` is already `serialize_v2` under its final name, so repoint the three production call sites mechanically (no behavior change):
+Run: `sed -i '' 's/SstFile\.serialize_v2(/SstFile.serialize(/' src/Compact.bend src/Flush.bend bench/compaction_bench.bend && grep -rn "serialize_v2" src/ app/ bench/ laws/ proofs/ || echo NO-V2-REFS`
+Expected: `NO-V2-REFS`. (On Linux use `sed -i` without `''`; this repo supports Darwin + Linux per the crash-matrix docs — pick the flag matching `uname`.)
 
 - [ ] **Step 2: Rewrite `src/SstFile.bend` as v2-only**
 

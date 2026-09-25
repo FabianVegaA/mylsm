@@ -43,11 +43,8 @@ law count_gen_one:
 law generation_decimal_branch:
   {Recover.gen_value_read(Some{12n}, "12") == 12n : Nat}
 
-law generation_legacy_branch:
-  {Recover.gen_value_read(None{}, "----") == 4n : Nat}
-
 law generation_shape_branches:
-  {(Recover.gen_valid_read(Some{12n}, "12"), Recover.gen_valid_read(None{}, "----")) == (True{}, True{}) : Bool & Bool}
+  {(Recover.gen_valid_read(Some{12n}, "12"), Recover.gen_valid_read(None{}, "----")) == (True{}, False{}) : Bool & Bool}
 
 
 # LAW: recovery equivalence — replayed reads equal pre-crash reads (closed)

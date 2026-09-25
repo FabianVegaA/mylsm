@@ -22,9 +22,6 @@ def Laws.count_gen_one():
 def Laws.generation_decimal_branch():
   {==}
 
-def Laws.generation_legacy_branch():
-  {==}
-
 def Laws.generation_shape_branches():
   {==}
 
