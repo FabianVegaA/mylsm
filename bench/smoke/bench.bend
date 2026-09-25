@@ -1,6 +1,6 @@
 import Base
-import ../src/Db.bend as Db
-import ../src/Recover.bend as Recover
+import ../../src/Db.bend as Db
+import ../../src/Recover.bend as Recover
 
 # Task 11 timing smoke benchmark. It records one acknowledged put and the
 # elapsed time; larger loops can be layered on this same API after calibration.

@@ -1,5 +1,5 @@
 import Base
-import ../src/CrashPoint.bend as CrashPoint
+import ../../src/CrashPoint.bend as CrashPoint
 
 def main() -> IO(Unit):
   do IO<Unit>:

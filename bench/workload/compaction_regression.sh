@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 MODE=${1:-baseline}
 REQUESTED_OUTPUT=${2:-"$ROOT/.mylsm-compaction-regression"}
 MIN_FREE_PERCENT=15
@@ -107,7 +107,7 @@ BUILD_DIR="$ROOT/.mylsm/build"
 BINARY="$BUILD_DIR/compaction-bench"
 mkdir -p -- "$BUILD_DIR"
 echo "phase=build status=starting"
-bend "$ROOT/bench/compaction_bench.bend" -o "$BINARY"
+bend "$ROOT/bench/workload/compaction.bend" -o "$BINARY"
 echo "phase=build status=complete"
 LAST_COMPLETED=build
 
@@ -155,9 +155,9 @@ run_gate() {
 }
 
 if [[ "$MODE" != short ]]; then
-  run_gate durable_4096_no_flush "${MYLSM_BENCH_TIMEOUT_4096:-120}" env MYLSM_THREADS="$THREADS" "$ROOT/bench/million_writes.sh" 4096 "$OUTPUT_DIR/durable-4096"
-  run_gate durable_4097_first_flush "${MYLSM_BENCH_TIMEOUT_4097:-300}" env MYLSM_THREADS="$THREADS" "$ROOT/bench/million_writes.sh" 4097 "$OUTPUT_DIR/durable-4097"
-  run_gate durable_20485_first_compaction "${MYLSM_BENCH_TIMEOUT_20485:-1800}" env MYLSM_THREADS="$THREADS" "$ROOT/bench/million_writes.sh" 20485 "$OUTPUT_DIR/durable-20485"
+  run_gate durable_4096_no_flush "${MYLSM_BENCH_TIMEOUT_4096:-120}" env MYLSM_THREADS="$THREADS" "$ROOT/bench/workload/million_writes.sh" 4096 "$OUTPUT_DIR/durable-4096"
+  run_gate durable_4097_first_flush "${MYLSM_BENCH_TIMEOUT_4097:-300}" env MYLSM_THREADS="$THREADS" "$ROOT/bench/workload/million_writes.sh" 4097 "$OUTPUT_DIR/durable-4097"
+  run_gate durable_20485_first_compaction "${MYLSM_BENCH_TIMEOUT_20485:-1800}" env MYLSM_THREADS="$THREADS" "$ROOT/bench/workload/million_writes.sh" 20485 "$OUTPUT_DIR/durable-20485"
   PURE_ENTRIES=4097
 else
   PURE_ENTRIES=${MYLSM_BENCH_ENTRIES:-8}

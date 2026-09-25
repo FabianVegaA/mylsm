@@ -206,8 +206,8 @@ case "$command" in
   --help|-h) usage ;;
   doctor) doctor ;;
   check) exec "$ROOT/proofs/run.sh" ;;
-  fuzz) exec bend "$ROOT/bench/fuzz.bend" ;;
-  bench) exec bend "$ROOT/bench/bench.bend" ;;
+  fuzz) exec bend "$ROOT/bench/workload/fuzz.bend" ;;
+  bench) exec bend "$ROOT/bench/smoke/bench.bend" ;;
   build) native_build "$DEMO" "$DEMO_BUILD" ;;
   run) if [ -x "$DEMO_BUILD" ]; then run_native "$DEMO_BUILD" 0; else exec bend "$DEMO"; fi ;;
   repl) repl_command "$@" ;;

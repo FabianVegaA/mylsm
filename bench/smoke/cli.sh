@@ -1,12 +1,12 @@
 #!/bin/sh
 set -eu
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$ROOT"
 trap 'rm -rf .mylsm-demo-data .mylsm .mylsm-cli-test .mylsm-cli-test.log .mylsm-cli-recover.log .mylsm-console-smoke.log .mylsm-cli-export.db' EXIT
 sh -n bin/mylsm
 bin/mylsm doctor
 bin/mylsm check
-printf 'hello\n' | MYLSM_TEST_ENV=world bend bench/console_smoke.bend >.mylsm-console-smoke.log
+printf 'hello\n' | MYLSM_TEST_ENV=world bend bench/smoke/console.bend >.mylsm-console-smoke.log
 grep '^line=hello$' .mylsm-console-smoke.log
 grep '^env=world$' .mylsm-console-smoke.log
 rm -f .mylsm-console-smoke.log

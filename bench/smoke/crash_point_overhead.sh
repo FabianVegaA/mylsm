@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 MODE=${1:-}
 REQUESTED_OUTPUT=${2:-"$ROOT/.mylsm-crash-point-overhead"}
 SENTINEL_NAME=.mylsm-crash-overhead
@@ -61,7 +61,7 @@ capture_phase() {
   for repetition in 1 2 3; do
     log="$phase_dir/run-$repetition.log"
     data_dir="$phase_dir/data-$repetition"
-    MYLSM_BENCH_RESET=1 "$ROOT/bench/million_writes.sh" 4096 "$data_dir" >"$log" 2>&1
+    MYLSM_BENCH_RESET=1 "$ROOT/bench/workload/million_writes.sh" 4096 "$data_dir" >"$log" 2>&1
     elapsed=$(awk -F= '/^elapsed_ms=/{value=$2} END{print value}' "$log")
     case "$elapsed" in
       ''|*[!0-9]*) echo "missing elapsed_ms in $log" >&2; return 1 ;;

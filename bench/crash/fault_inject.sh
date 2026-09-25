@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 MODE=run
 case "${1:-}" in
   --self-test|--validate-only)
@@ -15,7 +15,7 @@ REPETITIONS=${MYLSM_CRASH_REPETITIONS:-3}
 STOP_TIMEOUT=${MYLSM_CRASH_STOP_TIMEOUT:-10}
 BUILD_DIR="$ROOT/.mylsm/build"
 BINARY="$BUILD_DIR/crash-worker"
-SOURCE="$ROOT/bench/crash_worker.bend"
+SOURCE="$ROOT/bench/crash/crash_worker.bend"
 CURRENT_PID=
 CURRENT_ARTIFACT_DIR=
 MATRIX_COMPLETE=0

@@ -1,11 +1,12 @@
 import Base
-import ../src/Console.bend as Console
-import ../src/Compact.bend as Compact
-import ../src/Db.bend as Db
-import ../src/Flush.bend as Flush
-import ../src/Recover.bend as Recover
-import ../src/Sstable.bend as Sstable
-import ../src/Wal.bend as Wal
+import ../../src/Console.bend as Console
+import ../../src/Compact.bend as Compact
+import ../../src/Db.bend as Db
+import ../../src/Flush.bend as Flush
+import ../../src/Recover.bend as Recover
+import ../../src/Sstable.bend as Sstable
+import ../../src/Wal.bend as Wal
+import ../lib/common.bend as Common
 
 def bool_and(lhs: Bool, rhs: Bool) -> Bool:
   match lhs:
@@ -47,11 +48,6 @@ def fixture_puts(count: Nat, +family: String, +batch: Nat, +index: Nat) -> List<
         fixture_puts(rest, family, batch, Nat.add(index, 1n))
       }
 
-def maybe_value_eq(got: Maybe<&2, String>, +expected: String) -> Bool:
-  match got:
-    case None{}: False{}
-    case Some{value}: String.eq(value, expected)
-
 def optional_value_eq(got: Maybe<&2, String>, +expected: String) -> Bool:
   match got:
     case None{}: True{}
@@ -63,7 +59,7 @@ def fixture_keys_ok(count: Nat, +family: String, +batch: Nat, +index: Nat, +db: 
       True{}
     case 1n+rest:
       bool_and(
-        maybe_value_eq(Db.db_get(db, fixture_key(family, batch, index)), fixture_value(family, batch, index)),
+        Common.maybe_value_eq(Db.db_get(db, fixture_key(family, batch, index)), fixture_value(family, batch, index)),
         fixture_keys_ok(rest, family, batch, Nat.add(index, 1n), db))
 
 def compact_keys_ok(count: Nat, +batch: Nat, +db: Db.Db) -> Bool:
@@ -84,7 +80,7 @@ def trigger_optional(+db: Db.Db) -> Bool:
   optional_value_eq(Db.db_get(db, "wal-trigger"), "wal-trigger-value")
 
 def trigger_required(+db: Db.Db) -> Bool:
-  maybe_value_eq(Db.db_get(db, "wal-trigger"), "wal-trigger-value")
+  Common.maybe_value_eq(Db.db_get(db, "wal-trigger"), "wal-trigger-value")
 
 def trigger_absent_db(+db: Db.Db) -> Bool:
   trigger_absent(Db.db_get(db, "wal-trigger"))
@@ -112,25 +108,6 @@ def trigger_policy_valid(+policy: String) -> Bool:
 def case_valid(+case_name: String) -> Bool:
   Bool.or(String.eq(case_name, "wal"), Bool.or(String.eq(case_name, "flush"), String.eq(case_name, "compact")))
 
-def first_level(levels: List<&2, List<&2, Sstable.Table>>) -> List<&2, Sstable.Table>:
-  match levels:
-    case Nil{}: Nil{}
-    case Con{level, rest}: level
-
-def rest_levels(levels: List<&2, List<&2, Sstable.Table>>) -> List<&2, List<&2, Sstable.Table>>:
-  match levels:
-    case Nil{}: Nil{}
-    case Con{level, rest}: rest
-
-def level_count(db: Db.Db, level: Nat) -> Nat:
-  match db:
-    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
-      match level:
-        case 0n:
-          List.length(&2, Sstable.Table, first_level(levels))
-        case 1n+rest:
-          List.length(&2, Sstable.Table, first_level(rest_levels(levels)))
-
 def case_keys_flush(flush: Bool, +db: Db.Db) -> Bool:
   match flush:
     case True{}:
@@ -151,8 +128,8 @@ def case_keys_ok(+case_name: String, +trigger_policy: String, +db: Db.Db) -> Boo
 def verify_open(+case_name: String, +trigger_policy: String, +expected_l0: Nat, +expected_l1: Nat, +reopen: Nat, +db: Db.Db) -> IO(Unit):
   do IO<Unit>:
     _k : Unit <- require(case_keys_ok(case_name, trigger_policy, db), "acknowledged key/value verification failed")
-    _s0 : Unit <- require(Nat.is_eq(level_count(db, 0n), expected_l0), "unexpected L0 shape")
-    _s1 : Unit <- require(Nat.is_eq(level_count(db, 1n), expected_l1), "unexpected L1 shape")
+    _s0 : Unit <- require(Nat.is_eq(Common.level_count(db, 0n), expected_l0), "unexpected L0 shape")
+    _s1 : Unit <- require(Nat.is_eq(Common.level_count(db, 1n), expected_l1), "unexpected L1 shape")
     IO.print("worker_mode=verify case=" ++ case_name ++ " reopen=" ++ Nat.show(reopen) ++ " keys=pass level_shape=pass referenced_data=pass")
 
 def verify_twice(+dir: String, +case_name: String, +trigger_policy: String, +expected_l0: Nat, +expected_l1: Nat) -> IO(Unit):

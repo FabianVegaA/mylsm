@@ -14,9 +14,9 @@ def env_default(value: String, fallback: String) -> String:
     case SNil{}: fallback
     case SCon{h, t}: SCon{h, t}
 
-def nat_default(value: Maybe<&2, Nat>) -> Nat:
+def nat_default(value: Maybe<&2, Nat>, fallback: Nat) -> Nat:
   match value:
-    case None{}: 1n
+    case None{}: fallback
     case Some{n}: n
 
 def bool_text(ok: Bool) -> String:

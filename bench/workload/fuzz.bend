@@ -1,7 +1,7 @@
 import Base
-import ../src/Wal.bend as Wal
-import ../src/Manifest.bend as Manifest
-import ../src/SstFile.bend as SstFile
+import ../../src/Wal.bend as Wal
+import ../../src/Manifest.bend as Manifest
+import ../../src/SstFile.bend as SstFile
 
 # Deterministic fail-closed corpus. The decoder totality laws cover arbitrary
 # Strings; this executable adds representative truncation, noise, and valid
