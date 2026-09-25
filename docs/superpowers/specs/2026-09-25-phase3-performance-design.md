@@ -12,6 +12,8 @@ Remove the known algorithmic and IO bottlenecks before any cross-database compar
 
 Decisions (2026-09-25): single spec+plan; order A→B→D→C; skeleton-first execution; hub proofs trusted, ours cover glue only; bench gate from the refactor still holds (no measured win → revert).
 
+**Custom-code precedence (normative):** community packages are the default, not the mandate. If measurement shows custom code beats the hub module (throughput, proof burden, or fit), the custom code stays: keep it and record the numbers in the commit message when the verdict is clear-cut; escalate to the user when it is a close call or a direction change (e.g. dropping an adoption the spec planned). The refactor already set this precedent twice (balanced merge kept over hub tree/heap, prepend-log kept over `HashMap`).
+
 **No retrocompatibility (normative):** no database, file, or wire format is preserved across any phase. `Tbl` gains fields, checksums may change mode (C2 tree-hash), Manifest naming may change, staged-batch framing may change. No migration code, no legacy readers, no version dispatch — the V1 deletion (2026-09-24) is the precedent. Every phase's bench runs on fresh directories.
 
 ## 2. Skeleton (structural commit, no behavior change)
