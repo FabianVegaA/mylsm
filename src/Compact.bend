@@ -209,8 +209,7 @@ def table_runs(tabs: List<&2, Sstable.Table>) -> List<&2, List<&2, MemTable.Entr
 # in its original stored order, then merge L0 as strictly newer than L1.
 # Tombstones are retained, so a triggered compaction publishes exactly one table.
 def finish_runs(+l0_runs: List<&2, List<&2, MemTable.Entry>>, +l1_runs: List<&2, List<&2, MemTable.Entry>>, +rest: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
-  +merged_l0 = SortedRun.merge_many_newest(l0_runs)
-  +merged_l1 = SortedRun.merge_many_newest(l1_runs)
+  merged_l0 merged_l1 = SortedRun.merge_many_newest(l0_runs) SortedRun.merge_many_newest(l1_runs)
   +merged = SortedRun.merge_many_newest(Con{merged_l0, Con{merged_l1, Nil{}}})
   Con{Sstable.from_sorted_unique(shadow_drop(merged, Nil{}), 1n), rest}
 
@@ -228,8 +227,7 @@ def closed_runs_go(
     case 0n:
       finish_runs(l0_runs, table_runs(filter_pos(all_l1, lo, hi)), rest)
     case 1n+m:
-      +abs_new = filter_pos(rest, lo, hi)
-      +rem_new = filter_neg(rest, lo, hi)
+      +abs_new +rem_new = filter_pos(rest, lo, hi) filter_neg(rest, lo, hi)
       closed_runs_go(m, min_step(min_first(abs_new), lo), max_step(max_last(abs_new), hi), l0_runs, all_l1, rem_new)
 
 
