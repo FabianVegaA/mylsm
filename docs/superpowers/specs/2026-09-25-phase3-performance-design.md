@@ -10,7 +10,9 @@
 
 Remove the known algorithmic and IO bottlenecks before any cross-database comparison, in slice order: **A** reads (block index, block-oriented reads, live Bloom, block cache, measured Bloom tuning), **B** writes (grouped commits, configurable batching, active+frozen MemTables, background flush/compaction), **D** measurement (write amplification, recovery time, memory, latency percentiles, throughput, RocksDB/LevelDB/Pebble recipe), **C** GPU (`!` on chunked Bloom and block digests, CPU/GPU agreement laws).
 
-Decisions (2026-09-25): single spec+plan; order A→B→D→C; skeleton-first execution; no on-disk compat constraints (established 2026-09-24); hub proofs trusted, ours cover glue only; bench gate from the refactor still holds (no measured win → revert).
+Decisions (2026-09-25): single spec+plan; order A→B→D→C; skeleton-first execution; hub proofs trusted, ours cover glue only; bench gate from the refactor still holds (no measured win → revert).
+
+**No retrocompatibility (normative):** no database, file, or wire format is preserved across any phase. `Tbl` gains fields, checksums may change mode (C2 tree-hash), Manifest naming may change, staged-batch framing may change. No migration code, no legacy readers, no version dispatch — the V1 deletion (2026-09-24) is the precedent. Every phase's bench runs on fresh directories.
 
 ## 2. Skeleton (structural commit, no behavior change)
 
