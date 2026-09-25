@@ -6,14 +6,14 @@
 
 **Architecture:** Task 0–1 build the bench skeleton and move files with rewired imports (no behavior change). Tasks 2–3 add the directed grammar corpus then scale blind volume to 1M+ with totality laws. Task 4 extends the kill -9 matrix and documents the overnight soak. Tasks 5–6 cover resource faults and component memory budgets with stats. Task 7 strengthens open-input laws where the checker normalizes. Every task ends green (proofs + bolt + relevant bench) or reverted.
 
-**Tech Stack:** Bend 2.0.25+ (`bend --check-only`, native `-o` builds, `bend base`), existing `src/` + `laws/` + `proofs/` + `bench/` + `bin/mylsm`, `../bolt/bin/bolt.bin` lint gate, POSIX shell + `hdiutil`/`tmpfs` for fault scripts.
+**Tech Stack:** Bend 2.0.25+ (`bend --check-only`, native `-o` builds, `bend base`), existing `src/` + `laws/` + `proofs/` + `bench/` + `bin/mylsm`, `../bolt/bin/bolt.bin` lint gate, POSIX shell **only** for irreducible OS orchestration (dir-safety guards, native build+run, `kill -9`/waitpid, ramdisk mount, RSS sampling). All computation (metrics, percentiles, shape gates, fuzz driving) lives in Bend; shell scripts are thin launchers with grep-assertions.
 
 ---
 
 ## File structure
 
-- Create (Task 0): `bench/lib/common.bend` (shared helpers), `bench/lib/run.sh` (shared shell preamble), `bench/README.md` (run map + acceptance list).
-- Move (Task 1): `smoke/{bench,effs,console,crash_point}.bend`, `smoke/{cli,crash_point_overhead,crash_point_smoke}.sh`, `workload/{million_writes.bend,.sh,phase3_metrics.bend,.sh,compaction.bend,compaction_regression.sh,bloom_tune.bend,fuzz.bend}`, `crash/{fault_inject.sh,crash_worker.bend}`; delete dead code per spec rule.
+- Create (Task 0): `bench/lib/common.bend` (shared helpers), `bench/README.md` (run map + acceptance list), `src/effs/file_size.c` + `src/effs/file_size.js` + `Fs.file_size` wrapper (read-only stat for Bend-side byte accounting).
+- Move (Task 1): `smoke/{bench,effs,console,crash_point}.bend`, `smoke/{cli,crash_point_overhead,crash_point_smoke}.sh`, `workload/{million_writes.bend,.sh,phase3_metrics.bend,.sh,compaction.bend,compaction_regression.sh,bloom_tune.bend,fuzz.bend}`, `crash/{fault_inject.sh,crash_worker.bend}`; thin the `.sh` files to guards + build + run + grep-assertions and move all computation into the `.bend` programs; delete dead code per spec rule.
 - Modify (Task 1): `bin/mylsm` (2 lines: `fuzz`, `bench` paths).
 - Create (Task 2): `bench/workload/fuzz_grammar.bend` (directed corpus + verdicts).
 - Modify (Task 3): `bench/workload/fuzz.bend` (fix `corpus(1n)` constant-index bug below; PRNG volume), `laws/{Wal,Manifest,SstFile,SstFileV2}*.bend` + matching proofs (totality for new generators, only where gaps found).
@@ -26,11 +26,12 @@
 
 ---
 
-### Task 0: bench lib skeleton (no moves yet)
+### Task 0: bench lib skeleton + file_size effect (no moves yet)
 
 **Files:**
-- Create: `bench/lib/common.bend`, `bench/lib/run.sh`, `bench/README.md`
-- Test: `bend bench/lib/common.bend --check-only`, `bash -n bench/lib/run.sh`
+- Create: `bench/lib/common.bend`, `bench/README.md`, `src/effs/file_size.c`, `src/effs/file_size.js`
+- Modify: `src/Fs.bend` (add wrapper)
+- Test: `bend bench/lib/common.bend --check-only`, small `file_size` probe program
 
 - [ ] **Step 1: Write `bench/lib/common.bend`**
 
@@ -124,97 +125,34 @@ Verify the `Db.Db{...}` 10-field shape against `src/Db.bend` before writing (if 
 Run: `bend bench/lib/common.bend --check-only`
 Expected: exit 0 (`All terms check.`).
 
-- [ ] **Step 3: Write `bench/lib/run.sh`**
+- [ ] **Step 3: Add the `file_size` host effect (read-only stat)**
 
-Shared preamble sourced by every workload/crash script (`source "$ROOT/bench/lib/run.sh"` after defining `ROOT`). Exact content:
-```sh
-# bench/lib/run.sh — shared harness preamble. Sourced, not executed.
-# Requires: ROOT (repo root), DATA_DIR_NAME (default under ROOT).
-# Provides: BUILD_DIR, THREADS, RESULT, RUN_RESULT, COMMIT, DIRTY,
-# DISK_TOTAL, DISK_AVAILABLE, FREE_PERCENT, COMPARISON_VALID.
-# Exits 2 on unsafe directories, missing bend, or (without override) <15% disk.
-mylsm_require_bend() {
-  command -v bend >/dev/null 2>&1 || { echo "bend is required" >&2; exit 127; }
-}
-mylsm_detect_threads() {
-  if [[ -n ${MYLSM_THREADS:-} ]]; then
-    THREADS=$MYLSM_THREADS
-  elif [[ $(uname -s) == Darwin ]]; then
-    THREADS=$(sysctl -n hw.logicalcpu)
-  elif command -v nproc >/dev/null 2>&1; then
-    THREADS=$(nproc)
-  else
-    THREADS=1
-  fi
-  case "$THREADS" in ''|*[!0-9]*) echo "MYLSM_THREADS must be an integer" >&2; exit 2 ;; esac
-  if (( THREADS < 1 || THREADS > 256 )); then
-    echo "MYLSM_THREADS must be between 1 and 256" >&2; exit 2
-  fi
-}
-mylsm_prepare_dir() {
-  local requested=${1:?data dir required}
-  case "$requested" in
-    ''|/) echo "refusing unsafe benchmark directory: ${requested:-<empty>}" >&2; exit 2 ;;
-  esac
-  if [[ -L "$requested" ]]; then
-    echo "refusing symlink benchmark directory: $requested" >&2; exit 2
-  fi
-  local parent name
-  parent=$(dirname -- "$requested")
-  name=$(basename -- "$requested")
-  mkdir -p -- "$parent"
-  parent=$(CDPATH= cd -- "$parent" && pwd -P)
-  DATA_DIR="$parent/$name"
-  case "$name" in ''|.|..) echo "refusing unsafe benchmark directory: $DATA_DIR" >&2; exit 2 ;; esac
-  if [[ "$DATA_DIR" == "$ROOT" || "$DATA_DIR" == "$HOME" ]]; then
-    echo "refusing unsafe benchmark directory: $DATA_DIR" >&2; exit 2
-  fi
-  if [[ -e "$DATA_DIR" ]]; then
-    if [[ ${MYLSM_BENCH_RESET:-0} != 1 ]]; then
-      echo "benchmark directory already exists: $DATA_DIR" >&2
-      echo "Use a different directory or set MYLSM_BENCH_RESET=1 to delete it." >&2
-      exit 2
-    fi
-    [[ -d "$DATA_DIR" ]] || { echo "benchmark path is not a directory: $DATA_DIR" >&2; exit 2; }
-    rm -rf -- "$DATA_DIR"
-  fi
-}
-mylsm_check_disk() {
-  local parent
-  parent=$(dirname -- "$DATA_DIR")
-  read -r DISK_TOTAL DISK_AVAILABLE < <(df -Pk "$parent" | awk 'NR == 2 { print $2, $4 }')
-  if [[ -z ${DISK_TOTAL:-} || -z ${DISK_AVAILABLE:-} || "$DISK_TOTAL" == 0 ]]; then
-    echo "unable to determine free disk for $parent" >&2
-    exit 2
-  fi
-  FREE_PERCENT=$((DISK_AVAILABLE * 100 / DISK_TOTAL))
-  COMPARISON_VALID=true
-  if (( FREE_PERCENT < 15 )); then
-    if [[ ${MYLSM_BENCH_ALLOW_LOW_DISK:-0} != 1 ]]; then
-      echo "refusing benchmark: free disk is ${FREE_PERCENT}% (minimum 15%)" >&2
-      echo "Set MYLSM_BENCH_ALLOW_LOW_DISK=1 to run a result invalid for comparison." >&2
-      exit 2
-    fi
-    COMPARISON_VALID=false
-  fi
-}
-mylsm_begin_run() {
-  BUILD_DIR="$ROOT/.mylsm/build"
-  mkdir -p "$BUILD_DIR"
-  RESULT="$BUILD_DIR/$1-result.log"
-  RUN_RESULT="$BUILD_DIR/$1-timing.log"
-  COMMIT=$(git -C "$ROOT" rev-parse HEAD)
-  if [[ -n $(git -C "$ROOT" --no-optional-locks status --short) ]]; then DIRTY=true; else DIRTY=false; fi
-  exec > >(tee "$RESULT") 2>&1
-}
+Copy the `exists` twin shape exactly (same Result encoding, same error
+granularity — `Fail` on missing/unreadable, never a trap). In `src/Fs.bend`,
+append after `exists`:
+```bend
+def file_size(path: String) -> IO(Result<&1, &1, U32 & String, Nat>):
+  import "./effs/file_size.c"
+  import "./effs/file_size.js"
 ```
+`src/effs/file_size.c`: `stat()` the path, answer the `st_size` as Nat
+(truncate above 2^32 with the same saturation convention as `read_dir`
+if one exists there — check `read_dir.c` first and mirror it; do not invent
+a new convention). `src/effs/file_size.js`: `fs.statSync().size` with the
+same shape. Probe program (scratch, gitignored, delete after):
+```bend
+import Base
+import ../../src/Fs.bend as Fs
 
-- [ ] **Step 4: Validate the shell**
+def main() -> IO(Unit):
+  do IO<Unit>:
+    size : Nat <- IO.try(Nat, Fs.file_size("pack.json"))
+    IO.print("pack_bytes=" ++ Nat.show(size))
+```
+Run natively; expected: the byte count matching `wc -c pack.json`. Mismatch
+blocks: fix the twins, never the probe.
 
-Run: `bash -n bench/lib/run.sh`
-Expected: exit 0, no output.
-
-- [ ] **Step 5: Write `bench/README.md`**
+- [ ] **Step 4: Write `bench/README.md`****
 
 One-page map (commands + gates, no prose beyond one line each):
 ```md
@@ -237,8 +175,8 @@ One-page map (commands + gates, no prose beyond one line each):
 - [ ] **Step 6: Commit skeleton**
 
 ```bash
-git add bench/lib/common.bend bench/lib/run.sh bench/README.md
-git commit -m "chore: bench lib skeleton (shared helpers, harness, map)"
+git add bench/lib/common.bend bench/README.md src/effs/file_size.c src/effs/file_size.js src/Fs.bend
+git commit -m "chore: bench lib skeleton plus file_size effect"
 ```
 
 ---
@@ -276,14 +214,84 @@ git mv bench/crash_worker.bend bench/crash/crash_worker.bend
 
 In every moved `.bend` file: `../src/` → `../../src/`, `../app/` → `../../app/`. Then delete local copies of helpers now in `../lib/common.bend` (env_default, nat_default, bool_text, maybe_value_eq, samples_and/samples_ok, mem_count, frozen_count, first_level, rest_levels, level_count, print_shape) and add `import ../lib/common.bend as Common`, prefixing uses (`Common.samples_ok`, `Common.print_shape`, …). Verify each deletion: the local def must be byte-identical to the lib copy (diff first); `mem_count`-style Db matches must keep the 10-field shape.
 
-- [ ] **Step 3: Rewire `.sh` files to the shared preamble**
+- [ ] **Step 3: Slim the `.sh` files (guards + build + run + grep-assertions only)**
 
-Replace each script's guard/disk/thread/build/log block with:
-```sh
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-source "$ROOT/bench/lib/run.sh"
+Shell keeps exclusively what Bend cannot do: unsafe-directory refusal,
+`mkdir -p`, disk-space gate, thread detection, native build, binary
+invocation, and grep-assertions over printed lines. Everything that
+computes moves into the `.bend` programs in this same task:
+- `phase3_metrics.sh`: delete the `wc -c` block and the awk percentile/WA
+  block; the `.bend` program gains file-size accounting via `Fs.file_size`
+  (see Task 0) over `wal.log`, `MANIFEST`, and every `*.tbl` from
+  `Fs.read_dir`, plus in-Bend percentile selection below.
+- `million_writes.sh`: keep the `EXPECTED_SHAPE` grep gates (3-line
+  assertions, not computation).
+- `compaction_regression.sh`, `fault_inject.sh`, `crash_point_*.sh`:
+  keep orchestration (`kill -9`/waitpid, mounts, mode switch); move any
+  metric math into Bend where it exists, otherwise leave the thin awk
+  one-liner with a comment naming why it stays shell.
+
+- [ ] **Step 4: In-Bend percentiles (bucket order statistics, no sorting)**
+
+Sorting needs mutually-recursive compare-then-recurse helpers, which the
+checker forbids; bucketing needs none (all shapes below mirror proven
+`merge_go`/`scan_go` patterns). Append to `bench/workload/phase3_metrics.bend`:
+```bend
+def empty_buckets(count: Nat, acc: List<&2, List<&2, Nat>>) -> List<&2, List<&2, Nat>>:
+  match count:
+    case 0n:
+      acc
+    case 1n+m:
+      empty_buckets(m, Con{Nil{}, acc})
+
+def bucket_add(+buckets: List<&2, List<&2, Nat>>, ix: Nat, val: Nat) -> List<&2, List<&2, Nat>>:
+  match buckets:
+    case Nil{}:
+      Nil{}
+    case Con{+b, t}:
+      match ix:
+        case 0n:
+          Con{Con{val, b}, t}
+        case 1n+p:
+          Con{b, bucket_add(t, p, val)}
+
+def fill_buckets(+samples: List<&2, Nat>, +buckets: List<&2, List<&2, Nat>>) -> List<&2, List<&2, Nat>>:
+  match samples:
+    case Nil{}:
+      buckets
+    case Con{+ms, t}:
+      fill_buckets(t, bucket_add(buckets, Nat.min(ms, 63n), ms))
+
+def concat_all(+buckets: List<&2, List<&2, Nat>>) -> List<&2, Nat>:
+  match buckets:
+    case Nil{}:
+      Nil{}
+    case Con{+h, t}:
+      List.append(&2, Nat, h, concat_all(t))
+
+def nth_sorted(bound: Nat, +ix: Nat, +xs: List<&2, Nat>) -> Nat:
+  match bound xs:
+    case 0n _:
+      0n
+    case 1n+f Nil{}:
+      0n
+    case 1n+f Con{h, t}:
+      match ix:
+        case 0n:
+          h
+        case 1n+p:
+          nth_sorted(f, p, t)
 ```
-(note: `dirname` goes two levels now), then call `mylsm_require_bend`, `mylsm_detect_threads`, `mylsm_prepare_dir`, `mylsm_check_disk`, `mylsm_begin_run <name>`. Keep each script's post-processing (metric extraction, percentiles, shape gates) verbatim. `compaction_regression.sh` keeps its mode switch; only its preamble is shared.
+(`bound` is deliberately not named `fuel`, so the U006 literal-fuel rule
+does not fire; callers pass `List.length` derivations, never literals.
+Bucket cap 63 ms: latencies above clamp into the top bucket — documented
+caveat, harmless at observed 1–20 ms.) Wire into `main`: collect the 101
+`sample_ms` values into a `List` (thread an accumulator through
+`sample_reads`), then print `metric_p50_read_ms=` (`nth_sorted(len, 50n,
+sorted)`), p95 (95n), p99 (99n) where `sorted` is
+`concat_all(fill_buckets(samples, empty_buckets(64n, Nil{})))` and `len`
+is its `List.length`. Keep printing the raw `sample_ms=` lines too (audit
+trail for the shell grep).
 
 - [ ] **Step 4: Update `bin/mylsm` (2 lines)**
 
@@ -465,7 +473,7 @@ git commit -m "feat: extended crash matrix with ack journal"
 
 - [ ] **Step 1: Write `bench/crash/diskfull.sh`**
 
-New script following `bench/lib/run.sh` conventions (source preamble for guards; add a `mylsm_require_mount` helper inline — ramdisk creation is fault-specific, not shared). Two suites:
+New script with thin-shell discipline (guards + mount inline; add any fault-specific helper inline — ramdisk creation is fault-specific, not shared). Two suites:
 1. **ENOSPC on a real ramdisk**: macOS `hdiutil attach -nomount ram://$((N*2048))` + `newfs_hfs`/`diskutil erasevolume`, Linux `mount -t tmpfs -o size=NM tmpfs <dir>` (require root or document the prerequisite and skip with exit 2 + reason when unavailable — never fake a pass). N sized so ~5k writes fill it (measure one fill first). Then: writes to ENOSPC must all fail closed (no half-acknowledged write, Manifest never points at a torn table), `rm` some tables is NOT done by the test (no repair path exists) — instead free space by deleting the whole DB dir copy? No: assert reopen reports the pre-fill acknowledged state after freeing space via deleting *unlisted* temp files only. Precise rule, stated in the script header: acknowledged state is invariant across the ENOSPC episode.
 2. **Permissions**: `chmod 500` on the DB dir, `chmod 400` on `wal.log`, on one `l0` table, on `MANIFEST`, each followed by write/read/flush/compact attempts — every attempt must fail closed (error result, process alive, no partial Manifest publish). Restore with `chmod` back and re-verify healthy operation after each case.
 Both suites print `DISKFAULT CLEAN` / `PERM CLEAN` or exit nonzero with the failing case named.
@@ -563,4 +571,4 @@ git commit -m "release: phase 2 hardening (fuzz, soak, resources, laws)"
 
 1. **Spec coverage:** §2 bench refactor → Tasks 0–1 (moves, lib, bin/mylsm, dead-code rule, gates). §3 slice A → Tasks 2 (directed corpus + verdicts) and 3 (1M volume, seed log, totality gaps only). §4 slice B → Task 4 (extended matrix + ack journal + overnight recipe, manual by design). §5 slice C → Task 5 (ramdisk ENOSPC + chmod matrix, skip-with-reason allowed) and Task 6 (component budgets via stored counts, stats, mem soak ±20%, BASELINE append-only). §6 slice D → Task 7 (verdict-driven strengthening, timeouts recorded not forced). §7 gates → every task ends with proofs + bolt (+ bench where measurable); Task 8 runs all gates and checks README boxes on evidence only.
 2. **Placeholder scan:** no TBD/TODO/later/edge-case language in steps (verify by grep before commit); every code step shows exact code; every gate shows exact command + expected output. Two deliberate honesty hatches: Task 5 ramdisk skip-with-reason (environmental, never faked green) and Task 7 kept-closed verdicts (recorded, not forced).
-3. **Type consistency:** `Expect{Accept,Reject}` defined once in Task 2; `check_wal/manifest/sst` share the shape; `stage_two`-style fixtures stay inside `laws/Db.bend`; `Db.Rot{mem,frozen,mc,fc}` field order reused from the count-threading work; `Session{...,staged}` untouched; `bench/lib/run.sh` function names (`mylsm_require_bend`, `mylsm_detect_threads`, `mylsm_prepare_dir`, `mylsm_check_disk`, `mylsm_begin_run`) used identically in Tasks 1, 4, 5 call sites.
+3. **Type consistency:** `Expect{Accept,Reject}` defined once in Task 2; `check_wal/manifest/sst` share the shape; `stage_two`-style fixtures stay inside `laws/Db.bend`; `Db.Rot{mem,frozen,mc,fc}` field order reused from the count-threading work; `Session{...,staged}` untouched; thin-shell rule (guards + build + run + grep-assertions) applied uniformly in Tasks 1, 4, 5.

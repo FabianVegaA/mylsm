@@ -33,8 +33,10 @@ bench/
   lib/
     common.bend      # env_default, nat_default, bool_text, samples_ok,
                      # mem/frozen/level counts, print_shape (deduped from 5)
-    run.sh           # data-dir guards, 15% disk gate + override, thread
-                     # detection, native build, run with env, result logs
+  (Shell rule: scripts stay thin launchers — guards, build, run,
+  grep-assertions. All computation lives in Bend; kill -9/waitpid, mounts,
+  and RSS sampling are the irreducible shell remainder. A read-only
+  `Fs.file_size` host effect covers Bend-side byte accounting.)
   smoke/             # fast checks (<30s): bench, effs, console,
                      # crash_point bends, cli.sh, crash_point_overhead.sh,
                      # crash_point_smoke.sh
@@ -47,8 +49,11 @@ bench/
 ```
 
 Rename-only moves; moved `.bend` files re-point imports (`../../src/`,
-`../lib/common.bend`) and drop local helper copies; moved `.sh` files
-source `../lib/run.sh` and keep only post-processing; `bin/mylsm` updates
+`../lib/common.bend`) and drop local helper copies; moved `.sh` files are
+thinned to guards + build + run + grep-assertions (percentiles, write
+amplification, and shape math move into the `.bend` programs; in-Bend
+percentiles use bucket order statistics since the checker forbids
+mutually-recursive sort helpers); `bin/mylsm` updates
 the `fuzz` and `bench` command paths. Dead code in `bench/` MAY be deleted:
 unreachable helpers, harness logic superseded by `lib/`, one-off scripts
 with no gate or documentation pointing at them. Deletion is per-file
