@@ -409,39 +409,23 @@ git commit -m "feat: bittree capacity on hub pow2t, memtable+decimal stay"
 
 ---
 
-### Task 5: Sort/merge layer — SortedRun on tree+array, MergeIter/Compact on heap
+### Task 5: Sort/merge layer — EVALUATED, no change (spike finding)
 
-**Files:**
-- Modify: `src/SortedRun.bend`, `src/MergeIter.bend`, `src/Compact.bend` (public `def` names/signatures unchanged)
-- Modify: `laws/SortedRun.bend`, `laws/MergeIter.bend`, `laws/Compact.bend` + matching proofs (glue properties only)
-- Test: targeted proofs, `./proofs/run.sh`, compaction bench
+**Finding (2026-09-24, recorded instead of a rewrite):** the plan's premise was stale. `sort_newest` is already O(N log N) via precedence-preserving balanced multi-run merge (`merge_many_newest` over singleton runs, `merge_newer` pairwise-linear, `merge_round` halving rounds — the linear-compaction work). The hub offers consumable shapes (`TreeMap.poll_first_entry`, `Heap.to_sorted_list`, both verified by grep), and `SortedRun.entry_cmp` already exists as a ready static comparator — but a rewrite buys nothing asymptotically (TreeMap inserts are O(log N) each with RB-rebalance + affinity-threading overhead vs our linear pairwise merges; heap k-way is the same complexity class) while invalidating the proven `SortedRun`/`MergeIter`/`Compact` law suites. Newest-wins would additionally need oldest-first iteration (hub `put` overwrites) for zero gain. Per the spike + bench gates, Task 5 is a documented no-op: no `src/`, `laws/`, or `proofs/` changes.
 
-- [ ] **Step 0: Spike — prove ephemeral tree/heap use is expressible**
+- [ ] **Step 1: Spike — confirm consumable shape exists (done, read-only)**
 
-Per the affinity rule, the tree/heap may only be built, threaded, and fully consumed inside one function (never stored, never dropped). Before touching `src/`, verify the hub APIs allow that shape:
-Run: `grep -n "^def \|^type " ~/.bend/lib/0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/containers/balanced_search_tree.bend | head -25 && echo "===HEAP===" && grep -n "^def \|^type " ~/.bend/lib/0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/containers/binary_heap.bend | head -25`
-Expected: public constructors, an insert/push, and a consuming drain/pop-min (or public constructors a hand-written recursive consumer can match on). If neither module offers a consumable shape (opaque `Type` with no drain and no public constructors), STOP this task, record the finding in the commit message, and skip to Task 6 — do not force the adaptation.
+Run: `grep -n "^def " ~/.bend/lib/0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/containers/balanced_search_tree.bend | grep -i "poll_first_entry" && grep -n "^def " ~/.bend/lib/0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/containers/binary_heap.bend | grep -i "to_sorted_list"`
+Expected: both present (`poll_first_entry`, `to_sorted_list`). Shape exists — but unused per the finding above. If a future bench ever shows sort/merge as the bottleneck, `entry_cmp` (`src/SortedRun.bend:29`) is the ready static comparator.
 
-- [ ] **Step 1: SortedRun via ephemeral indexed red-black tree**
+- [ ] **Step 2: Regression pass + commit the finding**
 
-In `src/SortedRun.bend`: add `import 0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/containers/balanced_search_tree.bend as RBTree` and `import 0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/containers/dynamic_array.bend as DynArray` (exact def names per a fresh `grep -n "^def " ` on the fetched sources, same command shape as Task 0 Step 3). Keep `sort_newest(entries)` signature; implement as: insert entries into the tree keyed by `Keys.cmp` (newest-first tiebreak preserved), drain in order to a packed array, return as `List`. Delete the quadratic construction internals. Check: `bend src/SortedRun.bend --check-only`, expected exit 0.
-
-- [ ] **Step 2: MergeIter/Compact N-way merge via binary heap**
-
-In `src/MergeIter.bend`: keep `scan(merged, lo, hi)` signature; implement the merge with `binary_heap.bend` (packed-array min-heap, `Keys.cmp` as static comparator) instead of linear scans. In `src/Compact.bend`: use `priority_queue.bend` facades for run selection and parallelize independent compaction ranges (per `AGENT.md`: parallelize whenever semantically sound). No signature changes; no new `IO`. Check both: `bend src/MergeIter.bend --check-only && bend src/Compact.bend --check-only`, expected exit 0 for both.
-
-- [ ] **Step 3: Glue laws + witnesses for ordering**
-
-In `laws/SortedRun.bend` keep newest-wins + sortedness statements; in `laws/MergeIter.bend` keep `range_scan` correctness; in `laws/Compact.bend` keep merge-output properties. Re-witness in the three matching `proofs/` files against the new backends, citing hub tree/heap lemmas where applicable. This is the biggest proof-touch layer: run each targeted proof individually (`bend proofs/SortedRunProof.bend`, then `MergeIter`, then `Compact`) and fix one module at a time before the full gate.
-
-- [ ] **Step 4: Gate + compaction bench + commit**
-
-Run: `./proofs/run.sh` (expected green), then `bin/mylsm bench` plus `bench/compaction_regression.sh`, compared against `bench/BASELINE.md` (the 20,485-write / 4.524s reference and the 1M-write acceptance figures are the bars to beat on identical hardware).
+Run: `bend proofs/SortedRunProof.bend && bend proofs/MergeIterProof.bend && bend proofs/CompactProof.bend`
+Expected: all green (untouched).
 ```bash
-git add src/SortedRun.bend src/MergeIter.bend src/Compact.bend laws/SortedRun.bend laws/MergeIter.bend laws/Compact.bend proofs/SortedRunProof.bend proofs/MergeIterProof.bend proofs/CompactProof.bend
-git commit -m "feat: sorted runs on hub tree+array, merge on hub heap"
+git add docs/superpowers/plans/2026-09-24-bend-hub-refactor.md
+git commit -m "docs: task 5 sort-merge evaluated, no rewrite" -m "sort_newest already O(N log N) balanced merge; hub tree/heap same class with worse constants and full proof-suite cost. Spike gate produces a documented no-op."
 ```
-Bench regression on the compaction workload → revert that layer's `src/` change and keep the laws intact, noted in the commit message.
 
 ---
 
