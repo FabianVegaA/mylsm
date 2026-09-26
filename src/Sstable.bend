@@ -284,11 +284,21 @@ def bloom_of_pick(gate: Bool, +entries: List<&2, MemTable.Entry>, +nb: Nat) -> B
     case True{}:
       bloom_of_chunks!(entries, nb)
 
-# Size-gated `!` spike entry point; production stays on CPU until measured.
+# Size-gated `!` entry point: the bang fires only at >= 8192 entries, where
+# every flush in the durable write path lands (frozen merge of 4096 + 4096).
 def bloom_of_bang(+entries: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
   bloom_of_pick(bloom_bang_gate(List.length(&2, MemTable.Entry, entries)), entries, nb)
 
 # Size-gated entry point: parallel pays only above 2048 entries.
+# FORMAL LIMITATION (2026-09-26): production stays on the CPU-pool chunk
+# tree. Wiring this to bloom_of_bang activates the GPU runtime for every
+# native binary, and the Bend 2.0.28 Metal runtime faults recovery at scale
+# (20485-write WAL replay: `memory fault (machine stack overflow?)` with GPU
+# on, full pass with --gpu off; 4097-write recovery passes either way). The
+# write phase with bangs measures on par with CPU (100k: 10649 ms GPU vs
+# 10902 ms CPU pool), but end-to-end GPU runs cannot pass recovery gates
+# until the runtime issue is fixed upstream. bloom_of_bang stays available
+# for opt-in write-phase measurement; flip this branch to re-enable.
 def bloom_pick(small: Bool, +entries: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
   match small:
     case True{}:

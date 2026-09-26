@@ -79,6 +79,24 @@ if (( THREADS < 1 || THREADS > 256 )); then
   exit 2
 fi
 
+# GPU device selection for `!` calls (native binaries default to GPU on).
+# MYLSM_DEVICE: gpu/on (default, no flag), cpu/off (--gpu off), or a heap cap
+# like 4GB/512MB (--gpu <cap>). Values are validated before being passed
+# unquoted to the binary (word-splitting of "--gpu off" is intended).
+GPU_MODE=${MYLSM_DEVICE:-gpu}
+case "$GPU_MODE" in
+  gpu|on) GPU_ARGS="" ;;
+  cpu|off) GPU_ARGS="--gpu off" ;;
+  [0-9]*[GgMm][Bb]) GPU_ARGS="--gpu $GPU_MODE" ;;
+  *) echo "MYLSM_DEVICE must be gpu, cpu, off, or a heap cap like 4GB" >&2; exit 2 ;;
+esac
+
+# Apple clang matches the macOS SDK module maps; homebrew llvm fails to build
+# the Metal .gpu artifact (module '_c_standard_library_obsolete' error).
+if [[ $(uname -s) == Darwin && -z ${CC:-} ]]; then
+  export CC=/usr/bin/clang
+fi
+
 mkdir -p "$BUILD_DIR"
 exec > >(tee "$RESULT") 2>&1
 COMMIT=$(git -C "$ROOT" rev-parse HEAD)
@@ -87,6 +105,7 @@ if [[ -n $(git -C "$ROOT" --no-optional-locks status --short) ]]; then DIRTY=tru
 echo "benchmark=million_writes"
 echo "bend_version=$(bend version)"
 echo "os=$(uname -s) architecture=$(uname -m) logical_cpus=$THREADS"
+echo "gpu_mode=$GPU_MODE cc=${CC:-default}"
 echo "git_commit=$COMMIT git_dirty=$DIRTY"
 echo "disk_total_kib=$DISK_TOTAL disk_available_kib=$DISK_AVAILABLE disk_free_percent=$FREE_PERCENT"
 echo "minimum_free_percent=$MIN_FREE_PERCENT comparison_valid=$COMPARISON_VALID"
@@ -98,7 +117,7 @@ echo "phase=build status=starting measured=false"
 bend "$SOURCE" -o "$BINARY"
 echo "phase=build status=complete measured=false"
 echo "phase=durable_writes status=starting"
-/usr/bin/time -p env MYLSM_BENCH_WRITES="$COUNT" MYLSM_BENCH_DIR="$DATA_DIR" "$BINARY" --threads "$THREADS" 2>&1 | tee "$RUN_RESULT"
+/usr/bin/time -p env MYLSM_BENCH_WRITES="$COUNT" MYLSM_BENCH_DIR="$DATA_DIR" "$BINARY" --threads "$THREADS" $GPU_ARGS 2>&1 | tee "$RUN_RESULT"
 echo "phase=durable_writes status=complete"
 
 grep -q "^writes_completed=$COUNT$" "$RUN_RESULT" || { echo "correctness gate failed: write count" >&2; exit 1; }

@@ -14,6 +14,13 @@
 - `verify_all` native (`/tmp/verify_rt`): seq == par == `[True, True, True]` over 3 bodies (empty + 1-entry + 2-entry) in 0.5 s.
 - **Checker finding:** end-to-end batch laws over entry-bearing bodies are checker-infeasible — the decoder's `Nat.div` overflow guard (`Decimal.bend:46-54`) costs ~16M unary steps per digit with 16M–1G limits in the checker (runtime unaffected). Empty-body verify ≈ 13 s in the checker; entry-bearing bodies diverge. So `batch_verify_agrees` pins a single empty body (RecoverProof: 24 s, under the 900 s budget) and entry-bearing equivalence is covered by the native runtime evidence above. Do not extend the law fixture with entries without re-measuring.
 
+**GPU leverage log (2026-09-26):**
+- `bench/workload/million_writes.sh` now honors `MYLSM_DEVICE` (`gpu/on` default, `cpu/off` → `--gpu off`, or heap caps like `4GB`), logs `gpu_mode` + `cc` in the header, and defaults `CC=/usr/bin/clang` on Darwin (homebrew llvm@19 cannot build the Metal `.gpu` artifact: module `_c_standard_library_obsolete` error).
+- `bloom_pick` was briefly wired to `bloom_of_bang` (all 8192-entry frozen-merge flushes hit the ≥8192 gate). Write phase on GPU: 100k writes `elapsed_ms=10649` vs 10902 CPU pool — bangs execute correctly, on par.
+- BLOCKER: Bend 2.0.28 Metal runtime faults recovery at scale (`memory fault (machine stack overflow?)` replaying a 20485-frame WAL with GPU on, any thread count/heap cap; `--gpu off` passes; 4097-write recovery passes either way). No bang executes in recovery — it is a runtime issue, not code.
+- DECISION: production `bloom_pick` reverted to CPU-pool chunks (GPU runtime activation crashes production recovery; see formal limitation comment in `src/Sstable.bend`). `bloom_of_bang` stays as opt-in. Post-revert full bench with `MYLSM_DEVICE=gpu` passes all gates (20485: 10564.72 ops/s) — with no reachable bang the GPU runtime never initializes.
+- To re-enable end-to-end GPU: flip `bloom_pick` False-branch to `bloom_of_bang` once the upstream recovery crash is fixed.
+
 ---
 
 ### Task 1: Parallel bloom-probe harness
