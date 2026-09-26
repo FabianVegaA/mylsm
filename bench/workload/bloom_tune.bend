@@ -28,11 +28,7 @@ def fpr_add(present: Bool, acc: Nat) -> Nat:
       acc
 
 def fpr_go(+probes: List<&2, String>, +tab: Sstable.Table, acc: Nat) -> Nat:
-  match probes:
-    case Nil{}:
-      acc
-    case Con{+q, t}:
-      fpr_go(t, tab, fpr_add(Sstable.maybe_present(tab, q), acc))
+  Nat.add(Sstable.probe_count_par(probes, tab), acc)
 
 def report(+tag: String, +tab: Sstable.Table, +probes: Nat) -> IO(Unit):
   do IO<Unit>:

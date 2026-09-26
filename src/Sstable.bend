@@ -183,6 +183,49 @@ def maybe_present(tab: Table, +key: String) -> Bool:
     case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
       bloom_test(filter, key)
 
+# --- Parallel probe counters (Task 1): sequential leaf, two-way fork, `!` gate ---
+# Single probe as 0/1 for counting.
+def probe_hit_if(present: Bool) -> Nat:
+  match present:
+    case True{}:
+      1n
+    case False{}:
+      0n
+
+# Count matching probes sequentially.
+def probe_hit(+tab: Table, +key: String) -> Nat:
+  probe_hit_if(maybe_present(tab, key))
+
+# Sequential probe count over a probe list.
+def probe_count_seq(+probes: List<&2, String>, +tab: Table) -> Nat:
+  match probes:
+    case Nil{}:
+      0n
+    case Con{+q, t}:
+      Nat.add(probe_count_seq(t, tab), probe_hit(tab, q))
+
+# Two-way parallel probe count; halves share no state.
+def probe_count_par(+probes: List<&2, String>, +tab: Table) -> Nat:
+  +half = Nat.div(List.length(&2, String, probes), 2n)
+  left right = probe_count_seq(List.take(&2, String, probes, half), tab) probe_count_seq(List.drop(&2, String, probes, half), tab)
+  Nat.add(left, right)
+
+# Bang gate: GPU pays only with enough probes to fill lanes.
+def probe_count_bang_gate(+num: Nat) -> Bool:
+  Nat.is_le(16384n, num)
+
+# Pick CPU-pool or GPU execution for the same fork tree.
+def probe_count_pick(gate: Bool, +probes: List<&2, String>, +tab: Table) -> Nat:
+  match gate:
+    case False{}:
+      probe_count_par(probes, tab)
+    case True{}:
+      probe_count_par!(probes, tab)
+
+# Size-gated entry point for parallel probe counting.
+def probe_count_auto(+probes: List<&2, String>, +tab: Table) -> Nat:
+  probe_count_pick(probe_count_bang_gate(List.length(&2, String, probes)), probes, tab)
+
 # --- Canonicalization and construction ---
 def bloom_of(entries: List<&2, MemTable.Entry>, +blm: Bloom) -> Bloom:
   match entries:
