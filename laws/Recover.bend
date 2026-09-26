@@ -2,6 +2,7 @@ import Base
 import ../src/Wal.bend as Wal
 import ../src/MemTable.bend as MemTable
 import ../src/Db.bend as Db
+import ../src/SstFile.bend as SstFile
 import ../src/Recover.bend as Recover
 
 # Small local fixture duplicated from the WAL domain.
@@ -56,3 +57,13 @@ def replayed_db(res: Db.RotRes) -> Db.Db:
 # LAW: recovery equivalence — replayed reads equal pre-crash reads (closed)
 law recover_equiv:
   {Db.db_get(replayed_db(Recover.replay_mem(Recover.frame_of(Wal.encode(batch_put1())))), "k") == MemTable.get(MemTable.MT{Con{MemTable.Entry{"k", Some{"v"}}, Nil{}}}, "k") : Maybe<&2, String>}
+
+# Closed batch fixture: one well-formed empty body. Entry-bearing bodies are
+# excluded: the decoder's Nat.div overflow guard (~16M unary steps per digit
+# in the checker) makes them checker-infeasible; runtime evidence covers them.
+def batch_bodies() -> List<&2, String>:
+  Con{SstFile.serialize(Nil{}, 1n), Nil{}}
+
+# LAW: parallel batch verify agrees with sequential (closed)
+law batch_verify_agrees:
+  {Recover.verify_all_par(batch_bodies()) == Recover.verify_all_seq(batch_bodies()) : List<&2, Bool>}

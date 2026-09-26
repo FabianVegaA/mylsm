@@ -27,3 +27,6 @@ def Laws.generation_shape_branches():
 
 def Laws.recover_equiv():
   {==}
+
+def Laws.batch_verify_agrees():
+  {==}

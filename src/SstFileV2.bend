@@ -436,3 +436,25 @@ def error_of(result: ParseResult) -> Maybe<&2, Error>:
       Some{error}
     case Parsed{table}:
       None{}
+
+# --- Fail-closed batch checksum verdict (Task 3) ---
+# Any parse failure (checksum or otherwise) is a bad body: recovery treats
+# every reject as fatal, so the batch verdict stays consistent with parse.
+def checksum_bad(err: Maybe<&2, Error>) -> Bool:
+  match err:
+    case None{}:
+      False{}
+    case Some{_}:
+      True{}
+
+# Invert a bad-body flag into an ok verdict.
+def checksum_ok_of(bad: Bool) -> Bool:
+  match bad:
+    case True{}:
+      False{}
+    case False{}:
+      True{}
+
+# Checksum verdict over a full encoded body, reusing the production decoder.
+def body_checksum_ok(+enc: String) -> Bool:
+  checksum_ok_of(checksum_bad(error_of(parse_result(enc))))

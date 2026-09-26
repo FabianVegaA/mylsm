@@ -3,6 +3,7 @@ import ./Keys.bend as Keys
 import ./MemTable.bend as MemTable
 import ./Sstable.bend as Sstable
 import ./SstFile.bend as SstFile
+import ./SstFileV2.bend as SstFileV2
 import ./SstStream.bend as SstStream
 import ./Wal.bend as Wal
 import ./Manifest.bend as Manifest
@@ -334,6 +335,38 @@ def load_levels(lvls: List<&2, List<&2, String>>, +idx: Nat, +dir: String, +acc:
         ld : String <- ldir_io(ldir_of(idx))
         tabs : List<&2, Sstable.Table> <- load_tables(ns, ld, dir, Nil{})
         load_levels(t, Nat.add(idx, 1n), dir, Con{tabs, acc})
+
+# --- Batched checksum verification (Task 3): IO stays sequential in
+# load_tables; the pure verify below runs over already-loaded bodies ---
+# Sequential checksum verdict over encoded bodies.
+def verify_all_seq(+bodies: List<&2, String>) -> List<&2, Bool>:
+  match bodies:
+    case Nil{}:
+      Nil{}
+    case Con{+h, t}:
+      Con{SstFileV2.body_checksum_ok(h), verify_all_seq(t)}
+
+# Two-way parallel checksum verdict; halves share no state.
+def verify_all_par(+bodies: List<&2, String>) -> List<&2, Bool>:
+  +half = Nat.div(List.length(&2, String, bodies), 2n)
+  left right = verify_all_seq(List.take(&2, String, bodies, half)) verify_all_seq(List.drop(&2, String, bodies, half))
+  List.append(&2, Bool, left, right)
+
+# Bang gate: one lane per body, so GPU pays only for wide batches.
+def verify_bang_gate(+num: Nat) -> Bool:
+  Nat.is_le(64n, num)
+
+# Pick CPU-pool or GPU execution for the same verify tree.
+def verify_all_pick(gate: Bool, +bodies: List<&2, String>) -> List<&2, Bool>:
+  match gate:
+    case False{}:
+      verify_all_par(bodies)
+    case True{}:
+      verify_all_par!(bodies)
+
+# Size-gated entry point; open_db stays sequential until measured.
+def verify_all_auto(+bodies: List<&2, String>) -> List<&2, Bool>:
+  verify_all_pick(verify_bang_gate(List.length(&2, String, bodies)), bodies)
 
 # --- WAL open (absent = fresh; torn tail truncated) ---
 
