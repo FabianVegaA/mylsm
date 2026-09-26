@@ -36,3 +36,6 @@ def Laws.sstable_bloom_par_agrees():
 
 def Laws.sstable_bloom_chunks_agree():
   {==}
+
+def Laws.sstable_bloom_hybrid_agrees():
+  {==}

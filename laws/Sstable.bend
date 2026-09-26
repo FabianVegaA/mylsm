@@ -60,3 +60,7 @@ law sstable_bloom_par_agrees:
 # LAW: four-chunk parallel build equals the sequential build (closed)
 law sstable_bloom_chunks_agree:
   {Sstable.bloom_of_chunks(sst_e2(), 64n) == Sstable.bloom_of(sst_e2(), Sstable.bloom_new(64n)) : Sstable.Bloom}
+
+# LAW: hybrid build equals the sequential build (closed)
+law sstable_bloom_hybrid_agrees:
+  {Sstable.bloom_of_hybrid(sst_e2(), 64n) == Sstable.bloom_of(sst_e2(), Sstable.bloom_new(64n)) : Sstable.Bloom}

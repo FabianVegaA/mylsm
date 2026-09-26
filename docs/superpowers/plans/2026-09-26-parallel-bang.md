@@ -21,6 +21,12 @@
 - DECISION: production `bloom_pick` reverted to CPU-pool chunks (GPU runtime activation crashes production recovery; see formal limitation comment in `src/Sstable.bend`). `bloom_of_bang` stays as opt-in. Post-revert full bench with `MYLSM_DEVICE=gpu` passes all gates (20485: 10564.72 ops/s) — with no reachable bang the GPU runtime never initializes.
 - To re-enable end-to-end GPU: flip `bloom_pick` False-branch to `bloom_of_bang` once the upstream recovery crash is fixed.
 
+**Hybrid spike outcome (2026-09-26, DECISIVE):**
+- Design: parallel index collection (`hash_idxs_par_go`, fork tree with concat joins, zero trees/unions) + sequential single-tree assembly (`bloom_set_all`). Law `sstable_bloom_hybrid_agrees` proven.
+- 1M interleaved A/B vs 4-chunk (same machine, same toolchain): hybrid median 261,746 ms (runs 264,748 / 261,746 / 260,126) vs 4-chunk median 264,519 ms (runs 264,488 / 264,243 / 264,519) — hybrid ties 4-chunk, does NOT recover sequential level (225,105 ms).
+- Two-state confirmation: all arms shifted +15k ms on the slow day (thermal/load drift); sequential re-run same day 240,290 / 238,518 ms — relative order seq < hybrid ≈ 4-chunk stable in both states (~10% gap).
+- VERDICT: all parallel bloom variants lose ~10% vs sequential at 1M (fork/join + allocation overhead dominates; invisible at 100k). Production `bloom_pick` reverted to sequential on both gate branches; parallel + hybrid builds stay as law-covered spikes. Do NOT re-enable without a new 1M A/B.
+
 ---
 
 ### Task 1: Parallel bloom-probe harness

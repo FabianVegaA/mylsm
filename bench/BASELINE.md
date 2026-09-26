@@ -159,6 +159,17 @@ default cap 1). Datasets fit in RAM: not yet publication-grade comparisons.
   (9.8 s at 4,096 writes, 13.8 s at 20,485, 16.0 s at 1M) while table bytes
   grow 0 → 29 MB, pointing at fixed open-path overhead rather than
   data-proportional cost. Not investigated yet.
+- Parallel-bloom negative result (`feature/bloom-parallel`, Darwin arm64,
+  12 logical CPUs, Bend 2.0.28, ~40% free disk, 1M interleaved A/B):
+  sequential median 225,105 ms (4,442.36 ops/s; runs 232,882 / 224,565 /
+  225,105) vs 4-chunk parallel median 249,150 ms (4,013.65 ops/s; runs
+  249,150 / 249,741 / 248,967) vs hybrid (parallel index collection +
+  single-tree assembly) median 261,746 ms. The parallel builds cost ~10%
+  (fork/join plus allocation overhead; invisible at 100k, compounds over 244
+  flushes; relative order confirmed under a second machine state with all
+  arms shifted +15k ms). Production `bloom_pick` reverted to sequential;
+  parallel and hybrid builds stay as law-covered spikes with equivalence
+  witnesses. Do not re-enable without a new 1M A/B.
 
 ## Phase 2 memory observations (single points + soak gate)
 

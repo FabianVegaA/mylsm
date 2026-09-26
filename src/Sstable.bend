@@ -289,22 +289,74 @@ def bloom_of_pick(gate: Bool, +entries: List<&2, MemTable.Entry>, +nb: Nat) -> B
 def bloom_of_bang(+entries: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
   bloom_of_pick(bloom_bang_gate(List.length(&2, MemTable.Entry, entries)), entries, nb)
 
-# Size-gated entry point: parallel pays only above 2048 entries.
-# FORMAL LIMITATION (2026-09-26): production stays on the CPU-pool chunk
-# tree. Wiring this to bloom_of_bang activates the GPU runtime for every
-# native binary, and the Bend 2.0.28 Metal runtime faults recovery at scale
-# (20485-write WAL replay: `memory fault (machine stack overflow?)` with GPU
-# on, full pass with --gpu off; 4097-write recovery passes either way). The
-# write phase with bangs measures on par with CPU (100k: 10649 ms GPU vs
-# 10902 ms CPU pool), but end-to-end GPU runs cannot pass recovery gates
-# until the runtime issue is fixed upstream. bloom_of_bang stays available
-# for opt-in write-phase measurement; flip this branch to re-enable.
+# --- Hybrid bloom (spike): parallel index collection, sequential assembly ---
+# Phase 1 emits a flat index list (two per key); joins concatenate, so no
+# chunk tree or union is ever built. Phase 2 folds the indexes into ONE tree
+# on the CPU. This removes the tree-allocation amplification that costs ~10%
+# at 1M scale in the chunk+union design, while keeping a fork tree that a
+# future `!` can ship once the GPU recovery crash is fixed upstream.
+# Both bit positions of one key as a flat two-element list.
+def key_idxs(+key: String, +size: Nat) -> List<&2, Nat>:
+  Con{bhash_n(key, 17, size), Con{bhash_n(key, 257, size), Nil{}}}
+
+# Sequential index collection over entries.
+def hash_idxs_seq(+entries: List<&2, MemTable.Entry>, +size: Nat) -> List<&2, Nat>:
+  match entries:
+    case Nil{}:
+      Nil{}
+    case Con{MemTable.Entry{key, val}, t}:
+      List.append(&2, Nat, key_idxs(key, size), hash_idxs_seq(t, size))
+
+# Balanced parallel index collection; reusable fuel bounds the fork depth.
+def hash_idxs_par_go(+fuel: Nat, +entries: List<&2, MemTable.Entry>, +size: Nat) -> List<&2, Nat>:
+  match fuel:
+    case 0n:
+      hash_idxs_seq(entries, size)
+    case 1n+f:
+      match entries:
+        case Nil{}:
+          Nil{}
+        case Con{MemTable.Entry{key, val}, Nil{}}:
+          key_idxs(key, size)
+        case Con{_, Con{_, _}}:
+          +half = Nat.div(List.length(&2, MemTable.Entry, entries), 2n)
+          left right = hash_idxs_par_go(f, List.take(&2, MemTable.Entry, entries, half), size) hash_idxs_par_go(f, List.drop(&2, MemTable.Entry, entries, half), size)
+          List.append(&2, Nat, left, right)
+
+# Parallel entry point; fuel covers the fork depth.
+def hash_idxs_par(+entries: List<&2, MemTable.Entry>, +size: Nat) -> List<&2, Nat>:
+  +fuel = List.length(&2, MemTable.Entry, entries)
+  hash_idxs_par_go(fuel, entries, size)
+
+# Sequential assembly of one filter from a flat index list.
+def bloom_set_all(+idxs: List<&2, Nat>, +blm: Bloom) -> Bloom:
+  match idxs:
+    case Nil{}:
+      blm
+    case Con{+i, t}:
+      match blm:
+        case Blm{bits, +size}:
+          bloom_set_all(t, Blm{bit_set(i, bits), size})
+
+# Hybrid build: parallel hashing, single-tree assembly.
+def bloom_of_hybrid(+entries: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
+  bloom_set_all(hash_idxs_par(entries, nb), bloom_new(nb))
+
+# Size-gated entry point: sequential on both sides of the gate.
+# MEASURED VERDICT (2026-09-26, 1M interleaved A/B, Darwin arm64, Bend 2.0.28):
+# sequential median 225105 ms (4442 ops/s) vs 4-chunk 249150 ms (4014 ops/s)
+# vs hybrid 261746 ms — the parallel builds cost ~10% (fork/join plus
+# allocation overhead dominates; invisible at 100k, compounds over 244
+# flushes). Confirmed under two machine states (all arms shifted +15k ms on
+# the slow day; relative order unchanged). The parallel builds stay as
+# law-covered spikes; the `!` variants stay opt-in behind the GPU recovery
+# crash documented below.
 def bloom_pick(small: Bool, +entries: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
   match small:
     case True{}:
       bloom_of(entries, bloom_new(nb))
     case False{}:
-      bloom_of_chunks(entries, nb)
+      bloom_of(entries, bloom_new(nb))
 
 def bloom_of_auto(+entries: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
   bloom_pick(Nat.is_lt(List.length(&2, MemTable.Entry, entries), 2048n), entries, nb)
