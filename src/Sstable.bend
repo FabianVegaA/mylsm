@@ -259,13 +259,42 @@ def bloom_of_par(+entries: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
   left right = bloom_of_chunk(List.take(&2, MemTable.Entry, entries, half), nb) bloom_of_chunk(List.drop(&2, MemTable.Entry, entries, half), nb)
   bloom_union(left, right)
 
+# --- Four-chunk parallel build (Task 2): two-level fork, three unions ---
+# Third chunk slice as take-after-drop.
+def chunk_third(+entries: List<&2, MemTable.Entry>, +skip: Nat, +take: Nat) -> List<&2, MemTable.Entry>:
+  List.take(&2, MemTable.Entry, List.drop(&2, MemTable.Entry, entries, skip), take)
+
+# Four-way chunk build with a two-level fork tree.
+def bloom_of_chunks(+entries: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
+  +num = List.length(&2, MemTable.Entry, entries)
+  +q = Nat.div(num, 4n)
+  a b = bloom_of_chunk(List.take(&2, MemTable.Entry, entries, q), nb) bloom_of_chunk(chunk_third(entries, q, q), nb)
+  c d = bloom_of_chunk(chunk_third(entries, Nat.mul(q, 2n), q), nb) bloom_of_chunk(List.drop(&2, MemTable.Entry, entries, Nat.mul(q, 3n)), nb)
+  bloom_union(bloom_union(a, b), bloom_union(c, d))
+
+# Bang gate: GPU pays only with enough entries to feed lanes.
+def bloom_bang_gate(+num: Nat) -> Bool:
+  Nat.is_le(8192n, num)
+
+# Pick CPU-pool or GPU execution for the same chunk tree.
+def bloom_of_pick(gate: Bool, +entries: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
+  match gate:
+    case False{}:
+      bloom_of_chunks(entries, nb)
+    case True{}:
+      bloom_of_chunks!(entries, nb)
+
+# Size-gated `!` spike entry point; production stays on CPU until measured.
+def bloom_of_bang(+entries: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
+  bloom_of_pick(bloom_bang_gate(List.length(&2, MemTable.Entry, entries)), entries, nb)
+
 # Size-gated entry point: parallel pays only above 2048 entries.
 def bloom_pick(small: Bool, +entries: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
   match small:
     case True{}:
       bloom_of(entries, bloom_new(nb))
     case False{}:
-      bloom_of_par(entries, nb)
+      bloom_of_chunks(entries, nb)
 
 def bloom_of_auto(+entries: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
   bloom_pick(Nat.is_lt(List.length(&2, MemTable.Entry, entries), 2048n), entries, nb)
