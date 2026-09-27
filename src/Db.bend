@@ -5,6 +5,7 @@ import ./Sstable.bend as Sstable
 import ./Wal.bend as Wal
 import ./Fs.bend as Fs
 import ./Manifest.bend as Manifest
+import ./Decimal.bend as Decimal
 import ./CrashPoint.bend as CrashPoint
 
 # Db API (Task 7): durable write path + reads.
@@ -330,5 +331,160 @@ def db_write_staged(+db: Db, +staged: List<&2, Wal.Batch>) -> IO(Result<&1, &1, 
 
 def db_del(+db: Db, +key: String) -> IO(Result<&1, &1, U32 & String, Db>):
   db_write(db, Wal.Batch{Con{Wal.Del{key}, Nil{}}})
+
+# --- reopen (public API v0.3.2.0): WAL-only recovery over wal.log ---
+# Checks wal.log existence; missing dir/file = open_db (empty tables).
+# Present file is read positionally by chunks, concatenated, split into
+# wal_frame frames (dashes(len) ++ ";" ++ data), each payload decoded with
+# Wal.decode (checksum-validated). A torn/corrupt final suffix from a
+# mid-append crash is discarded; valid batches apply in order over an empty
+# memtable via apply_batch. Read errors propagate as Fail.
+
+def reopen_chunk_chars() -> Nat:
+  1048576n
+
+type ReChunk is Data:
+  ReChunk{bytes: Nat, text: String}
+
+def reopen_chunk_parse(pair: Decimal.Parse) -> Result<&1, &1, U32 & String, ReChunk>:
+  match pair:
+    case Decimal.Rejected{error}:
+      Fail{(U32.from_nat(8n), "bad UTF-8 chunk envelope")}
+    case Decimal.Accepted{Decimal.Dec{value, rest}}:
+      Done{ReChunk{value, rest}}
+
+def reopen_dash_step(+done: Bool, isdash: Bool, +acc: Nat) -> (Bool & Nat):
+  match done:
+    case True{}:
+      (True{}, acc)
+    case False{}:
+      match isdash:
+        case True{}:
+          (False{}, Nat.add(1n, acc))
+        case False{}:
+          (True{}, acc)
+
+def reopen_dash_snd(st: (Bool & Nat)) -> Nat:
+  match st:
+    case (d, a):
+      a
+
+def reopen_dash_fst(st: (Bool & Nat), +ch: Char) -> (Bool & Nat):
+  match st:
+    case (done, acc):
+      reopen_dash_step(done, Char.is_eq(ch, Char.from_u32(45)), acc)
+
+def reopen_dash_go(fuel: Nat, st: (Bool & Nat), str: String) -> Nat:
+  match fuel:
+    case 0n:
+      reopen_dash_snd(st)
+    case 1n+f:
+      match str:
+        case SNil{}:
+          reopen_dash_snd(st)
+        case SCon{h, t}:
+          reopen_dash_go(f, reopen_dash_fst(st, h), t)
+
+def reopen_dashes_len(+str: String) -> Nat:
+  reopen_dash_go(Nat.add(String.length(str), 1n), (False{}, 0n), str)
+
+def reopen_semi_is(eq: Bool, +num: Nat) -> Maybe<&2, Nat>:
+  match eq:
+    case True{}:
+      Some{num}
+    case False{}:
+      None{}
+
+def reopen_semi(+ch: Char, +num: Nat) -> Maybe<&2, Nat>:
+  reopen_semi_is(Char.is_eq(ch, Char.from_u32(59)), num)
+
+def reopen_semi_go(dropped: String, +num: Nat) -> Maybe<&2, Nat>:
+  match dropped:
+    case SNil{}:
+      None{}
+    case SCon{h, t}:
+      reopen_semi(h, num)
+
+def reopen_frame_len(+str: String) -> Maybe<&2, Nat>:
+  +num = reopen_dashes_len(str)
+  reopen_semi_go(String.drop(str, num), num)
+
+def reopen_consumed(+num: Nat) -> Nat:
+  Nat.add(String.length(Wal.dashes(num)), Nat.add(1n, num))
+
+def reopen_clip(+mlen: Maybe<&2, Nat>, +str: String) -> String:
+  match mlen:
+    case None{}:
+      str
+    case Some{n}:
+      String.take(String.drop(str, Nat.add(String.length(Wal.dashes(n)), 1n)), n)
+
+def reopen_drop(+mlen: Maybe<&2, Nat>, +str: String) -> String:
+  match mlen:
+    case None{}:
+      str
+    case Some{n}:
+      String.drop(str, reopen_consumed(n))
+
+def reopen_dec_apply(+m2: Maybe<&2, Wal.Batch>, +res: MemTable.MemTable) -> MemTable.MemTable:
+  match m2:
+    case None{}:
+      res
+    case Some{Wal.Batch{muts}}:
+      apply_batch(muts, res)
+
+def reopen_replay_go(fuel: Nat, +mem: MemTable.MemTable, +str: String) -> MemTable.MemTable:
+  match fuel:
+    case 0n:
+      mem
+    case 1n+g:
+      +fl = reopen_frame_len(str)
+      reopen_replay_go(g, reopen_dec_apply(Wal.decode(reopen_clip(fl, str)), mem), reopen_drop(fl, str))
+
+def reopen_replay(+str: String) -> MemTable.MemTable:
+  reopen_replay_go(Nat.add(String.length(str), 1n), MemTable.empty(), str)
+
+def reopen_assemble(+mem: MemTable.MemTable, +dir: String) -> Db:
+  Db{dir, mem, MemTable.empty(), default_batch_cap(), Nil{}, Nil{}, 0n, Manifest.serialize(Manifest.M{Nil{}}), MemTable.count(mem), 0n}
+
+# Chunked WAL reader (SstStream.stream_loop shape): the freshly read chunk
+# re-enters as the `pending` parameter, so every match scrutinee is a
+# parameter or field and the loop is a single self-recursive def.
+def reopen_read_loop(chunks_left: Nat, +path: String, +offset: Nat, +acc: String, pending: Maybe<&2, ReChunk>) -> IO(Result<&1, &1, U32 & String, String>):
+  match chunks_left pending:
+    case 0n _:
+      IO.pure(Result<&1, &1, U32 & String, String>, Fail{(U32.from_nat(7n), "wal exceeds streaming read limit")})
+    case 1n+rest None{}:
+      do IO<Result<&1, &1, U32 & String, String>>:
+        raw : String <- IO.try(String, Fs.read_utf8_chunk(path, offset, reopen_chunk_chars()))
+        chunk : ReChunk <- IO.try(ReChunk, IO.pure(Result<&1, &1, U32 & String, ReChunk>, reopen_chunk_parse(Decimal.parse_semicolon(raw, reopen_chunk_chars()))))
+        reopen_read_loop(rest, path, offset, acc, Some{chunk})
+    case 1n+rest Some{ReChunk{bytes, text}}:
+      match bytes:
+        case 0n:
+          IO.pure(Result<&1, &1, U32 & String, String>, Done{acc})
+        case 1n+more:
+          reopen_read_loop(rest, path, Nat.add(offset, 1n+more), acc ++ text, None{})
+
+def reopen_read(+dir: String) -> IO(Result<&1, &1, U32 & String, Db>):
+  do IO<Result<&1, &1, U32 & String, Db>>:
+    content : String <- IO.try(String, reopen_read_loop(8192n, wal_path(dir), 0n, "", None{}))
+    return Done{reopen_assemble(reopen_replay(content), dir)}
+
+def reopen_exists(ok: Result<&1, &1, U32 & String, Bool>, +dir: String) -> IO(Result<&1, &1, U32 & String, Db>):
+  match ok:
+    case Fail{e}:
+      IO.pure(Result<&1, &1, U32 & String, Db>, Fail{e})
+    case Done{present}:
+      match present:
+        case False{}:
+          IO.pure(Result<&1, &1, U32 & String, Db>, Done{open_db(dir)})
+        case True{}:
+          reopen_read(dir)
+
+def reopen(+dir: String) -> IO(Result<&1, &1, U32 & String, Db>):
+  do IO<Result<&1, &1, U32 & String, Db>>:
+    r : Result<&1, &1, U32 & String, Bool> <- Fs.exists(wal_path(dir))
+    reopen_exists(r, dir)
 
 # --- Closed-vector laws live in laws/Db.bend (spec laws 1, 2, 3, 7) ---

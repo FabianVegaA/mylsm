@@ -103,6 +103,11 @@ def Sess.bind(a, -A: Kind(a), -B: Kind(a), sess: Sess<a, A>, fun: A -> Sess<a, B
 def open(+dir: String) -> Db.Db:
   Db.open_db(dir)
 
+# Reopen a directory replaying wal.log chunks into a fresh memtable.
+# Missing file/dir answers open_db; torn tail discarded; IO errors Fail.
+def reopen(+dir: String) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+  Db.reopen(dir)
+
 # Pure put transition used by the session action.
 def put_go(+db: Db.Db, +key: String, +val: String) -> Db.Db:
   match db:
