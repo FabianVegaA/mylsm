@@ -9,8 +9,9 @@ recovery, and machine-checked laws for parts of the pure storage core.
 
 ## Quick start
 
-Requirements: Bend 2.0.4 or newer. Bend 2.0.13 was used for the latest
-SSTable v2 development and million-write validation.
+Requirements: Bend 2.0.33 or newer (the key and WAL proofs import
+bend-mathlib@0.7.0.0, which follows Base as of 2.0.33). Bend 2.0.13 was used
+for the latest SSTable v2 development and million-write validation.
 
 ```sh
 # Inspect available CPU/GPU/native capabilities
