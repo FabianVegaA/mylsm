@@ -1,5 +1,7 @@
 import Base
 import ./Keys.bend as Keys
+import bend-mathlib@0.7.0.0/string.bend as MString
+import bend-mathlib@0.7.0.0/nat.bend as MNat
 
 # WAL record codec (Task 3). Format (lengths are UNARY dash runs — no
 # decimal show/parse inverse lemmas; data is opaque — counted, never
@@ -218,35 +220,16 @@ def decode(+str: String) -> Maybe<&2, Batch>:
 # --- Proof scaffolding ---
 
 def app_assoc(sa: String, sb: String, sc: String) -> {((sa ++ sb) ++ sc) == (sa ++ (sb ++ sc)) : String}:
-  match sa:
-    case SNil{}:
-      {==}
-    case SCon{h, t}:
-      %app_assoc(t, sb, sc) : {SCon{h, (t ++ sb) ++ sc} == SCon{h, _} : String}
-      {==}
+  MString.append_assoc(sa, sb, sc)
 
 def app_nil_r(str: String) -> {(str ++ "") == str : String}:
-  match str:
-    case SNil{}:
-      {==}
-    case SCon{h, t}:
-      %app_nil_r(t) : {SCon{h, t ++ ""} == SCon{h, _} : String}
-      {==}
+  MString.append_nil(str)
+
 def len_append(sa: String, sb: String) -> {String.length(sa ++ sb) == Nat.add(String.length(sa), String.length(sb)) : Nat}:
-  match sa:
-    case SNil{}:
-      {==}
-    case SCon{h, t}:
-      %len_append(t, sb) : {1n+String.length(t ++ sb) == 1n+_ : Nat}
-      {==}
+  MString.length_append(sa, sb)
 
 def add_assoc(n1: Nat, n2: Nat, n3: Nat) -> {Nat.add(Nat.add(n1, n2), n3) == Nat.add(n1, Nat.add(n2, n3)) : Nat}:
-  match n1:
-    case 0n:
-      {==}
-    case 1n+m:
-      %add_assoc(m, n2, n3) : {1n+Nat.add(Nat.add(m, n2), n3) == 1n+_ : Nat}
-      {==}
+  MNat.add_assoc(n1, n2, n3)
 
 def list_app_assoc(
   xs: List<&2, Mut>,

@@ -1,4 +1,6 @@
 import Base
+import bend-mathlib@0.7.0.0/string.bend as MString
+import bend-mathlib@0.7.0.0/bool.bend as MBool
 
 # Total-order comparison for keys. Base's String.cmp hands the strings back
 # beside the verdict ((s1, s2), c); we take reusable copies and unpack via a
@@ -77,9 +79,10 @@ def cmp_one_hot_proof(+ord: Cmp) -> {cmp_one_hot(ord) == True{} : Bool}:
     case GT{}:
       {==}
 
-# `String.eq` is defined by the EQ projection of `String.cmp`; matching the
-# handed-back comparison pair exposes that definitional correspondence.
-def cmp_eq_pair(pair: (String & String) & Cmp) -> {cmp_is_eq(unpack(pair)) == String.eq.fin(pair) : Bool}:
+# `String.eq` is defined by the EQ projection of `String.cmp` (Cmp.is_eq of
+# Pair.snd since bend 2.0.33); matching the handed-back comparison pair
+# exposes that definitional correspondence.
+def cmp_eq_pair(pair: (String & String) & Cmp) -> {cmp_is_eq(unpack(pair)) == Cmp.is_eq(Pair.snd(String & String, Cmp, pair)) : Bool}:
   match pair:
     case ((a, b), c):
       match c:
@@ -94,16 +97,13 @@ def cmp_eq_bridge(+s1: String, +s2: String) -> {cmp_is_eq(cmp(s1, s2)) == eq(s1,
   cmp_eq_pair(String.cmp(s1, s2))
 
 # Reflexivity chain for open keys. Every product law about keyed lookup
-# rewrites with str_eq_refl; it rests on the layers below, down to bits.
+# rewrites with str_eq_refl; it rests on the layers below, down to bits,
+# proved in bend-mathlib's bool and string modules (hash-pinned by version).
 # (Proving Base's own primitives is the one exception to the trust-root
 # rule: without open-key comparison facts, NO keyed law is provable.)
 
 def bool_refl(+flag: Bool) -> {Bool.cmp(flag, flag) == EQ{} : Cmp}:
-  match flag:
-    case False{}:
-      {==}
-    case True{}:
-      {==}
+  MBool.cmp_refl(flag)
 
 def word_refl(width: Nat, +word: Word(width)) -> {Word.cmp(width, word, word) == EQ{} : Cmp}:
   match width word:
@@ -119,35 +119,17 @@ def word_refl(width: Nat, +word: Word(width)) -> {Word.cmp(width, word, word) ==
           {==}
 
 def u32_refl(+val: U32) -> {U32.cmp(val, val) == EQ{} : Cmp}:
-  match val:
-    case U32{w}:
-      %Equal.sym(Cmp, Word.cmp(32n, w, w), EQ{}, word_refl(32n, w)) : {_ == EQ{} : Cmp}
-      {==}
+  MString.u32_cmp_refl(val)
 
 def char_refl(+ch: Char) -> {Char.cmp(ch, ch) == ((ch, ch), EQ{}) : (Char & Char) & Cmp}:
-  match ch:
-    case Chr{x}:
-      %Equal.sym(Cmp, U32.cmp(x, x), EQ{}, u32_refl(x)) : {((Chr{x}, Chr{x}), _) == ((Chr{x}, Chr{x}), EQ{}) : (Char & Char) & Cmp}
-      {==}
+  MString.char_cmp_refl(ch)
 
 def s_cmp_pair_refl(+str: String) -> {String.cmp(str, str) == ((str, str), EQ{}) : (String & String) & Cmp}:
-  match str:
-    case SNil{}:
-      {==}
-    case SCon{h, t}:
-      %Equal.sym((Char & Char) & Cmp, Char.cmp(h, h), ((h, h), EQ{}), char_refl(h)) : {String.cmp.fin(t, t, _) == ((SCon{h, t}, SCon{h, t}), EQ{}) : (String & String) & Cmp}
-      %Equal.sym((String & String) & Cmp, String.cmp(t, t), ((t, t), EQ{}), s_cmp_pair_refl(t)) : {String.cmp.rec(h, h, _) == ((SCon{h, t}, SCon{h, t}), EQ{}) : (String & String) & Cmp}
-      {==}
+  MString.cmp_refl(str)
 
 def str_refl(+str: String) -> {cmp(str, str) == EQ{} : Cmp}:
   %Equal.sym((String & String) & Cmp, String.cmp(str, str), ((str, str), EQ{}), s_cmp_pair_refl(str)) : {unpack(_) == EQ{} : Cmp}
   {==}
 
 def str_eq_refl(+str: String) -> {eq(str, str) == True{} : Bool}:
-  match str:
-    case SNil{}:
-      {==}
-    case SCon{h, t}:
-      %Equal.sym((Char & Char) & Cmp, Char.cmp(h, h), ((h, h), EQ{}), char_refl(h)) : {String.eq.fin(String.cmp.fin(t, t, _)) == True{} : Bool}
-      %Equal.sym((String & String) & Cmp, String.cmp(t, t), ((t, t), EQ{}), s_cmp_pair_refl(t)) : {String.eq.fin(String.cmp.rec(h, h, _)) == True{} : Bool}
-      {==}
+  MString.eq_refl(str)
