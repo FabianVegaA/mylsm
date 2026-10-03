@@ -3,10 +3,8 @@ import ./Keys.bend as Keys
 import ./MemTable.bend as MemTable
 import ./Sstable.bend as Sstable
 import ./Wal.bend as Wal
-import ./Fs.bend as Fs
 import ./Manifest.bend as Manifest
 import ./Decimal.bend as Decimal
-import ./CrashPoint.bend as CrashPoint
 
 # Db API (Task 7): durable write path + reads.
 #
@@ -242,26 +240,6 @@ def db_get_cached(+db: Db, +key: String) -> Db & Maybe<&2, String>:
 def wal_frame(+data: String) -> String:
   Wal.dashes(String.length(data)) ++ ";" ++ data
 
-# Tail of the append: match heads the def body (params always
-# destructurable), so the write's pair splits with single uses.
-def wal_tail(fr: (File & Result<&1, &1, U32 & String, Unit>), +dir: String) -> IO(Result<&1, &1, U32 & String, Unit>):
-  match fr:
-    case (f2, r):
-      do IO<Result<&1, &1, U32 & String, Unit>>:
-        res : Unit <- IO.try(Unit, IO.pure(Result<&1, &1, U32 & String, Unit>, r))
-        _cp1 : Unit <- IO.try(Unit, CrashPoint.hit("wal.appended"))
-        _cls : Unit <- File.close(f2)
-        _syn : Unit <- IO.try(Unit, Fs.fsync(wal_path(dir)))
-        _cp2 : Unit <- IO.try(Unit, CrashPoint.hit("wal.synced"))
-        _prm : Unit <- IO.try(Unit, Fs.chmod(wal_path(dir), U32.from_nat(384n)))
-        return Done{res}
-
-def wal_append(+dir: String, +data: String) -> IO(Result<&1, &1, U32 & String, Unit>):
-  do IO<Result<&1, &1, U32 & String, Unit>>:
-    f : File <- IO.try(File, File.open(wal_path(dir), "a"))
-    fr : (File & Result<&1, &1, U32 & String, Unit>) <- File.write(f, wal_frame(data))
-    wal_tail(fr, dir)
-
 def batch_len(+muts: List<&2, Wal.Mut>) -> Nat:
   List.length(&2, Wal.Mut, muts)
 
@@ -295,18 +273,6 @@ def apply_done(res: RotRes, +dir: String, +batch_cap: Nat, +bcache: List<&2, BEn
 def rot_done(res: RotRes, +dir: String, +batch_cap: Nat, +bcache: List<&2, BEntry>, +levels: List<&2, List<&2, Sstable.Table>>, +flushed: Nat, +manifest_token: String) -> Result<&1, &1, U32 & String, Db>:
   Done{apply_done(res, dir, batch_cap, bcache, levels, flushed, manifest_token)}
 
-def db_write(+db: Db, +batch: Wal.Batch) -> IO(Result<&1, &1, U32 & String, Db>):
-  match db:
-    case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
-      match batch:
-        case Wal.Batch{muts}:
-          do IO<Result<&1, &1, U32 & String, Db>>:
-            _res : Unit <- IO.try(Unit, wal_append(dir, Wal.encode(Wal.Batch{muts})))
-            return rot_done(apply_and_rotate(muts, mem, frozen, mem_count, frozen_count), dir, batch_cap, bcache, levels, flushed, manifest_token)
-
-def db_put(+db: Db, +key: String, +val: String) -> IO(Result<&1, &1, U32 & String, Db>):
-  db_write(db, Wal.Batch{Con{Wal.Put{key, val}, Nil{}}})
-
 def batch_cap_of(+db: Db) -> Nat:
   match db:
     case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
@@ -323,14 +289,6 @@ def staged_muts(+staged: List<&2, Wal.Batch>) -> List<&2, Wal.Mut>:
       Nil{}
     case Con{Wal.Batch{muts}, t}:
       List.append(&2, Wal.Mut, muts, staged_muts(t))
-
-def db_write_staged(+db: Db, +staged: List<&2, Wal.Batch>) -> IO(Result<&1, &1, U32 & String, Db>):
-  match db:
-    case Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
-      db_write(Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}, Wal.Batch{staged_muts(List.reverse(&2, Wal.Batch, staged))})
-
-def db_del(+db: Db, +key: String) -> IO(Result<&1, &1, U32 & String, Db>):
-  db_write(db, Wal.Batch{Con{Wal.Del{key}, Nil{}}})
 
 # --- reopen (public API v0.3.2.0): WAL-only recovery over wal.log ---
 # Checks wal.log existence; missing dir/file = open_db (empty tables).
@@ -446,45 +404,5 @@ def reopen_replay(+str: String) -> MemTable.MemTable:
 
 def reopen_assemble(+mem: MemTable.MemTable, +dir: String) -> Db:
   Db{dir, mem, MemTable.empty(), default_batch_cap(), Nil{}, Nil{}, 0n, Manifest.serialize(Manifest.M{Nil{}}), MemTable.count(mem), 0n}
-
-# Chunked WAL reader (SstStream.stream_loop shape): the freshly read chunk
-# re-enters as the `pending` parameter, so every match scrutinee is a
-# parameter or field and the loop is a single self-recursive def.
-def reopen_read_loop(chunks_left: Nat, +path: String, +offset: Nat, +acc: String, pending: Maybe<&2, ReChunk>) -> IO(Result<&1, &1, U32 & String, String>):
-  match chunks_left pending:
-    case 0n _:
-      IO.pure(Result<&1, &1, U32 & String, String>, Fail{(U32.from_nat(7n), "wal exceeds streaming read limit")})
-    case 1n+rest None{}:
-      do IO<Result<&1, &1, U32 & String, String>>:
-        raw : String <- IO.try(String, Fs.read_utf8_chunk(path, offset, reopen_chunk_chars()))
-        chunk : ReChunk <- IO.try(ReChunk, IO.pure(Result<&1, &1, U32 & String, ReChunk>, reopen_chunk_parse(Decimal.parse_semicolon(raw, reopen_chunk_chars()))))
-        reopen_read_loop(rest, path, offset, acc, Some{chunk})
-    case 1n+rest Some{ReChunk{bytes, text}}:
-      match bytes:
-        case 0n:
-          IO.pure(Result<&1, &1, U32 & String, String>, Done{acc})
-        case 1n+more:
-          reopen_read_loop(rest, path, Nat.add(offset, 1n+more), acc ++ text, None{})
-
-def reopen_read(+dir: String) -> IO(Result<&1, &1, U32 & String, Db>):
-  do IO<Result<&1, &1, U32 & String, Db>>:
-    content : String <- IO.try(String, reopen_read_loop(8192n, wal_path(dir), 0n, "", None{}))
-    return Done{reopen_assemble(reopen_replay(content), dir)}
-
-def reopen_exists(ok: Result<&1, &1, U32 & String, Bool>, +dir: String) -> IO(Result<&1, &1, U32 & String, Db>):
-  match ok:
-    case Fail{e}:
-      IO.pure(Result<&1, &1, U32 & String, Db>, Fail{e})
-    case Done{present}:
-      match present:
-        case False{}:
-          IO.pure(Result<&1, &1, U32 & String, Db>, Done{open_db(dir)})
-        case True{}:
-          reopen_read(dir)
-
-def reopen(+dir: String) -> IO(Result<&1, &1, U32 & String, Db>):
-  do IO<Result<&1, &1, U32 & String, Db>>:
-    r : Result<&1, &1, U32 & String, Bool> <- Fs.exists(wal_path(dir))
-    reopen_exists(r, dir)
 
 # --- Closed-vector laws live in laws/Db.bend (spec laws 1, 2, 3, 7) ---

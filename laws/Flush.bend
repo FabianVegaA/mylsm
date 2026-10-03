@@ -2,7 +2,7 @@ import Base
 import ../src/MemTable.bend as MemTable
 import ../src/Sstable.bend as Sstable
 import ../src/Db.bend as Db
-import ../src/Flush.bend as Flush
+import ../src/FlushPolicy.bend as Flush
 
 # Small local fixture duplicated from the merge-iterator domain.
 def scan_mem() -> List<&2, MemTable.Entry>:

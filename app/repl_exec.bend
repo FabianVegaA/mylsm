@@ -1,8 +1,10 @@
 import Base
 import ../src/Db.bend as Db
+import ../src/DbIo.bend as DbIo
 import ../src/Recover.bend as Recover
 import ../src/Flush.bend as Flush
 import ../src/Compact.bend as Compact
+import ../src/CompactIo.bend as CompactIo
 import ../src/MergeIter.bend as MergeIter
 import ../src/MemTable.bend as MemTable
 import ../src/Sstable.bend as Sstable
@@ -14,6 +16,7 @@ import ./demo_helpers.bend as Demo
 import ./interchange.bend as Interchange
 import ./repl_types.bend as Repl
 import ./repl_parser.bend as Parser
+import ./repl_policy.bend as Policy
 
 type Session is Data:
   Session{db: Db.Db, dir: String, timing: Repl.TimingMode, mode: Repl.ComputeMode, gpu: Bool, workers: Nat, staged: List<&2, Wal.Batch>}
@@ -21,17 +24,6 @@ type Session is Data:
 type LoopState is Data:
   Running{session: Session}
   Stopped{}
-
-def timing_should(mode: Repl.TimingMode) -> Bool:
-  match mode:
-    case Repl.TimingOff{}: False{}
-    case Repl.TimingOn{}: True{}
-    case Repl.TimingOnce{}: True{}
-
-def timing_once(mode: Repl.TimingMode) -> Bool:
-  match mode:
-    case Repl.TimingOnce{}: True{}
-    case _: False{}
 
 def mode_name(mode: Repl.ComputeMode) -> String:
   match mode:
@@ -131,22 +123,6 @@ def live_entries(es: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
 def export_entries(db: Db.Db) -> List<&2, MemTable.Entry>:
   live_entries(SortedRun.sort_newest(Db.all_entries(db)))
 
-def parent_parts(parts: List<&2, String>, acc: List<&2, String>) -> String:
-  match parts:
-    case Nil{}:
-      "."
-    case Con{last, Nil{}}:
-      match acc:
-        case Nil{}:
-          "."
-        case Con{h, t}:
-          String.join(List.reverse(&2, String, Con{h, t}), "/")
-    case Con{h, Con{k, t}}:
-      parent_parts(Con{k, t}, Con{h, acc})
-
-def parent_path(path: String) -> String:
-  parent_parts(String.split(path, '/'), Nil{})
-
 def return_session(session: Session) -> IO(LoopState):
   IO.pure(LoopState, Running{session})
 
@@ -194,9 +170,6 @@ def update_mode(new_mode: Repl.ComputeMode, +session: Session) -> IO(LoopState):
     case Repl.Auto{}:
       replace_mode(Repl.Auto{}, session)
 
-def restart_bounds(+count: Nat, +current: Nat) -> Bool:
-  Bool.and(Nat.is_lt(0n, count), Bool.and(Nat.is_lt(count, 257n), Bool.not(Nat.is_eq(count, current))))
-
 def restart_write(valid: Bool, +count: Nat, +dir: String, session: Session) -> IO(LoopState):
   match valid:
     case False{}:
@@ -216,7 +189,7 @@ def restart_runtime(native: Bool, +count: Nat, +current: Nat, +dir: String, sess
         _u : Unit <- IO.print("error: threads is available only in native mode")
         return Running{session}
     case True{}:
-      restart_write(restart_bounds(count, current), count, dir, session)
+      restart_write(Policy.restart_bounds(count, current), count, dir, session)
 
 def restart_env(runtime: String, count: Nat, current: Nat, dir: String, session: Session) -> IO(LoopState):
   restart_runtime(String.eq(runtime, "native"), count, current, dir, session)
@@ -225,7 +198,7 @@ def put_flush(full: Bool, +staged: List<&2, Wal.Batch>, +db: Db.Db, +dir: String
   match full:
     case True{}:
       do IO<LoopState>:
-        db2 : Db.Db <- IO.try(Db.Db, Db.db_write_staged(db, staged))
+        db2 : Db.Db <- IO.try(Db.Db, DbIo.db_write_staged(db, staged))
         _u : Unit <- IO.print("OK")
         return Running{Session{db2, dir, timing, mode, gpu, workers, Nil{}}}
     case False{}:
@@ -268,7 +241,7 @@ def execute_go(command: Repl.Command, session: Session) -> IO(LoopState):
       match session:
         case Session{db, dir, timing, mode, gpu, workers, staged}:
           do IO<LoopState>:
-            db2 : Db.Db <- IO.try(Db.Db, Compact.compact(db))
+            db2 : Db.Db <- IO.try(Db.Db, CompactIo.compact(db))
             _u : Unit <- IO.print("OK compact")
             return Running{Session{db2, dir, timing, mode, gpu, workers, staged}}
     case Repl.Maintain{}:
@@ -326,7 +299,7 @@ def execute_go(command: Repl.Command, session: Session) -> IO(LoopState):
           do IO<LoopState>:
             _u0 : Unit <- IO.try(Unit, Flush.write_file(path ++ ".tmp", Interchange.serialize(export_entries(db))))
             _u1 : Unit <- IO.try(Unit, Fs.rename(path ++ ".tmp", path))
-            _u2 : Unit <- IO.try(Unit, Fs.fsync(parent_path(path)))
+            _u2 : Unit <- IO.try(Unit, Fs.fsync(Policy.parent_path(path)))
             _u3 : Unit <- IO.print("OK export")
             return Running{Session{db, dir, timing, mode, gpu, workers, staged}}
     case Repl.Time{inner}:
@@ -355,7 +328,7 @@ def execute_flushed(command: Repl.Command, +db: Db.Db, +dir: String, +timing: Re
       execute_go(command, Session{db, dir, timing, mode, gpu, workers, Nil{}})
     case Con{_, _}:
       do IO<LoopState>:
-        db2 : Db.Db <- IO.try(Db.Db, Db.db_write_staged(db, staged))
+        db2 : Db.Db <- IO.try(Db.Db, DbIo.db_write_staged(db, staged))
         execute_go(command, Session{db2, dir, timing, mode, gpu, workers, Nil{}})
 
 def execute(command: Repl.Command, session: Session) -> IO(LoopState):
@@ -388,7 +361,7 @@ def timed_dispatch(enabled: Bool, once: Bool, command: Repl.Command, session: Se
 def run_regular(command: Repl.Command, session: Session) -> IO(LoopState):
   match session:
     case Session{db, dir, +timing, mode, gpu, workers, staged}:
-      timed_dispatch(timing_should(timing), timing_once(timing), command, Session{db, dir, timing, mode, gpu, workers, staged})
+      timed_dispatch(Policy.timing_should(timing), Policy.timing_once(timing), command, Session{db, dir, timing, mode, gpu, workers, staged})
 
 def run_time(inner: String, session: Session) -> IO(LoopState):
   timed_dispatch(True{}, False{}, Parser.parse_command(inner), session)

@@ -3,7 +3,7 @@ import ../src/Wal.bend as Wal
 import ../src/MemTable.bend as MemTable
 import ../src/Db.bend as Db
 import ../src/SstFile.bend as SstFile
-import ../src/Recover.bend as Recover
+import ../src/RecoverPure.bend as Recover
 
 # Small local fixture duplicated from the WAL domain.
 def batch_put1() -> Wal.Batch:

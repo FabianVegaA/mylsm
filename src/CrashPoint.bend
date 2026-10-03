@@ -1,15 +1,6 @@
 import Base
 import ./Console.bend as Console
-
-# Pure checkpoint policy. Console.get_env maps an unset value to "", so the
-# non-empty guard distinguishes disabled injection from an exact empty match.
-def nonempty(value: String) -> Bool:
-  match value:
-    case SNil{}: False{}
-    case SCon{_, _}: True{}
-
-def enabled(+configured: String, requested: String) -> Bool:
-  Bool.and(nonempty(configured), String.eq(configured, requested))
+import ./CrashPointPolicy.bend as Policy
 
 # Irreducible host boundary: emit an unbuffered marker and stop this process.
 def stop(name: String) -> IO(Result<&1, &1, U32 & String, Unit>):
@@ -28,4 +19,4 @@ def hit_decision(active: Bool, name: String) -> IO(Result<&1, &1, U32 & String, 
 def hit(+name: String) -> IO(Result<&1, &1, U32 & String, Unit>):
   do IO<Result<&1, &1, U32 & String, Unit>>:
     configured : String <- IO.try(String, Console.get_env("MYLSM_CRASH_POINT"))
-    hit_decision(enabled(configured, name), name)
+    hit_decision(Policy.enabled(configured, name), name)

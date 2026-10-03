@@ -9,6 +9,7 @@ import ./Manifest.bend as Manifest
 import ./Fs.bend as Fs
 import ./Db.bend as Db
 import ./CrashPoint.bend as CrashPoint
+import ./FlushPolicy.bend as Policy
 
 # Flush (Task 8): sealed memtable -> L0 SSTable file + manifest + WAL reset.
 #
@@ -25,9 +26,6 @@ import ./CrashPoint.bend as CrashPoint
 # Empty memtable flush is a no-op (no files touched).
 # CrashPoint calls are test-only host effects. Unset or unequal checkpoints are
 # successful no-ops; signal delivery and filesystem ordering are not Bend proofs.
-
-def table_name(flushed: Nat) -> String:
-  "l0-" ++ Nat.show(flushed) ++ ".tbl"
 
 def l0_add(+levels: List<&2, List<&2, Sstable.Table>>, +tbl: Sstable.Table) -> List<&2, List<&2, Sstable.Table>>:
   match levels:
@@ -212,7 +210,7 @@ def flush_pre(
   +batch_cap: Nat,
 ) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   +tbl = Sstable.build(entries, 0n, List.length(&2, MemTable.Entry, entries))
-  +name = table_name(flushed)
+  +name = Policy.table_name(flushed)
   +l0dir = dir ++ "/l0"
   flush_goA(dir, l0dir, l0dir ++ "/" ++ name ++ ".tmp", l0dir ++ "/" ++ name, dir ++ "/MANIFEST", dir ++ "/MANIFEST.tmp", SstFile.serialize(Db.table_entries(tbl), 0n), tbl, name, levels, flushed, manifest_token, MemTable.MT{Nil{}}, batch_cap)
 
@@ -232,7 +230,7 @@ def flush_frozen(
     case MemTable.MT{live}:
       +merged = SortedRun.merge_many_newest(Con{live, Con{entries, Nil{}}})
       +tbl = Sstable.build(merged, 0n, List.length(&2, MemTable.Entry, merged))
-      +name = table_name(flushed)
+      +name = Policy.table_name(flushed)
       +l0dir = dir ++ "/l0"
       flush_goA(dir, l0dir, l0dir ++ "/" ++ name ++ ".tmp", l0dir ++ "/" ++ name, dir ++ "/MANIFEST", dir ++ "/MANIFEST.tmp", SstFile.serialize(Db.table_entries(tbl), 0n), tbl, name, levels, flushed, manifest_token, MemTable.MT{Nil{}}, batch_cap)
 

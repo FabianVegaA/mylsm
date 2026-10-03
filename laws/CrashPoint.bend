@@ -1,5 +1,5 @@
 import Base
-import ../src/CrashPoint.bend as CrashPoint
+import ../src/CrashPointPolicy.bend as CrashPoint
 
 # The open unset theorem and closed equality fixtures keep activation policy in
 # proven Bend code. Marker emission and SIGSTOP remain outside this proof scope.

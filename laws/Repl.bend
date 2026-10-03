@@ -2,7 +2,7 @@ import Base
 import ../src/MemTable.bend as MemTable
 import ../app/repl_types.bend as Repl
 import ../app/repl_parser.bend as ReplParser
-import ../app/repl_exec.bend as ReplExec
+import ../app/repl_policy.bend as ReplExec
 import ../app/repl_lexer.bend as ReplLexer
 import ../app/interchange.bend as Interchange
 

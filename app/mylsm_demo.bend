@@ -1,5 +1,6 @@
 import Base
 import ../src/Db.bend as Db
+import ../src/DbIo.bend as DbIo
 import ../src/Recover.bend as Recover
 import ./demo_helpers.bend as Demo
 
@@ -7,10 +8,10 @@ def open_or_die(+dir: String) -> IO(Db.Db):
   IO.try(Db.Db, Recover.open_db(dir))
 
 def put_or_die(+db: Db.Db, +key: String, +val: String) -> IO(Db.Db):
-  IO.try(Db.Db, Db.db_put(db, key, val))
+  IO.try(Db.Db, DbIo.db_put(db, key, val))
 
 def delete_or_die(+db: Db.Db, +key: String) -> IO(Db.Db):
-  IO.try(Db.Db, Db.db_del(db, key))
+  IO.try(Db.Db, DbIo.db_del(db, key))
 
 def main() -> IO(Unit):
   do IO<Unit>:
