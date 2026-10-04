@@ -1,0 +1,53 @@
+{
+  "bend_minimum": "2.0.35",
+  "source_repository": {
+    "url": "https://github.com/paymog/bend-kit",
+    "checkout_commit": "bba96d622670fd9ab9bbc08c72fd77f81c8052c2"
+  },
+  "packages": {
+    "bend-kit-bytes": {
+      "release": "0.3.2.0",
+      "hash": "0x185ae03c75e3e75be1171471f68b43cb",
+      "source_commit": "18027ad0ab5452219559273fd71152d5db99a950",
+      "dependencies": {
+        "bend-kit-int@0.2.0.0": {
+          "hash": "0x4eed9d7ac6ece61523d747a9d804e4f0",
+          "source_commit": "5d163cfa7760144db9174b6d2a698bacdde0cc75"
+        }
+      }
+    },
+    "bend-kit-encoding": {
+      "release": "0.3.0.0",
+      "hash": "0xcfc8be7b076f41f95c8e118383892d55",
+      "source_commit": "b45b784763fc039598a26ddb7d480476e1254b7b",
+      "dependencies": {
+        "bend-kit-bytes@0.3.0.0": {
+          "hash": "0x49814d83de8f70993a43e1002be29ecd",
+          "source_commit": "c58aaa1dd3055d6397db2adfed5e80c519d5147d",
+          "reason": "Encoding returns this release's nominal Bytes type; MyLSM must adapt its {len, buf} representation to bend-kit-bytes@0.3.2.0 at the UTF-8 boundary."
+        }
+      },
+      "limitations": [
+        "utf8.decode follows WHATWG replacement semantics and is not suitable for strict storage decoding; validate UTF-8 before calling it."
+      ]
+    },
+    "bend-kit-files": {
+      "release": "0.1.1.0",
+      "hash": "0x6c54b2522c2258baf6f58d2b970c3902",
+      "source_commit": "2587d61a308e98529133e6a242ba7d255753e967",
+      "dependencies": {
+        "bend-kit-bytes@0.3.1.0": {
+          "hash": "0xb7603dcfa1d7f60d01e06c928738cc73",
+          "source_commit": "7005daa02586b1001009e7b88a1b4dd79b302119",
+          "reason": "The published files package imports this nominal Bytes release; files.check.bend and files/bench also pin 0.3.1.0."
+        }
+      },
+      "io_contract": [
+        "read.words reads at most 1 MiB in one host call; a short read is progress and zero bytes is EOF.",
+        "write.words loops over short writes; errors retain the File and do not roll back an already-written prefix.",
+        "C and JavaScript implementations are host effects and remain outside Bend proof guarantees.",
+        "MyLSM must preserve its own fsync, rename, directory-fsync, and crash-ordering protocol."
+      ]
+    }
+  }
+}
