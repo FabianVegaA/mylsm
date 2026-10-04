@@ -31,4 +31,5 @@ import ./proofs/SstFileV2ParserProof.bend as SstFileV2ParserProof
 import ./proofs/SstFileV2PutProof.bend as SstFileV2PutProof
 import ./proofs/SstStreamProof.bend as SstStreamProof
 import ./proofs/SstableProof.bend as SstableProof
+import ./proofs/StorageBytesProof.bend as StorageBytesProof
 import ./proofs/WalProof.bend as WalProof

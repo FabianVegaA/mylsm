@@ -2,6 +2,8 @@
 # (src/crypto/sha/sha256.bend), byte-identical. See core.bend header.
 import Base
 import ./core.bend as Core
+import ./state.bend as S
+import 0x185ae03c75e3e75be1171471f68b43cb/bytes.bend as Packed
 
 # The core refinement theorem quantifies over every constant table.
 # Instantiate the verified core with the FIPS 180-4 constants.
@@ -23,12 +25,15 @@ def constants() -> List<&2, U32>:
    1955562222, 2024104815, 2227730452, 2361852424,
    2428436474, 2756734187, 3204031479, 3329325298]
 
+# SHA-256 for the reference octet-list input.
 def sha256(bytes: List<&2, U32>) -> List<&2, U32>:
   Core.sha256(bytes)
 
-def ascii(s: String) -> List<&2, U32>:
-  Core.ascii(s)
+# Convert ASCII text to the reference octet-list input.
+def ascii(text: String) -> List<&2, U32>:
+  Core.ascii(text)
 
+# Format eight digest words as lowercase hexadecimal.
 def hex(ws: List<&2, U32>) -> String:
   Core.hex(ws)
 
@@ -43,5 +48,152 @@ def digest_bytes(ws: List<&2, U32>) -> List<&2, U32>:
       U32.and(U32.shrn(w, 8n), 255) <>
       U32.and(w, 255) <> digest_bytes(tail)
 
+# Return the reference digest as eight big-endian octets per word.
 def sha256_bytes(bytes: List<&2, U32>) -> List<&2, U32>:
   digest_bytes(sha256(bytes))
+
+# Compress one packed block using sixteen transient big-endian words. The file
+# buffer stays packed; no per-byte List is constructed for complete blocks.
+def packed.compress(words: List<&2, U32>, state: S.State) -> S.State:
+  match words:
+    case a <> b <> c <> d <> e <> f <> g <> h <> i <> j <> k <> l <> m <> n <> o <> p <> Nil{}:
+      Core.fips_compress16(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, 48n, state)
+    case _:
+      state
+
+# Read complete 64-byte blocks directly through a bounded package cursor.
+def packed.blocks(
+  remaining: Nat,
+  in_block: Nat,
+  pair: Packed.Cursor & Maybe<&2, U32>,
+  acc: List<&2, U32>,
+  state: S.State
+) -> Packed.Cursor & S.State:
+  match remaining:
+    case 0n:
+      match pair:
+        case (cursor, _):
+          (cursor, state)
+    case 1n:
+      match in_block:
+        case 0n:
+          match pair:
+            case (cursor, _):
+              (cursor, state)
+        case 1n:
+          match pair:
+            case (cursor, Some{word}):
+              (cursor, packed.compress(List.reverse(&2, U32, word <> acc), state))
+            case (cursor, None{}):
+              (cursor, state)
+        case 1n+more:
+          match pair:
+            case (cursor, _):
+              (cursor, state)
+    case 1n+more:
+      match in_block:
+        case 0n:
+          match pair:
+            case (cursor, _):
+              (cursor, state)
+        case 1n:
+          match pair:
+            case (cursor, Some{word}):
+              packed.blocks(more, 16n, Packed.Cursor.u32be(cursor), Nil{},
+                packed.compress(List.reverse(&2, U32, word <> acc), state))
+            case (cursor, None{}):
+              (cursor, state)
+        case 1n+left:
+          match pair:
+            case (cursor, Some{word}):
+              packed.blocks(more, left, Packed.Cursor.u32be(cursor), word <> acc, state)
+            case (cursor, None{}):
+              (cursor, state)
+
+# Read the remaining fewer than 64 bytes for the existing constant-space tail
+# padding routines. This list is bounded by 63 octets, regardless of file size.
+def packed.tail(
+  remaining: Nat,
+  pair: Packed.Cursor & Maybe<&2, U32>,
+  acc: List<&2, U32>
+) -> Packed.Cursor & List<&2, U32>:
+  match remaining:
+    case 0n:
+      match pair:
+        case (cursor, _):
+          (cursor, List.reverse(&2, U32, acc))
+    case 1n:
+      match pair:
+        case (cursor, Some{byte}):
+          (cursor, List.reverse(&2, U32, byte <> acc))
+        case (cursor, None{}):
+          (cursor, Nil{})
+    case 1n+more:
+      match pair:
+        case (cursor, Some{byte}):
+          packed.tail(more, Packed.Cursor.u8(cursor), byte <> acc)
+        case (cursor, None{}):
+          (cursor, Nil{})
+
+def packed.finish.tail(total: U32, pair: Packed.Cursor & List<&2, U32>, state: S.State) -> S.State:
+  match pair:
+    case (_, tail):
+      Core.finish_n(tail, U32.to_nat(total), 48n, state)
+
+def packed.final.tail(total: U32, tail_len: Nat, cursor: Packed.Cursor, state: S.State) -> S.State:
+  match tail_len:
+    case 0n:
+      packed.finish.tail(total, (cursor, Nil{}), state)
+    case 1n+more:
+      packed.finish.tail(total, packed.tail(1n+more, Packed.Cursor.u8(cursor), Nil{}), state)
+
+def packed.final(total: U32, tail_len: Nat, cursor: Packed.Cursor, state: S.State) -> List<&2, U32>:
+  Core.digest(packed.final.tail(total, tail_len, cursor, state))
+
+def packed.after_blocks(total: U32, tail_len: Nat, pair: Packed.Cursor & S.State) -> List<&2, U32>:
+  match pair:
+    case (cursor, state):
+      packed.final(total, tail_len, cursor, state)
+
+def packed.start.blocks(+total: U32, cursor: Packed.Cursor, blocks: Nat, +tail_len: Nat) -> List<&2, U32>:
+  match blocks:
+    case 0n:
+      packed.final(total, tail_len, cursor, Core.initial())
+    case 1n+more:
+      packed.after_blocks(total, tail_len,
+        packed.blocks(((1n+more) * 16n : Nat), 16n, Packed.Cursor.u32be(cursor), Nil{}, Core.initial()))
+
+def packed.start(+total: U32, cursor: Packed.Cursor) -> List<&2, U32>:
+  packed.start.blocks(total, cursor,
+    Nat.div(U32.to_nat(total), 64n), Nat.mod(U32.to_nat(total), 64n))
+
+# SHA-256 directly over packed bytes. Full blocks are read as sixteen u32be
+# words; only the final 0..63 octets use the existing tail padding interface.
+def sha256_packed(bytes: Packed.Bytes) -> List<&2, U32>:
+  match bytes:
+    case Packed.Bytes{+len, buf}:
+      packed.start(len, Packed.Cursor.new(Packed.Bytes{len, buf}))
+
+def packed.digest.finish.bytes(pair: Packed.Bytes & U32) -> Packed.Bytes:
+  match pair:
+    case (bytes, _):
+      bytes
+
+def packed.digest.finish(pair: Packed.Cursor & Bool) -> Packed.Bytes:
+  match pair:
+    case (cursor, _):
+      packed.digest.finish.bytes(Packed.Cursor.finish(cursor))
+
+def packed.digest.words(words: List<&2, U32>, pair: Packed.Cursor & Bool) -> Packed.Bytes:
+  match words:
+    case Nil{}:
+      packed.digest.finish(pair)
+    case word <> rest:
+      match pair:
+        case (cursor, _) :
+          packed.digest.words(rest, Packed.Cursor.put.u32be(cursor, word))
+
+# Return the SHA-256 digest as packed bytes in canonical big-endian order.
+def sha256_packed_bytes(bytes: Packed.Bytes) -> Packed.Bytes:
+  packed.digest.words(sha256_packed(bytes),
+    (Packed.Cursor.new(Packed.Bytes{32, Packed.alloc(32)}), True{}))
