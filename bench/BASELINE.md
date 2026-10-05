@@ -1,5 +1,23 @@
 # Benchmark baseline
 
+## Packed binary storage 0.4.0.0 comparison
+
+Five-run before/after measurements use Bend 2.0.35 on Darwin arm64, 12 logical
+CPUs, and the same disk. The checked reports include validated raw samples.
+
+| Workload | Baseline ms | 0.4.0.0 ms | Baseline peak RSS | 0.4.0.0 peak RSS | Gate |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 4,097 writes | 738 | 547 | 25,608,192 | 4,472,832 | pass |
+| 20,485 writes | 2,329 | 2,246 | 53,051,392 | 23,183,360 | pass |
+| 1,000,000 writes | 252,254 | 156,931 | 2,502,393,856 | 942,784,512 | pass |
+| compaction, 5 × 4,097 | 31 | 29 | 24,428,544 | 22,888,448 | pass |
+
+See [the baseline report](results/packed-storage-pre-0.4.0.0.md),
+[the candidate report](results/packed-storage-0.4.0.0.md), and
+`bench/storage_codec_compare.sh` for raw-sample validation and the regression
+gate. These measurements supersede the historical v2 acceptance observation
+below.
+
 ## Frozen pre-linear-compaction observation
 
 The observed development baseline was recorded with **Bend 2.0.9** on an Apple
@@ -56,7 +74,7 @@ threads but only 2% free disk, so they are functional observations marked
 - second 1,000,000 attempt: stopped after 862.61 seconds with `No space left on
   device`; the host volume reached 100% capacity.
 
-## SSTable v2 acceptance observation
+## Historical: SSTable v2 acceptance observation
 
 With Bend 2.0.13, eight logical CPUs, and 18% free disk, the versioned v2 codec
 completed the durable acceptance workload:

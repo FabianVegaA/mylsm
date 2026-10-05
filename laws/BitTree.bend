@@ -5,5 +5,6 @@ import ../src/BitTree.bend as BitTree
 law bit_tree_set_hit:
   {BitTree.test(BitTree.set(BitTree.new(2n), 63n), 63n) == True{} : Bool}
 
+# State the bit tree oob safe property for the bit-tree laws.
 law bit_tree_oob_safe:
   {BitTree.test(BitTree.set(BitTree.new(1n), 32n), 32n) == False{} : Bool}

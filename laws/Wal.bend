@@ -1,48 +1,63 @@
 import Base
 import ../src/Wal.bend as Wal
+import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
-# --- WAL codec (Task 3) ---
+def expected.finish(value: Maybe<&1, Bytes.Bytes>) -> Bytes.Bytes:
+  match value:
+    case Some{bytes}:
+      bytes
+    case None{}:
+      Bytes.new(0)
 
-# LAW: WAL codec round-trip (closed vectors; each is proven by {==}
-# normalization alone — no manual P's, no fragility).
-# The OPEN round-trip (all batches) is fuzz-verified (Task 12, 1M+ inputs)
-# and its full proof is deferred: open-key/open-length joint induction is not
-# currently accepted by the Bend 2.0.9 checker (syntactic P-matching over pump
-# states with stuck-open tails). See spec §3.2.
-# Open concat-merges attempted 2026-09-25 (Phase 2D): `{==}` rejected, needs
-# the same deferred induction. Closed wal_concat_merges plus 1M fuzz stand.
+# Check whether whether expected holds for the WAL codec laws.
+def empty_expected() -> Bytes.Bytes:
+  expected.finish(Bytes.from_hex("0000002400000000b10689a773611ef6afdd983542da2b82a13d6133370d6abecbc1476b224b09ea"))
 
-# Batch fixtures (named defs: the parser rejects nested Con inside Some).
-def batch_empty() -> Wal.Batch:
-  Wal.Batch{Nil{}}
+# Handle put delete expected in the WAL codec laws.
+def put_delete_expected() -> Bytes.Bytes:
+  expected.finish(Bytes.from_hex("000000350000000200000000016b000000017601000000017895d505a518f16f1c1036ea0541e9b9dc1e5c8123eea75d6eb074b0069150abb4"))
 
-def batch_put1() -> Wal.Batch:
-  Wal.Batch{Con{Wal.Put{"k", "v"}, Nil{}}}
+# Handle log header expected in the WAL codec laws.
+def log_header_expected() -> Bytes.Bytes:
+  expected.finish(Bytes.from_hex("4d594c534d335700"))
 
-def batch_del1() -> Wal.Batch:
-  Wal.Batch{Con{Wal.Del{"k"}, Nil{}}}
+def bytes.eq.result(pair: Bytes.Bytes & Bytes.Bytes & Bool) -> Bool:
+  match pair:
+    case (_, _, valid):
+      valid
 
-def batch_multi() -> Wal.Batch:
-  Wal.Batch{Con{Wal.Put{"a", ""}, Con{Wal.Del{"b"}, Con{Wal.Put{"", "c"}, Nil{}}}}}
+# State the wal v3 log header vector property for the WAL codec laws.
+law wal_v3_log_header_vector:
+  {bytes.eq.result(Bytes.eq(Wal.log_header(), log_header_expected())) == True{} : Bool}
 
-law wal_rt_empty:
-  {Wal.decode(Wal.encode(batch_empty())) == Some{batch_empty()} : Maybe<&2, Wal.Batch>}
+# State the wal v3 log header decodes property for the WAL codec laws.
+law wal_v3_log_header_decodes:
+  {Wal.decode_header(log_header_expected()) == Done{Unit{}} : Result<&1, &1, Wal.Error, Unit>}
 
-law wal_rt_put1:
-  {Wal.decode(Wal.encode(batch_put1())) == Some{batch_put1()} : Maybe<&2, Wal.Batch>}
+# State the wal v3 rejects text log header property for the WAL codec laws.
+law wal_v3_rejects_text_log_header:
+  {Wal.decode_header(expected.finish(Bytes.from_hex("2d"))) == Fail{Wal.Malformed{}} : Result<&1, &1, Wal.Error, Unit>}
 
-law wal_rt_del1:
-  {Wal.decode(Wal.encode(batch_del1())) == Some{batch_del1()} : Maybe<&2, Wal.Batch>}
+# State the wal v3 empty frame vector property for the WAL codec laws.
+law wal_v3_empty_frame_vector:
+  {Wal.encode_frame(Wal.Batch{Nil{}}) == Done{empty_expected()} : Result<&1, &1, Wal.Error, Bytes.Bytes>}
 
-law wal_rt_multi:
-  {Wal.decode(Wal.encode(batch_multi())) == Some{batch_multi()} : Maybe<&2, Wal.Batch>}
+# State the wal v3 put delete frame vector property for the WAL codec laws.
+law wal_v3_put_delete_frame_vector:
+  {Wal.encode_frame(Wal.Batch{Con{Wal.Put{"k", "v"}, Con{Wal.Del{"x"}, Nil{}}}}) == Done{put_delete_expected()} : Result<&1, &1, Wal.Error, Bytes.Bytes>}
 
-# Decoder totality: every input reaches a decided fail-closed result.
-law wal_fail_closed:
-  for +s: String
-  {Wal.is_decided(Wal.decode(s)) == True{} : Bool}
+# State the wal v3 empty frame decodes property for the WAL codec laws.
+law wal_v3_empty_frame_decodes:
+  {Wal.decode_frame(empty_expected()) == Done{Wal.Batch{Nil{}}} : Result<&1, &1, Wal.Error, Wal.Batch>}
 
-# LAW: concatenated encodings decode as one merged batch (closed; sequence
-# semantics — the framing layer owns boundaries, decode consumes sequences).
-law wal_concat_merges:
-  {Wal.decode(Wal.encode(batch_put1()) ++ Wal.encode(batch_del1())) == Some{Wal.Batch{Con{Wal.Put{"k", "v"}, Con{Wal.Del{"k"}, Nil{}}}}} : Maybe<&2, Wal.Batch>}
+# State the wal v3 put delete frame decodes property for the WAL codec laws.
+law wal_v3_put_delete_frame_decodes:
+  {Wal.decode_frame(put_delete_expected()) == Done{Wal.Batch{Con{Wal.Put{"k", "v"}, Con{Wal.Del{"x"}, Nil{}}}}} : Result<&1, &1, Wal.Error, Wal.Batch>}
+
+# State the wal v3 frame rejects trailing byte property for the WAL codec laws.
+law wal_v3_frame_rejects_trailing_byte:
+  {Wal.decode_frame(Bytes.concat([empty_expected(), Bytes.new(1)])) == Fail{Wal.Malformed{}} : Result<&1, &1, Wal.Error, Wal.Batch>}
+
+# State the wal v3 frame rejects bad digest property for the WAL codec laws.
+law wal_v3_frame_rejects_bad_digest:
+  {Wal.decode_frame(Bytes.set(put_delete_expected(), 56, 0)) == Fail{Wal.ChecksumMismatch{}} : Result<&1, &1, Wal.Error, Wal.Batch>}

@@ -7,8 +7,8 @@ BUILD_DIR="$ROOT/.mylsm/build"
 BINARY="$BUILD_DIR/phase3-metrics"
 COUNT=${1:-20485}
 REQUESTED_DATA_DIR=${2:-"$ROOT/.mylsm-phase3-metrics-data"}
-RESULT="$BUILD_DIR/phase3-metrics-result.log"
-RUN_RESULT="$BUILD_DIR/phase3-metrics-timing.log"
+RESULT=${MYLSM_BENCH_RESULT_LOG:-"$BUILD_DIR/phase3-metrics-result.log"}
+RUN_RESULT=${MYLSM_BENCH_TIMING_LOG:-"$BUILD_DIR/phase3-metrics-timing.log"}
 MIN_FREE_PERCENT=15
 
 case "$COUNT" in
@@ -44,7 +44,9 @@ if [[ -e "$DATA_DIR" ]]; then
   rm -rf -- "$DATA_DIR"
 fi
 
-read -r DISK_TOTAL DISK_AVAILABLE < <(df -Pk "$DATA_PARENT" | awk 'NR == 2 { print $2, $4 }')
+DISK_INFO=$(df -Pk "$DATA_PARENT" | awk 'NR == 2 { print $2, $4 }')
+DISK_TOTAL=${DISK_INFO%% *}
+DISK_AVAILABLE=${DISK_INFO##* }
 if [[ -z ${DISK_TOTAL:-} || -z ${DISK_AVAILABLE:-} || "$DISK_TOTAL" == 0 ]]; then
   echo "unable to determine free disk for $DATA_PARENT" >&2
   exit 2
@@ -77,7 +79,7 @@ if (( THREADS < 1 || THREADS > 256 )); then
 fi
 
 mkdir -p "$BUILD_DIR"
-exec > >(tee "$RESULT") 2>&1
+exec >"$RESULT" 2>&1
 COMMIT=$(git -C "$ROOT" rev-parse HEAD)
 if [[ -n $(git -C "$ROOT" --no-optional-locks status --short) ]]; then DIRTY=true; else DIRTY=false; fi
 
@@ -95,7 +97,8 @@ echo "phase=build status=starting measured=false"
 bend "$SOURCE" -o "$BINARY"
 echo "phase=build status=complete measured=false"
 echo "phase=run status=starting"
-/usr/bin/time -p env MYLSM_BENCH_WRITES="$COUNT" MYLSM_BENCH_DIR="$DATA_DIR" "$BINARY" --threads "$THREADS" 2>&1 | tee "$RUN_RESULT"
+MYLSM_BENCH_WRITES="$COUNT" MYLSM_BENCH_DIR="$DATA_DIR" \
+  python3 "$ROOT/bench/measure_rss.py" "$RUN_RESULT" "$BINARY" --threads "$THREADS"
 echo "phase=run status=complete"
 
 grep -q "^writes_completed_check=pass$" "$RUN_RESULT" || true

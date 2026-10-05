@@ -1,15 +1,18 @@
 import Base
 
+# Represent LexerResult data used by the interactive command lexer.
 type LexerResult is Data:
   LexSuccess{tokens: List<&2, String>}
   LexError{message: String}
 
+# Represent LexerMode data used by the interactive command lexer.
 type LexerMode is Data:
   LexBetween{}
   LexBare{}
   LexQuoted{}
   LexEscape{}
 
+# Represent LexerChar data used by the interactive command lexer.
 type LexerChar is Data:
   LexWhitespace{value: Char}
   LexQuote{}
@@ -18,6 +21,7 @@ type LexerChar is Data:
   LexEscapeT{}
   LexLiteral{value: Char}
 
+# Classify t for the interactive command lexer.
 def classify_t(char: Char, hit: Bool) -> LexerChar:
   match hit:
     case True{}:
@@ -25,6 +29,7 @@ def classify_t(char: Char, hit: Bool) -> LexerChar:
     case False{}:
       LexLiteral{char}
 
+# Classify n for the interactive command lexer.
 def classify_n(+char: Char, hit: Bool) -> LexerChar:
   match hit:
     case True{}:
@@ -32,6 +37,7 @@ def classify_n(+char: Char, hit: Bool) -> LexerChar:
     case False{}:
       classify_t(char, Char.is_eq(char, 't'))
 
+# Classify backslash for the interactive command lexer.
 def classify_backslash(+char: Char, hit: Bool) -> LexerChar:
   match hit:
     case True{}:
@@ -39,6 +45,7 @@ def classify_backslash(+char: Char, hit: Bool) -> LexerChar:
     case False{}:
       classify_n(char, Char.is_eq(char, 'n'))
 
+# Classify quote for the interactive command lexer.
 def classify_quote(+char: Char, hit: Bool) -> LexerChar:
   match hit:
     case True{}:
@@ -46,6 +53,7 @@ def classify_quote(+char: Char, hit: Bool) -> LexerChar:
     case False{}:
       classify_backslash(char, Char.is_eq(char, '\\'))
 
+# Classify space for the interactive command lexer.
 def classify_space(+char: Char, hit: Bool) -> LexerChar:
   match hit:
     case True{}:
@@ -53,9 +61,11 @@ def classify_space(+char: Char, hit: Bool) -> LexerChar:
     case False{}:
       classify_quote(char, Char.is_eq(char, '"'))
 
+# Handle classify in the interactive command lexer.
 def classify(+char: Char) -> LexerChar:
   classify_space(char, Char.is_space(char))
 
+# Classify input for the interactive command lexer.
 def classify_input(input: String) -> LexerChar:
   match input:
     case SNil{}:
@@ -63,9 +73,11 @@ def classify_input(input: String) -> LexerChar:
     case SCon{head, _}:
       classify(head)
 
+# Finish ish for the interactive command lexer.
 def finish(tokens_rev: List<&2, String>) -> LexerResult:
   LexSuccess{List.reverse(&2, String, tokens_rev)}
 
+# Handle scan in the interactive command lexer.
 def scan(
   input: String,
   mode: LexerMode,
@@ -143,5 +155,6 @@ def scan(
             case LexLiteral{_}:
               LexError{"invalid escape sequence"}
 
+# Tokenize ize for the interactive command lexer.
 def tokenize(+input: String) -> LexerResult:
   scan(input, LexBetween{}, classify_input(input), "", Nil{})

@@ -11,6 +11,7 @@ import ./SortedRun.bend as SortedRun
 # so the key survives the keep/drop decision with no clone primitive.
 # Order of defs is load-bearing (Bend 2: only backward references).
 
+# Scan put2 for the sorted merge iterator.
 def scan_put2(pair: (String & String) & Cmp, +val: String, acc: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
   match pair:
     case ((k3, _), c):
@@ -22,7 +23,13 @@ def scan_put2(pair: (String & String) & Cmp, +val: String, acc: List<&2, MemTabl
         case GT{}:
           acc
 
-def scan_put(pair: (String & String) & Cmp, +hi: String, +val: String, acc: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
+# Scan put for the sorted merge iterator.
+def scan_put(
+  pair: (String & String) & Cmp,
+  +hi: String,
+  +val: String,
+  acc: List<&2, MemTable.Entry>
+) -> List<&2, MemTable.Entry>:
   match pair:
     case ((k2, _), c):
       match c:
@@ -33,7 +40,14 @@ def scan_put(pair: (String & String) & Cmp, +hi: String, +val: String, acc: List
         case GT{}:
           scan_put2(String.cmp(k2, hi), val, acc)
 
-def scan_go(fuel: Nat, +lo: String, +hi: String, acc: List<&2, MemTable.Entry>, xs: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
+# Scan go for the sorted merge iterator.
+def scan_go(
+  fuel: Nat,
+  +lo: String,
+  +hi: String,
+  acc: List<&2, MemTable.Entry>,
+  xs: List<&2, MemTable.Entry>
+) -> List<&2, MemTable.Entry>:
   match fuel:
     case 0n:
       List.reverse(&2, MemTable.Entry, acc)

@@ -16,21 +16,6 @@
         }
       }
     },
-    "bend-kit-encoding": {
-      "release": "0.3.0.0",
-      "hash": "0xcfc8be7b076f41f95c8e118383892d55",
-      "source_commit": "b45b784763fc039598a26ddb7d480476e1254b7b",
-      "dependencies": {
-        "bend-kit-bytes@0.3.0.0": {
-          "hash": "0x49814d83de8f70993a43e1002be29ecd",
-          "source_commit": "c58aaa1dd3055d6397db2adfed5e80c519d5147d",
-          "reason": "Encoding returns this release's nominal Bytes type; MyLSM must adapt its {len, buf} representation to bend-kit-bytes@0.3.2.0 at the UTF-8 boundary."
-        }
-      },
-      "limitations": [
-        "utf8.decode follows WHATWG replacement semantics and is not suitable for strict storage decoding; validate UTF-8 before calling it."
-      ]
-    },
     "bend-kit-files": {
       "release": "0.1.1.0",
       "hash": "0x6c54b2522c2258baf6f58d2b970c3902",

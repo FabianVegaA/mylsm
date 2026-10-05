@@ -1,7 +1,7 @@
 # MyLSM Hub Facade (importable pure core) — Design Spec
 
 **Date:** 2026-09-22
-**Status:** Draft, pending human review
+**Status:** Superseded for 0.4.0.0 on 2026-10-05: the public facade includes effectful database recovery by user decision.
 **Choice:** Option C (facade `mylsm.bend`, pure-only v1) → approach C1 (single-publish amalgamation)
 **Related:** `docs/superpowers/specs/2026-09-17-lsm-bend-design.md`, `README.md`, `AGENT.md`
 

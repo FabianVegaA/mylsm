@@ -37,6 +37,12 @@ def Laws.repl_parse_import():
 def Laws.interchange_roundtrip():
   {==}
 
+def Laws.interchange_rejects_version_one():
+  {==}
+
+def Laws.interchange_uses_version_two():
+  {==}
+
 def Laws.repl_restart_zero_rejected():
   {==}
 

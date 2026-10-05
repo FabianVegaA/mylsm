@@ -2,6 +2,7 @@ import Base
 import ../src/MemTable.bend as MemTable
 import ../src/Sstable.bend as Sstable
 
+# Handle sst e1 in the Bloom filter safety laws.
 def sst_e1() -> List<&2, MemTable.Entry>:
   Con{MemTable.Entry{"b", Some{"2"}}, Con{MemTable.Entry{"a", Some{"1"}}, Nil{}}}
 

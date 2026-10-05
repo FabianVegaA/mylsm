@@ -47,7 +47,9 @@ if [[ -e "$DATA_DIR" ]]; then
   rm -rf -- "$DATA_DIR"
 fi
 
-read -r DISK_TOTAL DISK_AVAILABLE < <(df -Pk "$DATA_PARENT" | awk 'NR == 2 { print $2, $4 }')
+DISK_INFO=$(df -Pk "$DATA_PARENT" | awk 'NR == 2 { print $2, $4 }')
+DISK_TOTAL=${DISK_INFO%% *}
+DISK_AVAILABLE=${DISK_INFO##* }
 if [[ -z ${DISK_TOTAL:-} || -z ${DISK_AVAILABLE:-} || "$DISK_TOTAL" == 0 ]]; then
   echo "unable to determine free disk for $DATA_PARENT" >&2
   exit 2
@@ -98,7 +100,7 @@ if [[ $(uname -s) == Darwin && -z ${CC:-} ]]; then
 fi
 
 mkdir -p "$BUILD_DIR"
-exec > >(tee "$RESULT") 2>&1
+exec >"$RESULT" 2>&1
 COMMIT=$(git -C "$ROOT" rev-parse HEAD)
 if [[ -n $(git -C "$ROOT" --no-optional-locks status --short) ]]; then DIRTY=true; else DIRTY=false; fi
 

@@ -3,6 +3,7 @@ import Base
 # Canonical bounded decimal support for compact storage formats.
 # The scanner consumes one character per recursive step and never splits input.
 
+# Represent Error data used by the decimal integer conversion.
 type Error is Data:
   Empty{}
   LeadingZero{}
@@ -10,28 +11,35 @@ type Error is Data:
   Overflow{}
   MissingDelimiter{}
 
+# Represent Stop data used by the decimal integer conversion.
 type Stop is Data:
   Delimited{delimiter: Char}
   Complete{}
 
+# Represent Parsed data used by the decimal integer conversion.
 type Parsed is Data:
   Dec{value: Nat, rest: String}
 
+# Represent Parse data used by the decimal integer conversion.
 type Parse is Data:
   Rejected{error: Error}
   Accepted{parsed: Parsed}
 
+# Represent Scan data used by the decimal integer conversion.
 type Scan is Data:
   Reading{value: Nat, started: Bool, leading_zero: Bool}
   Finished{value: Nat}
   Failed{error: Error}
 
+# Handle render in the decimal integer conversion.
 def render(num: Nat) -> String:
   Nat.show(num)
 
+# Check whether digit code holds for the decimal integer conversion.
 def is_digit_code(+code: U32) -> Bool:
   Bool.and(U32.is_le(48, code), U32.is_le(code, 57))
 
+# Handle digit dec in the decimal integer conversion.
 def digit_dec(ok: Bool, code: U32) -> Maybe<&2, Nat>:
   match ok:
     case False{}:
@@ -39,10 +47,12 @@ def digit_dec(ok: Bool, code: U32) -> Maybe<&2, Nat>:
     case True{}:
       Some{U32.to_nat(U32.sub(code, 48))}
 
+# Handle digit of in the decimal integer conversion.
 def digit_of(ch: Char) -> Maybe<&2, Nat>:
   +code = Char.to_u32(ch)
   digit_dec(is_digit_code(code), code)
 
+# Handle within digit limit in the decimal integer conversion.
 def within_digit_limit(digit_ok: Bool, acc: Nat, digit: Nat, limit: Nat) -> Bool:
   match digit_ok:
     case False{}:
@@ -50,9 +60,11 @@ def within_digit_limit(digit_ok: Bool, acc: Nat, digit: Nat, limit: Nat) -> Bool
     case True{}:
       Nat.is_le(acc, Nat.div(Nat.sub(limit, digit), 10n))
 
+# Handle can accumulate in the decimal integer conversion.
 def can_accumulate(acc: Nat, +digit: Nat, +limit: Nat) -> Bool:
   within_digit_limit(Nat.is_le(digit, limit), acc, digit, limit)
 
+# Handle accumulated in the decimal integer conversion.
 def accumulated(ok: Bool, acc: Nat, digit: Nat, leading_zero: Bool) -> Scan:
   match ok:
     case False{}:
@@ -60,6 +72,7 @@ def accumulated(ok: Bool, acc: Nat, digit: Nat, leading_zero: Bool) -> Scan:
     case True{}:
       Reading{Nat.add(Nat.mul(acc, 10n), digit), True{}, leading_zero}
 
+# Return the next digit zero in the decimal integer conversion.
 def next_digit_zero(started: Bool, leading_zero: Bool, +acc: Nat, +digit: Nat, limit: Nat) -> Scan:
   match started:
     case False{}:
@@ -71,6 +84,7 @@ def next_digit_zero(started: Bool, leading_zero: Bool, +acc: Nat, +digit: Nat, l
         case False{}:
           accumulated(can_accumulate(acc, digit, limit), acc, digit, False{})
 
+# Return the next digit nonzero in the decimal integer conversion.
 def next_digit_nonzero(leading_zero: Bool, +acc: Nat, +digit: Nat, limit: Nat) -> Scan:
   match leading_zero:
     case True{}:
@@ -78,6 +92,7 @@ def next_digit_nonzero(leading_zero: Bool, +acc: Nat, +digit: Nat, limit: Nat) -
     case False{}:
       accumulated(can_accumulate(acc, digit, limit), acc, digit, False{})
 
+# Return the next digit value in the decimal integer conversion.
 def next_digit_value(+digit: Nat, started: Bool, leading_zero: Bool, acc: Nat, limit: Nat) -> Scan:
   match digit:
     case 0n:
@@ -85,6 +100,7 @@ def next_digit_value(+digit: Nat, started: Bool, leading_zero: Bool, acc: Nat, l
     case 1n+p:
       next_digit_nonzero(leading_zero, acc, 1n+p, limit)
 
+# Return the next digit in the decimal integer conversion.
 def next_digit(+digit: Maybe<&2, Nat>, started: Bool, leading_zero: Bool, acc: Nat, limit: Nat) -> Scan:
   match digit:
     case None{}:
@@ -92,6 +108,7 @@ def next_digit(+digit: Maybe<&2, Nat>, started: Bool, leading_zero: Bool, acc: N
     case Some{d}:
       next_digit_value(d, started, leading_zero, acc, limit)
 
+# Finish field for the decimal integer conversion.
 def finish_field(started: Bool, acc: Nat) -> Scan:
   match started:
     case False{}:
@@ -99,6 +116,7 @@ def finish_field(started: Bool, acc: Nat) -> Scan:
     case True{}:
       Finished{acc}
 
+# Handle delimited step in the decimal integer conversion.
 def delimited_step(is_delimiter: Bool, ch: Char, acc: Nat, started: Bool, leading_zero: Bool, limit: Nat) -> Scan:
   match is_delimiter:
     case True{}:
@@ -106,6 +124,7 @@ def delimited_step(is_delimiter: Bool, ch: Char, acc: Nat, started: Bool, leadin
     case False{}:
       next_digit(digit_of(ch), started, leading_zero, acc, limit)
 
+# Scan step for the decimal integer conversion.
 def scan_step(+ch: Char, st: Scan, limit: Nat, stop: Stop) -> Scan:
   match st:
     case Finished{value}:
@@ -119,6 +138,7 @@ def scan_step(+ch: Char, st: Scan, limit: Nat, stop: Stop) -> Scan:
         case Delimited{delimiter}:
           delimited_step(Char.is_eq(ch, delimiter), ch, value, started, leading_zero, limit)
 
+# Handle complete end in the decimal integer conversion.
 def complete_end(started: Bool, value: Nat, rest: String) -> Parse:
   match started:
     case False{}:
@@ -126,6 +146,7 @@ def complete_end(started: Bool, value: Nat, rest: String) -> Parse:
     case True{}:
       Accepted{Dec{value, rest}}
 
+# Scan end for the decimal integer conversion.
 def scan_end(st: Scan, rest: String, stop: Stop) -> Parse:
   match st:
     case Finished{value}:
@@ -139,6 +160,7 @@ def scan_end(st: Scan, rest: String, stop: Stop) -> Parse:
         case Complete{}:
           complete_end(started, value, rest)
 
+# Handle scan in the decimal integer conversion.
 def scan(rest: String, st: Scan, +limit: Nat, +stop: Stop) -> Parse:
   match rest st:
     case _ Finished{value}:
@@ -150,28 +172,35 @@ def scan(rest: String, st: Scan, +limit: Nat, +stop: Stop) -> Parse:
     case SCon{c, t} Reading{value, started, leading_zero}:
       scan(t, scan_step(c, Reading{value, started, leading_zero}, limit, stop), limit, stop)
 
+# Parse with stop for the decimal integer conversion.
 def parse_with_stop(str: String, limit: Nat, stop: Stop) -> Parse:
   scan(str, Reading{0n, False{}, False{}}, limit, stop)
 
+# Parse delimited for the decimal integer conversion.
 def parse_delimited(str: String, limit: Nat, delimiter: Char) -> Parse:
   parse_with_stop(str, limit, Delimited{delimiter})
 
+# Parse semicolon for the decimal integer conversion.
 def parse_semicolon(str: String, limit: Nat) -> Parse:
   parse_delimited(str, limit, ';')
 
+# Parse complete for the decimal integer conversion.
 def parse_complete(str: String, limit: Nat) -> Parse:
   parse_with_stop(str, limit, Complete{})
 
+# Parse d value for the decimal integer conversion.
 def parsed_value(parsed: Parsed) -> Nat:
   match parsed:
     case Dec{value, rest}:
       value
 
+# Parse d rest for the decimal integer conversion.
 def parsed_rest(parsed: Parsed) -> String:
   match parsed:
     case Dec{value, rest}:
       rest
 
+# Check whether accepted holds for the decimal integer conversion.
 def is_accepted(outcome: Parse) -> Bool:
   match outcome:
     case Rejected{error}:

@@ -3,7 +3,7 @@
 import Base
 import ./core.bend as Core
 import ./state.bend as S
-import 0x185ae03c75e3e75be1171471f68b43cb/bytes.bend as Packed
+import bend-kit-bytes@0.3.2.0/bytes.bend as Packed
 
 # The core refinement theorem quantifies over every constant table.
 # Instantiate the verified core with the FIPS 180-4 constants.

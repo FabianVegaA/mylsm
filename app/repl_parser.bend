@@ -6,6 +6,7 @@ import ./repl_lexer.bend as Lexer
 def parse_nat_token(str: String) -> Maybe<&2, Nat>:
   Nat.read(str)
 
+# Parse put key for the interactive command parser.
 def parse_put_key(key: String, value: String, empty: Bool) -> Repl.Command:
   match empty:
     case True{}:
@@ -13,6 +14,7 @@ def parse_put_key(key: String, value: String, empty: Bool) -> Repl.Command:
     case False{}:
       Repl.Put{key, value}
 
+# Parse put for the interactive command parser.
 def parse_put(tokens: List<&2, String>) -> Repl.Command:
   match tokens:
     case Con{+key, Con{value, Nil{}}}:
@@ -20,6 +22,7 @@ def parse_put(tokens: List<&2, String>) -> Repl.Command:
     case _:
       Repl.Invalid{"usage: put <key> <value>"}
 
+# Parse get key for the interactive command parser.
 def parse_get_key(key: String, empty: Bool) -> Repl.Command:
   match empty:
     case True{}:
@@ -27,6 +30,7 @@ def parse_get_key(key: String, empty: Bool) -> Repl.Command:
     case False{}:
       Repl.Get{key}
 
+# Parse get for the interactive command parser.
 def parse_get(tokens: List<&2, String>) -> Repl.Command:
   match tokens:
     case Con{+key, Nil{}}:
@@ -34,6 +38,7 @@ def parse_get(tokens: List<&2, String>) -> Repl.Command:
     case _:
       Repl.Invalid{"usage: get <key>"}
 
+# Parse del key for the interactive command parser.
 def parse_del_key(key: String, empty: Bool) -> Repl.Command:
   match empty:
     case True{}:
@@ -41,6 +46,7 @@ def parse_del_key(key: String, empty: Bool) -> Repl.Command:
     case False{}:
       Repl.Del{key}
 
+# Parse del for the interactive command parser.
 def parse_del(tokens: List<&2, String>) -> Repl.Command:
   match tokens:
     case Con{+key, Nil{}}:
@@ -48,6 +54,7 @@ def parse_del(tokens: List<&2, String>) -> Repl.Command:
     case _:
       Repl.Invalid{"usage: del <key>"}
 
+# Parse scan bounds for the interactive command parser.
 def parse_scan_bounds(lo: String, hi: String, lo_empty: Bool, hi_empty: Bool) -> Repl.Command:
   match lo_empty hi_empty:
     case False{} False{}:
@@ -55,6 +62,7 @@ def parse_scan_bounds(lo: String, hi: String, lo_empty: Bool, hi_empty: Bool) ->
     case _ _:
       Repl.Invalid{"usage: scan <lo> <hi>"}
 
+# Parse scan for the interactive command parser.
 def parse_scan(tokens: List<&2, String>) -> Repl.Command:
   match tokens:
     case Con{+lo, Con{+hi, Nil{}}}:
@@ -62,6 +70,7 @@ def parse_scan(tokens: List<&2, String>) -> Repl.Command:
     case _:
       Repl.Invalid{"usage: scan <lo> <hi>"}
 
+# Parse no args for the interactive command parser.
 def parse_no_args(tokens: List<&2, String>, command: Repl.Command, usage: String) -> Repl.Command:
   match tokens:
     case Nil{}:
@@ -69,6 +78,7 @@ def parse_no_args(tokens: List<&2, String>, command: Repl.Command, usage: String
     case Con{_, _}:
       Repl.Invalid{usage}
 
+# Parse timing once for the interactive command parser.
 def parse_timing_once(once: Bool) -> Repl.Command:
   match once:
     case True{}:
@@ -76,6 +86,7 @@ def parse_timing_once(once: Bool) -> Repl.Command:
     case False{}:
       Repl.Invalid{"usage: timing <on|off|once>"}
 
+# Parse timing off for the interactive command parser.
 def parse_timing_off(+mode: String, off: Bool) -> Repl.Command:
   match off:
     case True{}:
@@ -83,6 +94,7 @@ def parse_timing_off(+mode: String, off: Bool) -> Repl.Command:
     case False{}:
       parse_timing_once(String.eq(mode, "once"))
 
+# Parse timing on for the interactive command parser.
 def parse_timing_on(+mode: String, on: Bool) -> Repl.Command:
   match on:
     case True{}:
@@ -90,6 +102,7 @@ def parse_timing_on(+mode: String, on: Bool) -> Repl.Command:
     case False{}:
       parse_timing_off(mode, String.eq(mode, "off"))
 
+# Parse timing for the interactive command parser.
 def parse_timing(tokens: List<&2, String>) -> Repl.Command:
   match tokens:
     case Con{+mode, Nil{}}:
@@ -97,6 +110,7 @@ def parse_timing(tokens: List<&2, String>) -> Repl.Command:
     case _:
       Repl.Invalid{"usage: timing <on|off|once>"}
 
+# Parse mode auto for the interactive command parser.
 def parse_mode_auto(auto: Bool) -> Repl.Command:
   match auto:
     case True{}:
@@ -104,6 +118,7 @@ def parse_mode_auto(auto: Bool) -> Repl.Command:
     case False{}:
       Repl.Invalid{"usage: mode <cpu|gpu|auto>"}
 
+# Parse mode gpu for the interactive command parser.
 def parse_mode_gpu(+mode: String, gpu: Bool) -> Repl.Command:
   match gpu:
     case True{}:
@@ -111,6 +126,7 @@ def parse_mode_gpu(+mode: String, gpu: Bool) -> Repl.Command:
     case False{}:
       parse_mode_auto(String.eq(mode, "auto"))
 
+# Parse mode cpu for the interactive command parser.
 def parse_mode_cpu(+mode: String, cpu: Bool) -> Repl.Command:
   match cpu:
     case True{}:
@@ -118,6 +134,7 @@ def parse_mode_cpu(+mode: String, cpu: Bool) -> Repl.Command:
     case False{}:
       parse_mode_gpu(mode, String.eq(mode, "gpu"))
 
+# Parse mode for the interactive command parser.
 def parse_mode(tokens: List<&2, String>) -> Repl.Command:
   match tokens:
     case Con{+mode, Nil{}}:
@@ -125,6 +142,7 @@ def parse_mode(tokens: List<&2, String>) -> Repl.Command:
     case _:
       Repl.Invalid{"usage: mode <cpu|gpu|auto>"}
 
+# Parse threads nat for the interactive command parser.
 def parse_threads_nat(parsed: Maybe<&2, Nat>) -> Repl.Command:
   match parsed:
     case None{}:
@@ -132,6 +150,7 @@ def parse_threads_nat(parsed: Maybe<&2, Nat>) -> Repl.Command:
     case Some{count}:
       Repl.Threads{count}
 
+# Parse threads for the interactive command parser.
 def parse_threads(tokens: List<&2, String>) -> Repl.Command:
   match tokens:
     case Con{count, Nil{}}:
@@ -139,6 +158,7 @@ def parse_threads(tokens: List<&2, String>) -> Repl.Command:
     case _:
       Repl.Invalid{"usage: threads <n>"}
 
+# Parse compute nat for the interactive command parser.
 def parse_compute_nat(parsed: Maybe<&2, Nat>) -> Repl.Command:
   match parsed:
     case None{}:
@@ -146,6 +166,7 @@ def parse_compute_nat(parsed: Maybe<&2, Nat>) -> Repl.Command:
     case Some{fuel}:
       Repl.Compute{fuel}
 
+# Parse compute for the interactive command parser.
 def parse_compute(tokens: List<&2, String>) -> Repl.Command:
   match tokens:
     case Con{fuel, Nil{}}:
@@ -153,6 +174,7 @@ def parse_compute(tokens: List<&2, String>) -> Repl.Command:
     case _:
       Repl.Invalid{"usage: compute <fuel>"}
 
+# Parse path for the interactive command parser.
 def parse_path(tokens: List<&2, String>, importing: Bool) -> Repl.Command:
   match tokens importing:
     case Con{path, Nil{}} True{}:
@@ -164,6 +186,7 @@ def parse_path(tokens: List<&2, String>, importing: Bool) -> Repl.Command:
     case _ False{}:
       Repl.Invalid{"usage: export <path>"}
 
+# Parse time one for the interactive command parser.
 def parse_time_one(inner: String) -> Repl.Command:
   match inner:
     case SNil{}:
@@ -171,6 +194,7 @@ def parse_time_one(inner: String) -> Repl.Command:
     case SCon{h, t}:
       Repl.Time{SCon{h, t}}
 
+# Parse time for the interactive command parser.
 def parse_time(tokens: List<&2, String>) -> Repl.Command:
   match tokens:
     case Nil{}:
@@ -188,6 +212,7 @@ def dispatch_exit(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Co
     case False{}:
       Repl.Invalid{"unknown command: " ++ cmd}
 
+# Dispatch help for the interactive command parser.
 def dispatch_help(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
   match hit:
     case True{}:
@@ -195,6 +220,7 @@ def dispatch_help(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Co
     case False{}:
       dispatch_exit(String.eq(cmd, "exit"), cmd, tokens)
 
+# Dispatch time for the interactive command parser.
 def dispatch_time(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
   match hit:
     case True{}:
@@ -202,6 +228,7 @@ def dispatch_time(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Co
     case False{}:
       dispatch_help(String.eq(cmd, "help"), cmd, tokens)
 
+# Dispatch export for the interactive command parser.
 def dispatch_export(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
   match hit:
     case True{}:
@@ -209,6 +236,7 @@ def dispatch_export(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.
     case False{}:
       dispatch_time(String.eq(cmd, "time"), cmd, tokens)
 
+# Dispatch import for the interactive command parser.
 def dispatch_import(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
   match hit:
     case True{}:
@@ -216,6 +244,7 @@ def dispatch_import(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.
     case False{}:
       dispatch_export(String.eq(cmd, "export"), cmd, tokens)
 
+# Dispatch compute for the interactive command parser.
 def dispatch_compute(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
   match hit:
     case True{}:
@@ -223,6 +252,7 @@ def dispatch_compute(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl
     case False{}:
       dispatch_import(String.eq(cmd, "import"), cmd, tokens)
 
+# Dispatch threads for the interactive command parser.
 def dispatch_threads(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
   match hit:
     case True{}:
@@ -230,6 +260,7 @@ def dispatch_threads(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl
     case False{}:
       dispatch_compute(String.eq(cmd, "compute"), cmd, tokens)
 
+# Dispatch mode for the interactive command parser.
 def dispatch_mode(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
   match hit:
     case True{}:
@@ -237,6 +268,7 @@ def dispatch_mode(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Co
     case False{}:
       dispatch_threads(String.eq(cmd, "threads"), cmd, tokens)
 
+# Dispatch timing for the interactive command parser.
 def dispatch_timing(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
   match hit:
     case True{}:
@@ -244,6 +276,7 @@ def dispatch_timing(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.
     case False{}:
       dispatch_mode(String.eq(cmd, "mode"), cmd, tokens)
 
+# Dispatch runtime for the interactive command parser.
 def dispatch_runtime(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
   match hit:
     case True{}:
@@ -251,6 +284,7 @@ def dispatch_runtime(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl
     case False{}:
       dispatch_timing(String.eq(cmd, "timing"), cmd, tokens)
 
+# Dispatch stats for the interactive command parser.
 def dispatch_stats(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
   match hit:
     case True{}:
@@ -258,6 +292,7 @@ def dispatch_stats(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.C
     case False{}:
       dispatch_runtime(String.eq(cmd, "runtime"), cmd, tokens)
 
+# Dispatch maintain for the interactive command parser.
 def dispatch_maintain(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
   match hit:
     case True{}:
@@ -265,6 +300,7 @@ def dispatch_maintain(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Rep
     case False{}:
       dispatch_stats(String.eq(cmd, "stats"), cmd, tokens)
 
+# Dispatch compact for the interactive command parser.
 def dispatch_compact(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
   match hit:
     case True{}:
@@ -272,6 +308,7 @@ def dispatch_compact(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl
     case False{}:
       dispatch_maintain(String.eq(cmd, "maintain"), cmd, tokens)
 
+# Dispatch flush for the interactive command parser.
 def dispatch_flush(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
   match hit:
     case True{}:
@@ -279,6 +316,7 @@ def dispatch_flush(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.C
     case False{}:
       dispatch_compact(String.eq(cmd, "compact"), cmd, tokens)
 
+# Dispatch scan for the interactive command parser.
 def dispatch_scan(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
   match hit:
     case True{}:
@@ -286,6 +324,7 @@ def dispatch_scan(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Co
     case False{}:
       dispatch_flush(String.eq(cmd, "flush"), cmd, tokens)
 
+# Dispatch del for the interactive command parser.
 def dispatch_del(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
   match hit:
     case True{}:
@@ -293,6 +332,7 @@ def dispatch_del(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Com
     case False{}:
       dispatch_scan(String.eq(cmd, "scan"), cmd, tokens)
 
+# Dispatch get for the interactive command parser.
 def dispatch_get(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
   match hit:
     case True{}:
@@ -300,6 +340,7 @@ def dispatch_get(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Com
     case False{}:
       dispatch_del(String.eq(cmd, "del"), cmd, tokens)
 
+# Dispatch put for the interactive command parser.
 def dispatch_put(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
   match hit:
     case True{}:
@@ -307,9 +348,11 @@ def dispatch_put(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Com
     case False{}:
       dispatch_get(String.eq(cmd, "get"), cmd, tokens)
 
+# Parse head for the interactive command parser.
 def parse_head(+cmd: String, tokens: List<&2, String>) -> Repl.Command:
   dispatch_put(String.eq(cmd, "put"), cmd, tokens)
 
+# Parse tokens for the interactive command parser.
 def parse_tokens(tokens: List<&2, String>) -> Repl.Command:
   match tokens:
     case Nil{}:
@@ -319,6 +362,7 @@ def parse_tokens(tokens: List<&2, String>) -> Repl.Command:
     case Con{cmd, rest}:
       parse_head(cmd, rest)
 
+# Parse lexed for the interactive command parser.
 def parse_lexed(result: Lexer.LexerResult) -> Repl.Command:
   match result:
     case Lexer.LexSuccess{tokens}:
@@ -326,5 +370,6 @@ def parse_lexed(result: Lexer.LexerResult) -> Repl.Command:
     case Lexer.LexError{message}:
       Repl.Invalid{message}
 
+# Parse command for the interactive command parser.
 def parse_command(line: String) -> Repl.Command:
   parse_lexed(Lexer.tokenize(line))

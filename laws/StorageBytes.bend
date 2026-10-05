@@ -1,9 +1,7 @@
 import Base
 import ../src/StorageBytes.bend as StorageBytes
-import 0x185ae03c75e3e75be1171471f68b43cb/bytes.bend as Bytes
-import 0x49814d83de8f70993a43e1002be29ecd/bytes.bend as Bytes030
+import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 import ../src/hub_sha/sha256.bend as SHA
-import ../src/SstChecksum.bend as SstChecksum
 
 # Unwrap a known-valid closed fixture for the following codec laws.
 def packed_text.fin(result: Result<&1, &1, U32 & String, Bytes.Bytes>) -> Bytes.Bytes:
@@ -20,6 +18,10 @@ def packed_text(text: String) -> Bytes.Bytes:
 # Construct the UTF-8 encoding of a forbidden surrogate scalar.
 def invalid_surrogate() -> Bytes.Bytes:
   Bytes.Bytes{3, Bytes.poke(Bytes.poke(Bytes.poke(Bytes.alloc(3), 0, 237), 1, 160), 2, 128)}
+
+# Construct one isolated continuation octet.
+def invalid_continuation() -> Bytes.Bytes:
+  Bytes.Bytes{1, Bytes.poke(Bytes.alloc(1), 0, 128)}
 
 # Construct a truncated four-byte UTF-8 sequence.
 def invalid_truncated() -> Bytes.Bytes:
@@ -85,9 +87,21 @@ law cursor_u32be_roundtrip:
 law utf8_ascii_roundtrip:
   {StorageBytes.to_string_strict(packed_text("hello")) == Done{"hello"} : Result<&1, &1, U32 & String, String>}
 
+# Storage encoder emits the UTF-8 ASCII bytes exactly.
+law utf8_ascii_bytes:
+  {Bytes.to_hex(packed_text("hello")) == "68656c6c6f" : String}
+
 # A two-byte UTF-8 scalar survives the storage boundary.
 law utf8_multibyte_roundtrip:
   {StorageBytes.to_string_strict(packed_text("é")) == Done{"é"} : Result<&1, &1, U32 & String, String>}
+
+# Storage encoder emits a two-byte scalar exactly.
+law utf8_two_byte_bytes:
+  {Bytes.to_hex(packed_text("é")) == "c3a9" : String}
+
+# Storage encoder emits a three-byte scalar exactly.
+law utf8_three_byte_bytes:
+  {Bytes.to_hex(packed_text("€")) == "e282ac" : String}
 
 # The decoder completes one legal two-byte scalar.
 law utf8_two_byte_step:
@@ -97,9 +111,13 @@ law utf8_two_byte_step:
 law utf8_four_byte_roundtrip:
   {StorageBytes.to_string_strict(packed_text("😀")) == Done{"😀"} : Result<&1, &1, U32 & String, String>}
 
+# Storage encoder emits a supplementary scalar exactly.
+law utf8_four_byte_bytes:
+  {Bytes.to_hex(packed_text("😀")) == "f09f9880" : String}
+
 # An isolated continuation byte is rejected.
 law utf8_invalid_continuation_reject:
-  {StorageBytes.to_string_strict(StorageBytes.bytes030_to_current(Bytes030.Bytes{1, Bytes030.poke(Bytes030.alloc(1), 0, 128)})) == Fail{(1, "invalid UTF-8")} : Result<&1, &1, U32 & String, String>}
+  {StorageBytes.to_string_strict(invalid_continuation()) == Fail{(1, "invalid UTF-8")} : Result<&1, &1, U32 & String, String>}
 
 # UTF-8 encodings of surrogate codepoints are rejected.
 law utf8_surrogate_reject:
@@ -116,10 +134,6 @@ law sha256_packed_empty:
 # The packed SHA path agrees with the existing reference at the abc vector.
 law sha256_packed_abc:
   {String.eq(SHA.hex(SHA.sha256_packed(Bytes.from_string("abc"))), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad") == True{} : Bool}
-
-# The storage checksum exposes packed digest bytes in network byte order.
-law sha256_packed_digest_bytes:
-  {String.eq(Bytes.to_hex(SstChecksum.digest_bytes(Bytes.from_string("abc"))), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad") == True{} : Bool}
 
 # Binary octets retain their high bits and are hashed exactly.
 law sha256_packed_binary_octets:

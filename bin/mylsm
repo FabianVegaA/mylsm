@@ -37,10 +37,20 @@ USAGE
 
 logical_cpus() {
   if command -v sysctl >/dev/null 2>&1; then
-    sysctl -n hw.logicalcpu 2>/dev/null || true
-  elif command -v nproc >/dev/null 2>&1; then
-    nproc 2>/dev/null || true
+    count=$(sysctl -n hw.logicalcpu 2>/dev/null || true)
+    case "$count" in
+      ''|*[!0-9]*) ;;
+      *) printf '%s\n' "$count"; return 0 ;;
+    esac
   fi
+  if command -v nproc >/dev/null 2>&1; then
+    count=$(nproc 2>/dev/null || true)
+    case "$count" in
+      ''|*[!0-9]*) ;;
+      *) printf '%s\n' "$count"; return 0 ;;
+    esac
+  fi
+  printf '1\n'
 }
 
 threads() {

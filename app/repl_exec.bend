@@ -18,29 +18,35 @@ import ./repl_types.bend as Repl
 import ./repl_parser.bend as Parser
 import ./repl_policy.bend as Policy
 
+# Represent Session data used by the interactive command execution.
 type Session is Data:
   Session{db: Db.Db, dir: String, timing: Repl.TimingMode, mode: Repl.ComputeMode, gpu: Bool, workers: Nat, staged: List<&2, Wal.Batch>}
 
+# Represent LoopState data used by the interactive command execution.
 type LoopState is Data:
   Running{session: Session}
   Stopped{}
 
+# Handle the mode for name for the interactive command execution.
 def mode_name(mode: Repl.ComputeMode) -> String:
   match mode:
     case Repl.Cpu{}: "cpu"
     case Repl.Gpu{}: "gpu"
     case Repl.Auto{}: "auto"
 
+# Evaluate name for the interactive command execution.
 def bool_name(value: Bool) -> String:
   match value:
     case True{}: "yes"
     case False{}: "no"
 
+# Handle the entry line for the interactive command execution.
 def entry_line(entry: MemTable.Entry) -> String:
   match entry:
     case MemTable.Entry{key, val}:
       key ++ "=" ++ Demo.show_maybe(val)
 
+# Print entries for the interactive command execution.
 def print_entries(es: List<&2, MemTable.Entry>) -> IO(Unit):
   match es:
     case Nil{}:
@@ -50,11 +56,13 @@ def print_entries(es: List<&2, MemTable.Entry>) -> IO(Unit):
         _u : Unit <- IO.print(entry_line(h))
         print_entries(t)
 
+# Return the memory count for the interactive command execution.
 def mem_count(db: Db.Db) -> Nat:
   match db:
     case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
       MemTable.count(mem)
 
+# Return the level count for the interactive command execution.
 def level_count(db: Db.Db) -> Nat:
   match db:
     case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
@@ -67,16 +75,19 @@ def stored_mem_count(db: Db.Db) -> Nat:
     case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mc, fc}:
       mc
 
+# Handle stored frozen count in the interactive command execution.
 def stored_frozen_count(db: Db.Db) -> Nat:
   match db:
     case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mc, fc}:
       fc
 
+# Handle bcache len in the interactive command execution.
 def bcache_len(db: Db.Db) -> Nat:
   match db:
     case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mc, fc}:
       List.length(&2, Db.BEntry, bcache)
 
+# Open tables go for the interactive command execution.
 def open_tables_go(+lvls: List<&2, List<&2, Sstable.Table>>, acc: Nat) -> Nat:
   match lvls:
     case Nil{}:
@@ -84,11 +95,13 @@ def open_tables_go(+lvls: List<&2, List<&2, Sstable.Table>>, acc: Nat) -> Nat:
     case Con{+h, t}:
       open_tables_go(t, Nat.add(acc, List.length(&2, Sstable.Table, h)))
 
+# Open tables for the interactive command execution.
 def open_tables(db: Db.Db) -> Nat:
   match db:
     case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mc, fc}:
       open_tables_go(levels, 0n)
 
+# Compute gpu ok for the interactive command execution.
 def compute_gpu_ok(enabled: Bool, fuel: Nat) -> IO(Nat):
   match enabled:
     case True{}:
@@ -98,17 +111,20 @@ def compute_gpu_ok(enabled: Bool, fuel: Nat) -> IO(Nat):
         _u : Unit <- IO.print("error: GPU runtime is not enabled")
         return 0n
 
+# Compute auto for the interactive command execution.
 def compute_auto(enabled: Bool, fuel: Nat) -> IO(Nat):
   match enabled:
     case True{}: IO.pure(Nat, Demo.worker_gpu!(fuel, 0n))
     case False{}: IO.pure(Nat, Demo.worker(fuel, 0n))
 
+# Handle compute in the interactive command execution.
 def compute(mode: Repl.ComputeMode, enabled: Bool, fuel: Nat) -> IO(Nat):
   match mode:
     case Repl.Cpu{}: IO.pure(Nat, Demo.worker(fuel, 0n))
     case Repl.Gpu{}: compute_gpu_ok(enabled, fuel)
     case Repl.Auto{}: compute_auto(enabled, fuel)
 
+# Handle live entries in the interactive command execution.
 def live_entries(es: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
   match es:
     case Nil{}:
@@ -120,12 +136,34 @@ def live_entries(es: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
         case Some{value}:
           Con{MemTable.Entry{key, Some{value}}, live_entries(t)}
 
+# Export entries for the interactive command execution.
 def export_entries(db: Db.Db) -> List<&2, MemTable.Entry>:
   live_entries(SortedRun.sort_newest(Db.all_entries(db)))
 
+# Export result for the interactive command execution.
+def export_result(
+  +path: String,
+  result: Result<&1, &1, Wal.Error, String>,
+  session: Session
+) -> IO(LoopState):
+  match result:
+    case Fail{_}:
+      do IO<LoopState>:
+        _u : Unit <- IO.print("error: export exceeds packed frame limits")
+        return Running{session}
+    case Done{data}:
+      do IO<LoopState>:
+        _u0 : Unit <- IO.try(Unit, Flush.write_file(path ++ ".tmp", data))
+        _u1 : Unit <- IO.try(Unit, Fs.rename(path ++ ".tmp", path))
+        _u2 : Unit <- IO.try(Unit, Fs.fsync(Policy.parent_path(path)))
+        _u3 : Unit <- IO.print("OK export")
+        return Running{session}
+
+# Handle return session in the interactive command execution.
 def return_session(session: Session) -> IO(LoopState):
   IO.pure(LoopState, Running{session})
 
+# Import decoded for the interactive command execution.
 def import_decoded(decoded: Maybe<&2, List<&2, MemTable.Entry>>, session: Session) -> IO(LoopState):
   match decoded:
     case None{}:
@@ -140,6 +178,7 @@ def import_decoded(decoded: Maybe<&2, List<&2, MemTable.Entry>>, session: Sessio
             _u : Unit <- IO.print("OK import")
             return Running{Session{db2, dir, timing, mode, gpu, workers, staged}}
 
+# Replace mode for the interactive command execution.
 def replace_mode(+new_mode: Repl.ComputeMode, session: Session) -> IO(LoopState):
   match session:
     case Session{db, dir, timing, mode, gpu, workers, staged}:
@@ -147,11 +186,13 @@ def replace_mode(+new_mode: Repl.ComputeMode, session: Session) -> IO(LoopState)
         _u : Unit <- IO.print("mode=" ++ mode_name(new_mode))
         return Running{Session{db, dir, timing, new_mode, gpu, workers, staged}}
 
+# Handle GPU mode for enabled for the interactive command execution.
 def gpu_enabled(session: Session) -> Bool:
   match session:
     case Session{db, dir, timing, mode, gpu, workers, staged}:
       gpu
 
+# Update gpu mode for the interactive command execution.
 def set_gpu_mode(enabled: Bool, session: Session) -> IO(LoopState):
   match enabled:
     case False{}:
@@ -161,6 +202,7 @@ def set_gpu_mode(enabled: Bool, session: Session) -> IO(LoopState):
     case True{}:
       replace_mode(Repl.Gpu{}, session)
 
+# Update mode for the interactive command execution.
 def update_mode(new_mode: Repl.ComputeMode, +session: Session) -> IO(LoopState):
   match new_mode:
     case Repl.Gpu{}:
@@ -170,6 +212,7 @@ def update_mode(new_mode: Repl.ComputeMode, +session: Session) -> IO(LoopState):
     case Repl.Auto{}:
       replace_mode(Repl.Auto{}, session)
 
+# Restart write for the interactive command execution.
 def restart_write(valid: Bool, +count: Nat, +dir: String, session: Session) -> IO(LoopState):
   match valid:
     case False{}:
@@ -182,6 +225,7 @@ def restart_write(valid: Bool, +count: Nat, +dir: String, session: Session) -> I
         _u1 : Unit <- IO.print("restarting with threads=" ++ Nat.show(count))
         IO.die(LoopState, U32.from_nat(75n), "thread restart requested")
 
+# Restart runtime for the interactive command execution.
 def restart_runtime(native: Bool, +count: Nat, +current: Nat, +dir: String, session: Session) -> IO(LoopState):
   match native:
     case False{}:
@@ -191,10 +235,21 @@ def restart_runtime(native: Bool, +count: Nat, +current: Nat, +dir: String, sess
     case True{}:
       restart_write(Policy.restart_bounds(count, current), count, dir, session)
 
+# Restart env for the interactive command execution.
 def restart_env(runtime: String, count: Nat, current: Nat, dir: String, session: Session) -> IO(LoopState):
   restart_runtime(String.eq(runtime, "native"), count, current, dir, session)
 
-def put_flush(full: Bool, +staged: List<&2, Wal.Batch>, +db: Db.Db, +dir: String, +timing: Repl.TimingMode, +mode: Repl.ComputeMode, +gpu: Bool, +workers: Nat) -> IO(LoopState):
+# Handle put flush in the interactive command execution.
+def put_flush(
+  full: Bool,
+  +staged: List<&2, Wal.Batch>,
+  +db: Db.Db,
+  +dir: String,
+  +timing: Repl.TimingMode,
+  +mode: Repl.ComputeMode,
+  +gpu: Bool,
+  +workers: Nat
+) -> IO(LoopState):
   match full:
     case True{}:
       do IO<LoopState>:
@@ -206,6 +261,7 @@ def put_flush(full: Bool, +staged: List<&2, Wal.Batch>, +db: Db.Db, +dir: String
         _u : Unit <- IO.print("QUEUED")
         return Running{Session{db, dir, timing, mode, gpu, workers, staged}}
 
+# Execute go for the interactive command execution.
 def execute_go(command: Repl.Command, session: Session) -> IO(LoopState):
   match command:
     case Repl.Noop{}:
@@ -257,7 +313,8 @@ def execute_go(command: Repl.Command, session: Session) -> IO(LoopState):
           do IO<LoopState>:
             _u0 : Unit <- IO.print("mem_entries=" ++ Nat.show(mem_count(db)))
             _u1 : Unit <- IO.print("levels=" ++ Nat.show(level_count(db)))
-            _u2 : Unit <- IO.print("mem_stored=" ++ Nat.show(stored_mem_count(db)) ++ " mem_cap=4096 frozen_stored=" ++ Nat.show(stored_frozen_count(db)) ++ " frozen_cap=4096 bcache_entries=" ++ Nat.show(bcache_len(db)) ++ " bcache_cap=256 open_tables=" ++ Nat.show(open_tables(db)))
+            _u2 : Unit <- IO.print("mem_stored=" ++ Nat.show(stored_mem_count(db)) ++ " mem_cap=4096 frozen_stored=" ++ Nat.show(stored_frozen_count(db)) ++
+            " frozen_cap=4096 bcache_entries=" ++ Nat.show(bcache_len(db)) ++ " bcache_cap=256 open_tables=" ++ Nat.show(open_tables(db)))
             return Running{Session{db, dir, timing, mode, gpu, workers, staged}}
     case Repl.Runtime{}:
       match session:
@@ -295,13 +352,8 @@ def execute_go(command: Repl.Command, session: Session) -> IO(LoopState):
         import_decoded(Interchange.parse(data), session)
     case Repl.Export{+path}:
       match session:
-        case Session{+db, dir, timing, mode, gpu, workers, staged}:
-          do IO<LoopState>:
-            _u0 : Unit <- IO.try(Unit, Flush.write_file(path ++ ".tmp", Interchange.serialize(export_entries(db))))
-            _u1 : Unit <- IO.try(Unit, Fs.rename(path ++ ".tmp", path))
-            _u2 : Unit <- IO.try(Unit, Fs.fsync(Policy.parent_path(path)))
-            _u3 : Unit <- IO.print("OK export")
-            return Running{Session{db, dir, timing, mode, gpu, workers, staged}}
+        case Session{+db, _, _, _, _, _, _}:
+          export_result(path, Interchange.serialize(export_entries(db)), session)
     case Repl.Time{inner}:
       do IO<LoopState>:
         _u : Unit <- IO.print("use 'timing once' before the command: " ++ inner)
@@ -322,7 +374,17 @@ def execute_go(command: Repl.Command, session: Session) -> IO(LoopState):
         _u : Unit <- IO.print("error: " ++ message)
         return Running{session}
 
-def execute_flushed(command: Repl.Command, +db: Db.Db, +dir: String, +timing: Repl.TimingMode, +mode: Repl.ComputeMode, +gpu: Bool, +workers: Nat, +staged: List<&2, Wal.Batch>) -> IO(LoopState):
+# Execute flushed for the interactive command execution.
+def execute_flushed(
+  command: Repl.Command,
+  +db: Db.Db,
+  +dir: String,
+  +timing: Repl.TimingMode,
+  +mode: Repl.ComputeMode,
+  +gpu: Bool,
+  +workers: Nat,
+  +staged: List<&2, Wal.Batch>
+) -> IO(LoopState):
   match staged:
     case Nil{}:
       execute_go(command, Session{db, dir, timing, mode, gpu, workers, Nil{}})
@@ -331,11 +393,13 @@ def execute_flushed(command: Repl.Command, +db: Db.Db, +dir: String, +timing: Re
         db2 : Db.Db <- IO.try(Db.Db, DbIo.db_write_staged(db, staged))
         execute_go(command, Session{db2, dir, timing, mode, gpu, workers, Nil{}})
 
+# Handle execute in the interactive command execution.
 def execute(command: Repl.Command, session: Session) -> IO(LoopState):
   match session:
     case Session{db, dir, timing, mode, gpu, workers, staged}:
       execute_flushed(command, db, dir, timing, mode, gpu, workers, staged)
 
+# Reset once state for the interactive command execution.
 def reset_once_state(once: Bool, state: LoopState) -> LoopState:
   match once state:
     case False{} _:
@@ -345,6 +409,7 @@ def reset_once_state(once: Bool, state: LoopState) -> LoopState:
     case True{} Running{Session{db, dir, timing, mode, gpu, workers, staged}}:
       Running{Session{db, dir, Repl.TimingOff{}, mode, gpu, workers, staged}}
 
+# Run the timed run for the interactive command execution.
 def timed_run(once: Bool, command: Repl.Command, session: Session) -> IO(LoopState):
   do IO<LoopState>:
     start : Nat <- IO.now()
@@ -353,16 +418,19 @@ def timed_run(once: Bool, command: Repl.Command, session: Session) -> IO(LoopSta
     _u : Unit <- IO.print("time_ms=" ++ Nat.show(Nat.sub(finish, start)))
     return reset_once_state(once, state)
 
+# Run the timed dispatch for the interactive command execution.
 def timed_dispatch(enabled: Bool, once: Bool, command: Repl.Command, session: Session) -> IO(LoopState):
   match enabled:
     case True{}: timed_run(once, command, session)
     case False{}: execute(command, session)
 
+# Run regular for the interactive command execution.
 def run_regular(command: Repl.Command, session: Session) -> IO(LoopState):
   match session:
     case Session{db, dir, +timing, mode, gpu, workers, staged}:
       timed_dispatch(Policy.timing_should(timing), Policy.timing_once(timing), command, Session{db, dir, timing, mode, gpu, workers, staged})
 
+# Run time for the interactive command execution.
 def run_time(inner: String, session: Session) -> IO(LoopState):
   timed_dispatch(True{}, False{}, Parser.parse_command(inner), session)
 

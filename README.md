@@ -9,9 +9,8 @@ recovery, and machine-checked laws for parts of the pure storage core.
 
 ## Quick start
 
-Requirements: Bend 2.0.33 or newer (the key and WAL proofs import
-bend-mathlib@0.7.0.0, which follows Base as of 2.0.33). Bend 2.0.13 was used
-for the latest SSTable v2 development and million-write validation.
+Requirements: Bend 2.0.35 or newer. The 0.4.0.0 source and proof gates are
+validated with Bend 2.0.35.
 
 ```sh
 # Inspect available CPU/GPU/native capabilities
@@ -38,8 +37,13 @@ Paste the import; the compiler fetches the package from the hub into
 `~/.bend/lib`, verifies it against its hash, and runs offline afterwards:
 
 ```bend
-import mylsm-lsm-store@0.3.2.0/mylsm.bend as MyLSM
+import mylsm-lsm-store@0.4.0.0/mylsm.bend as MyLSM
 ```
+
+`MyLSM.open(dir)` creates an empty in-memory handle. To recover a persisted
+database from that directory, call `MyLSM.open_recovering(dir)`; it returns an
+`IO(Result<&1, &1, U32 & String, Db.Db>)` and reads the Manifest, SSTables, and
+WAL through the filesystem effects.
 
 Level 1 is a session monad — no manual handle threading. Steps share one
 quantity (`&2`); `v : T <- …` binds a result, bare `sput(…)` is a Unit step,
@@ -47,7 +51,7 @@ quantity (`&2`); `v : T <- …` binds a result, bare `sput(…)` is a Unit step,
 
 ```bend
 import Base
-import mylsm-lsm-store@0.3.2.0/mylsm.bend as MyLSM
+import mylsm-lsm-store@0.4.0.0/mylsm.bend as MyLSM
 
 def show(m: Maybe<&2, String>) -> U32:
   match m:
@@ -76,7 +80,7 @@ version — this snippet proves both in one run:
 
 ```bend
 import Base
-import mylsm-lsm-store@0.3.2.0/mylsm.bend as MyLSM
+import mylsm-lsm-store@0.4.0.0/mylsm.bend as MyLSM
 
 def bit(b: Bool) -> U32:
   match b:
@@ -143,37 +147,35 @@ export CC=/usr/bin/clang
 bin/mylsm build
 ```
 
-Without a native binary, `demo`/`repl` fall back to portable, which
-currently dies opening a fresh database — so a working native build is
-effectively required.
+Without a native binary, `demo` and `repl` use Bend's portable CPU backend.
 
 ## Correctness status
 
 The modular proof suite contains witnesses for key storage transitions, codecs,
 flush, compaction, recovery, and CPU/GPU worker agreement. Run
 `./proofs/run.sh` for the bounded parallel proof gate, or target an individual
-`proofs/*Proof.bend` module while developing. The crash-injection development
-baseline passed all 34 isolated modules on Bend 2.0.24 with no failures or
+`proofs/*Proof.bend` module while developing. The current suite passes all 22
+isolated modules on Bend 2.0.35 with no failures or
 timeouts. A timeout is not a passing proof. Closed fixtures provide concrete
 executable evidence, but some general open-input properties and all host IO
 behavior still require stronger proofs or empirical validation.
 
-## Compaction performance status
+Bend 2.0.35's `--verdict` currently fails with a mismatch between its
+TypeScript implementation and the formalized BendTT kernel. The passing module
+checks therefore do not establish independent kernel validation.
 
-The current development tree uses balanced stable sorted-run merging for
-MemTable canonicalization and compaction, indexed BitTree Bloom filters, cached
-SSTable range metadata, conservative tombstone retention, and compact decimal
-table generations with legacy-name recovery. The first-compaction workload
-(20,485 durable writes) improved from a timeout beyond 30 minutes to 4.524
-seconds on the development M1, but that run had only 2% free disk and is not a
-publishable comparison. See `bench/BASELINE.md`.
+## Packed storage 0.4.0.0
 
-The SSTable v2 acceptance run completed 1,000,000 durable writes and post-restart
-first/middle/last-key verification in 1,087.20 seconds on Bend 2.0.13. Its main
-L1 table was 29,175,202 bytes versus 103,339,329 bytes for the equivalent legacy
-v1 table. MyLSM still needs block-oriented lookups, bounded multi-output
-publication and stronger general proofs before making competitive or production
-claims.
+Version 0.4.0.0 stores checksummed binary SST blocks, WAL frames, and a binary
+Manifest. Its disk format is incompatible with earlier releases. Back up and
+remove existing database directories before opening them with this version;
+there is no compatibility reader or migration tool.
+
+Five-run Darwin arm64 benchmarks passed the elapsed-time and peak-memory gates
+for 4,097 writes, 20,485 writes, 1,000,000 writes, and compaction. The 1M
+median fell from 252,254 ms to 156,931 ms, while peak RSS fell from
+2,502,393,856 to 942,784,512 bytes. The complete measurements and raw-sample
+links are in [the 0.4.0.0 benchmark report](bench/results/packed-storage-0.4.0.0.md).
 
 ## Crash recovery testing
 
@@ -229,10 +231,10 @@ Goal: survive corruption, crashes, and resource pressure predictably.
 - [x] Run 1M+ mutated inputs through WAL, Manifest, and SSTable parsers.
       (`workload/fuzz.bend`: 1,000,000 decided, 0 traps, fixed seed.)
 - [x] Test truncated files, invalid checksums, missing tables, and hostile names.
-      (`workload/fuzz_grammar.bend`: 324 directed cases on verdict.)
+      (`workload/fuzz_grammar.bend`: 708 directed cases on verdict.)
 - [x] Test disk-full and permission-denied behavior.
-      (`crash/diskfull.sh`: ramdisk suite skipped without mount privileges,
-      chmod matrix all fail-closed with healthy restore.)
+      (`crash/diskfull.sh`: ENOSPC and all four permission cases fail closed
+      and recover with acknowledged data intact.)
 - [x] Run repeated write/crash/recover cycles and compare acknowledged state.
       (200-case matrix with ack journals, zero mismatches; overnight recipe
       in `crash/soak_overnight.md`.)

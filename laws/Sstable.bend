@@ -8,6 +8,7 @@ import ../src/Db.bend as Db
 def sst_e1() -> List<&2, MemTable.Entry>:
   Con{MemTable.Entry{"b", Some{"2"}}, Con{MemTable.Entry{"a", Some{"1"}}, Nil{}}}
 
+# Handle sst e2 in the SSTable laws.
 def sst_e2() -> List<&2, MemTable.Entry>:
   Con{MemTable.Entry{"k", Some{"new"}}, Con{MemTable.Entry{"k", Some{"old"}}, Nil{}}}
 
@@ -23,8 +24,11 @@ law sst_newest:
 law sst_metadata_count:
   {Sstable.table_count(Sstable.from_sorted_unique(Con{MemTable.Entry{"a", Some{"1"}}, Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}}, 1n)) == 2n : Nat}
 
+# State the sst metadata bounds property for the SSTable laws.
 law sst_metadata_bounds:
-  {(Sstable.table_smallest(Sstable.from_sorted_unique(Con{MemTable.Entry{"a", Some{"1"}}, Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}}, 1n)), Sstable.table_largest(Sstable.from_sorted_unique(Con{MemTable.Entry{"a", Some{"1"}}, Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}}, 1n))) == (Some{"a"}, Some{"b"}) : Maybe<&2, String> & Maybe<&2, String>}
+  {(Sstable.table_smallest(Sstable.from_sorted_unique(Con{MemTable.Entry{"a", Some{"1"}}, Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}}, 1n)),
+  Sstable.table_largest(Sstable.from_sorted_unique(Con{MemTable.Entry{"a", Some{"1"}}, Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}}, 1n))) == (Some{"a"}, Some{"b"}) : Maybe<&2,
+  String> & Maybe<&2, String>}
 
 # LAW: block_get agrees with lookup on a hit (closed)
 law sstable_block_get_equiv:
@@ -42,6 +46,7 @@ law sstable_block_hit_equiv:
 law sstable_block_hit_missing:
   {Sstable.block_get_hit(Sstable.build(sst_e2(), 0n, 2n), "zzz") == None{} : Maybe<&2, Maybe<&2, String>>}
 
+# Handle blm a in the SSTable laws.
 def blm_a() -> Sstable.Bloom:
   Sstable.bloom_of(Con{MemTable.Entry{"a", Some{"1"}}, Nil{}}, Sstable.bloom_new(64n))
 

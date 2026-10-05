@@ -14,14 +14,17 @@ import 0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/math/pow2.bend as Pow2
 # indexes outside [0, words * 32) are total: test returns False{} and set is
 # the identity.
 
+# Represent WordTree data used by the packed bit-tree operations.
 type WordTree is Data:
   Empty{}
   Leaf{word: U32}
   Fork{left: WordTree, right: WordTree}
 
+# Represent BitTree data used by the packed bit-tree operations.
 type BitTree is Data:
   BT{root: WordTree, words: Nat, capacity: Nat, height: Nat}
 
+# Represent Plan data used by the packed bit-tree operations.
 type Plan is Data:
   Plan{capacity: Nat, height: Nat}
 
@@ -39,6 +42,7 @@ def plan_go(fuel: Nat, +need: Nat, +capacity: Nat, +height: Nat, done: Bool) -> 
           +next = Nat.double(capacity)
           plan_go(f, need, next, Nat.add(height, 1n), Nat.is_le(need, next))
 
+# Handle plan in the packed bit-tree operations.
 def plan(+need: Nat) -> Plan:
   match need:
     case 0n:
@@ -55,11 +59,13 @@ def zero_tree(+height: Nat) -> WordTree:
       left right = zero_tree(h) zero_tree(h)
       Fork{left, right}
 
+# Create from plan for the packed bit-tree operations.
 def new_from_plan(words: Nat, plan: Plan) -> BitTree:
   match plan:
     case Plan{capacity, +height}:
       BT{zero_tree(height), words, capacity, height}
 
+# Handle new in the packed bit-tree operations.
 def new(+words: Nat) -> BitTree:
   match words:
     case 0n:
@@ -74,22 +80,27 @@ def word_count(tree: BitTree) -> Nat:
     case BT{root, words, capacity, height}:
       words
 
+# Handle capacity words in the packed bit-tree operations.
 def capacity_words(tree: BitTree) -> Nat:
   match tree:
     case BT{root, words, capacity, height}:
       capacity
 
+# Handle tree height in the packed bit-tree operations.
 def tree_height(tree: BitTree) -> Nat:
   match tree:
     case BT{root, words, capacity, height}:
       height
 
+# Handle bit count in the packed bit-tree operations.
 def bit_count(tree: BitTree) -> Nat:
   Nat.mul(word_count(tree), 32n)
 
+# Check whether bit holds for the packed bit-tree operations.
 def valid_bit(tree: BitTree, bit: Nat) -> Bool:
   Nat.is_lt(bit, bit_count(tree))
 
+# Handle same metadata in the packed bit-tree operations.
 def same_metadata(+ta: BitTree, +tb: BitTree) -> Bool:
   Bool.and(
     Nat.is_eq(word_count(ta), word_count(tb)),
@@ -105,6 +116,7 @@ def path_bit(rem: Nat) -> Bool:
     case 1n+r:
       True{}
 
+# Handle index path in the packed bit-tree operations.
 def index_path(height: Nat, +index: Nat, acc: List<&2, Bool>) -> List<&2, Bool>:
   match height:
     case 0n:
@@ -112,6 +124,7 @@ def index_path(height: Nat, +index: Nat, acc: List<&2, Bool>) -> List<&2, Bool>:
     case 1n+h:
       index_path(h, Nat.div(index, 2n), Con{path_bit(Nat.mod(index, 2n)), acc})
 
+# Handle tree word in the packed bit-tree operations.
 def tree_word(path: List<&2, Bool>, tree: WordTree) -> U32:
   match path tree:
     case Nil{} Empty{}:
@@ -129,6 +142,7 @@ def tree_word(path: List<&2, Bool>, tree: WordTree) -> U32:
     case Con{True{}, rest} Fork{left, right}:
       tree_word(rest, right)
 
+# Handle tree set word in the packed bit-tree operations.
 def tree_set_word(path: List<&2, Bool>, value: U32, tree: WordTree) -> WordTree:
   match path tree:
     case Nil{} Empty{}:
@@ -146,6 +160,7 @@ def tree_set_word(path: List<&2, Bool>, value: U32, tree: WordTree) -> WordTree:
     case Con{True{}, rest} Fork{left, right}:
       Fork{left, tree_set_word(rest, value, right)}
 
+# Handle word at if in the packed bit-tree operations.
 def word_at_if(inside: Bool, tree: BitTree, index: Nat) -> U32:
   match inside:
     case False{}:
@@ -159,6 +174,7 @@ def word_at_if(inside: Bool, tree: BitTree, index: Nat) -> U32:
 def word_at(+tree: BitTree, +index: Nat) -> U32:
   word_at_if(Nat.is_lt(index, word_count(tree)), tree, index)
 
+# Replace word if for the packed bit-tree operations.
 def replace_word_if(inside: Bool, tree: BitTree, index: Nat, value: U32) -> BitTree:
   match inside:
     case False{}:
@@ -173,6 +189,7 @@ def replace_word_if(inside: Bool, tree: BitTree, index: Nat, value: U32) -> BitT
 def replace_word(+tree: BitTree, +index: Nat, value: U32) -> BitTree:
   replace_word_if(Nat.is_lt(index, word_count(tree)), tree, index, value)
 
+# Update if for the packed bit-tree operations.
 def set_if(inside: Bool, +tree: BitTree, +bit: Nat) -> BitTree:
   match inside:
     case False{}:
@@ -186,6 +203,7 @@ def set_if(inside: Bool, +tree: BitTree, +bit: Nat) -> BitTree:
 def set(+tree: BitTree, +bit: Nat) -> BitTree:
   set_if(valid_bit(tree, bit), tree, bit)
 
+# Handle test if in the packed bit-tree operations.
 def test_if(inside: Bool, +tree: BitTree, +bit: Nat) -> Bool:
   match inside:
     case False{}:
@@ -239,9 +257,11 @@ def shape_ok(+height: Nat, tree: WordTree) -> Bool:
       a b = shape_ok(h, left) shape_ok(h, right)
       Bool.and(a, b)
 
+# Check whether whether metadata ok holds for the packed bit-tree operations.
 def empty_metadata_ok(words: Nat, capacity: Nat, height: Nat) -> Bool:
   Bool.and(Nat.is_eq(words, 0n), Bool.and(Nat.is_eq(capacity, 0n), Nat.is_eq(height, 0n)))
 
+# Handle nonempty metadata ok in the packed bit-tree operations.
 def nonempty_metadata_ok(root: WordTree, +words: Nat, +capacity: Nat, +height: Nat) -> Bool:
   Bool.and(
     Nat.is_gt(words, 0n),

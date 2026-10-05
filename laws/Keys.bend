@@ -19,15 +19,18 @@ law cmp_refl_a:
 law cmp_order_ab:
   {Keys.cmp("a", "b") == LT{} : Cmp}
 
+# State the key cmp refl property for the key ordering laws.
 law key_cmp_refl:
   for +key: String
   {Keys.cmp(key, key) == EQ{} : Cmp}
 
+# State the key cmp eq bridge property for the key ordering laws.
 law key_cmp_eq_bridge:
   for +a: String
   for +b: String
   {Keys.cmp_is_eq(Keys.cmp(a, b)) == Keys.eq(a, b) : Bool}
 
+# State the key cmp trichotomy property for the key ordering laws.
 law key_cmp_trichotomy:
   for +a: String
   for +b: String

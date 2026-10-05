@@ -1,20 +1,29 @@
 import Base
 import ../laws/Wal.bend as Laws
 
-def Laws.wal_rt_empty():
+def Laws.wal_v3_log_header_vector():
   {==}
 
-def Laws.wal_rt_put1():
+def Laws.wal_v3_log_header_decodes():
   {==}
 
-def Laws.wal_rt_del1():
+def Laws.wal_v3_rejects_text_log_header():
   {==}
 
-def Laws.wal_rt_multi():
+def Laws.wal_v3_empty_frame_vector():
   {==}
 
-def Laws.wal_fail_closed(_s):
+def Laws.wal_v3_put_delete_frame_vector():
   {==}
 
-def Laws.wal_concat_merges():
+def Laws.wal_v3_empty_frame_decodes():
+  {==}
+
+def Laws.wal_v3_put_delete_frame_decodes():
+  {==}
+
+def Laws.wal_v3_frame_rejects_trailing_byte():
+  {==}
+
+def Laws.wal_v3_frame_rejects_bad_digest():
   {==}

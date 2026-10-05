@@ -7,6 +7,7 @@ def stop(name: String) -> IO(Result<&1, &1, U32 & String, Unit>):
   import "./effs/crash_point.c"
   import "./effs/crash_point.js"
 
+# Resolve the hit for decision for the crash injection interface.
 def hit_decision(active: Bool, name: String) -> IO(Result<&1, &1, U32 & String, Unit>):
   match active:
     case True{}:

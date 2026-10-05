@@ -5,5 +5,6 @@ import ../app/demo_helpers.bend as Demo
 law demo_worker_zero:
   {Demo.worker(0n, 0n) == 0n : Nat}
 
+# State the demo worker gpu agrees property for the demo behavior laws.
 law demo_worker_gpu_agrees:
   {Demo.worker_gpu(8n, 0n) == Demo.worker(8n, 0n) : Nat}

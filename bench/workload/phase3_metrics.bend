@@ -11,6 +11,7 @@ import ../lib/common.bend as Common
 # Phase D metrics harness: write loop tracking logical bytes, first/middle/
 # last samples, timed recovery, and 101 sampled point reads.
 
+# Write many for the database metrics benchmark.
 def write_many(fuel: Nat, +index: Nat, db: Db.Db) -> IO(Db.Db):
   match fuel:
     case 0n:
@@ -20,6 +21,7 @@ def write_many(fuel: Nat, +index: Nat, db: Db.Db) -> IO(Db.Db):
         next : Db.Db <- IO.try(Db.Db, Recover.write(db, Wal.Batch{Con{Wal.Put{"key-" ++ Nat.show(index), "value-" ++ Nat.show(index)}, Nil{}}}))
         write_many(rest, Nat.add(index, 1n), next)
 
+# Handle logical go in the database metrics benchmark.
 def logical_go(fuel: Nat, +start: Nat, acc: Nat) -> Nat:
   match fuel:
     case 0n:
@@ -27,6 +29,7 @@ def logical_go(fuel: Nat, +start: Nat, acc: Nat) -> Nat:
     case 1n+f:
       logical_go(f, Nat.add(start, 1n), Nat.add(acc, Nat.add(String.length("key-" ++ Nat.show(start)), String.length("value-" ++ Nat.show(start)))))
 
+# Handle sample reads in the database metrics benchmark.
 def sample_reads(+samples: Nat, +db: Db.Db, +count: Nat, acc: List<&2, Nat>) -> IO(List<&2, Nat>):
   match samples:
     case 0n:
@@ -40,6 +43,7 @@ def sample_reads(+samples: Nat, +db: Db.Db, +count: Nat, acc: List<&2, Nat>) -> 
         _pd : Unit <- IO.print("sample_ms=" ++ Nat.show(Nat.sub(stop, start)))
         sample_reads(rest, db, count, Con{Nat.sub(stop, start), acc})
 
+# Handle frac pick in the database metrics benchmark.
 def frac_pick(small: Bool, +frac: Nat) -> String:
   match small:
     case True{}:
@@ -47,6 +51,7 @@ def frac_pick(small: Bool, +frac: Nat) -> String:
     case False{}:
       Nat.show(frac)
 
+# Print ratio for the database metrics benchmark.
 def print_ratio(+tag: String, +num: Nat, +den: Nat) -> IO(Unit):
   match den:
     case 0n:
@@ -60,6 +65,7 @@ def print_ratio(+tag: String, +num: Nat, +den: Nat) -> IO(Unit):
 # recursive helpers, which the checker forbids; all shapes here mirror
 # proven merge_go/scan_go patterns). Readings above 63 ms clamp.
 
+# Check whether whether buckets holds for the database metrics benchmark.
 def empty_buckets(count: Nat, acc: List<&2, List<&2, Nat>>) -> List<&2, List<&2, Nat>>:
   match count:
     case 0n:
@@ -67,6 +73,7 @@ def empty_buckets(count: Nat, acc: List<&2, List<&2, Nat>>) -> List<&2, List<&2,
     case 1n+m:
       empty_buckets(m, Con{Nil{}, acc})
 
+# Handle bucket add in the database metrics benchmark.
 def bucket_add(+buckets: List<&2, List<&2, Nat>>, ix: Nat, val: Nat) -> List<&2, List<&2, Nat>>:
   match buckets:
     case Nil{}:
@@ -78,6 +85,7 @@ def bucket_add(+buckets: List<&2, List<&2, Nat>>, ix: Nat, val: Nat) -> List<&2,
         case 1n+p:
           Con{b, bucket_add(t, p, val)}
 
+# Handle fill buckets in the database metrics benchmark.
 def fill_buckets(+samples: List<&2, Nat>, +buckets: List<&2, List<&2, Nat>>) -> List<&2, List<&2, Nat>>:
   match samples:
     case Nil{}:
@@ -85,6 +93,7 @@ def fill_buckets(+samples: List<&2, Nat>, +buckets: List<&2, List<&2, Nat>>) -> 
     case Con{+ms, t}:
       fill_buckets(t, bucket_add(buckets, Nat.min(ms, 63n), ms))
 
+# Concatenate all for the database metrics benchmark.
 def concat_all(+buckets: List<&2, List<&2, Nat>>) -> List<&2, Nat>:
   match buckets:
     case Nil{}:
@@ -92,6 +101,7 @@ def concat_all(+buckets: List<&2, List<&2, Nat>>) -> List<&2, Nat>:
     case Con{+h, t}:
       List.append(&2, Nat, h, concat_all(t))
 
+# Handle nth sorted in the database metrics benchmark.
 def nth_sorted(bound: Nat, +ix: Nat, +xs: List<&2, Nat>) -> Nat:
   match bound ix xs:
     case 0n _ _:
@@ -105,6 +115,7 @@ def nth_sorted(bound: Nat, +ix: Nat, +xs: List<&2, Nat>) -> Nat:
 
 # Byte accounting over the data dir (replaces shell wc).
 
+# Select size for the database metrics benchmark.
 def pick_size(tbl: Bool, size: Nat) -> Nat:
   match tbl:
     case True{}:
@@ -112,6 +123,7 @@ def pick_size(tbl: Bool, size: Nat) -> Nat:
     case False{}:
       0n
 
+# Handle sum go in the database metrics benchmark.
 def sum_go(names: List<&1, String>, +dir: String, acc: Nat) -> IO(Nat):
   match names:
     case Nil{}:
@@ -121,6 +133,7 @@ def sum_go(names: List<&1, String>, +dir: String, acc: Nat) -> IO(Nat):
         size : Nat <- IO.try(Nat, Fs.file_size(dir ++ "/" ++ h))
         sum_go(t, dir, Nat.add(acc, pick_size(String.ends_with(h, ".tbl"), size)))
 
+# Return the level sized for the database metrics benchmark.
 def level_sized(present: Bool, +dir: String, +sub: String) -> IO(Nat):
   match present:
     case False{}:
@@ -130,11 +143,13 @@ def level_sized(present: Bool, +dir: String, +sub: String) -> IO(Nat):
         names : List<&1, String> <- IO.try(List<&1, String>, Fs.read_dir(dir ++ "/" ++ sub))
         sum_go(names, dir ++ "/" ++ sub, 0n)
 
+# Return the level bytes for the database metrics benchmark.
 def level_bytes(+dir: String, +sub: String) -> IO(Nat):
   do IO<Nat>:
     present : Bool <- IO.try(Bool, Fs.exists(dir ++ "/" ++ sub))
     level_sized(present, dir, sub)
 
+# Return the size of if in the database metrics benchmark.
 def size_if(present: Bool, +dir: String, +file: String) -> IO(Nat):
   match present:
     case False{}:
@@ -144,6 +159,7 @@ def size_if(present: Bool, +dir: String, +file: String) -> IO(Nat):
         size : Nat <- IO.try(Nat, Fs.file_size(dir ++ "/" ++ file))
         IO.pure(Nat, size)
 
+# Handle file bytes in the database metrics benchmark.
 def file_bytes(+dir: String, +file: String) -> IO(Nat):
   do IO<Nat>:
     present : Bool <- IO.try(Bool, Fs.exists(dir ++ "/" ++ file))

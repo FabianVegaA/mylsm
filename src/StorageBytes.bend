@@ -1,19 +1,5 @@
 import Base
-import 0x185ae03c75e3e75be1171471f68b43cb/bytes.bend as Bytes
-import 0x49814d83de8f70993a43e1002be29ecd/bytes.bend as Bytes030
-import 0xcfc8be7b076f41f95c8e118383892d55/encoding.bend as Encoding
-
-# Rewrap the encoding package buffer without unpacking octets.
-def bytes030_to_current(old: Bytes030.Bytes) -> Bytes.Bytes:
-  match old:
-    case Bytes030.Bytes{len, buf}:
-      Bytes.Bytes{len, buf}
-
-# Rewrap current bytes for the encoding package boundary.
-def current_to_bytes030(bytes: Bytes.Bytes) -> Bytes030.Bytes:
-  match bytes:
-    case Bytes.Bytes{len, buf}:
-      Bytes030.Bytes{len, buf}
+import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # State for the strict single-pass UTF-8 decoder.
 type Utf8State is Data:
@@ -85,7 +71,7 @@ def utf8.scan(
     case 1n+p:
       match pair:
         case (buf, b):
-          utf8.scan(p, (offset + 1 : U32), Bytes030.peek(buf, (offset + 1 : U32)), utf8.step(state, b))
+          utf8.scan(p, (offset + 1 : U32), Bytes.peek(buf, (offset + 1 : U32)), utf8.step(state, b))
 
 # Return None rather than wrapping when U32 addition overflows.
 def checked_add(+left: U32, +right: U32) -> Maybe<&2, U32>:
@@ -103,31 +89,119 @@ def MAX_RECORD_BYTES() -> U32:
 def MAX_MANIFEST_BYTES() -> U32:
   1048576
 
+def utf8.width(+scalar: U32) -> U32:
+  Bool.pick(U32, U32.is_le(scalar, 127), 1,
+    Bool.pick(U32, U32.is_le(scalar, 2047), 2,
+      Bool.pick(U32, U32.is_le(scalar, 65535), 3, 4)))
+
+def from_string.size(+text: String, +size: U32, fits: Bool) -> Maybe<&2, U32>:
+  match text fits:
+    case SNil{} _:
+      Some{size}
+    case SCon{Chr{_scalar}, SNil{}} False{}:
+      None{}
+    case SCon{Chr{scalar}, SNil{}} True{}:
+      Some{(size + utf8.width(scalar) : U32)}
+    case SCon{Chr{_scalar}, SCon{Chr{_next_scalar}, _rest}} False{}:
+      None{}
+    case SCon{Chr{scalar}, SCon{Chr{next_scalar}, rest}} True{}:
+      from_string.size(SCon{Chr{next_scalar}, rest}, (size + utf8.width(scalar) : U32),
+        U32.is_le((size + utf8.width(scalar) : U32),
+          (MAX_RECORD_BYTES() - utf8.width(next_scalar) : U32)))
+
+def from_string.size.begin(+text: String) -> Maybe<&2, U32>:
+  match text:
+    case SNil{}:
+      Some{0}
+    case SCon{Chr{scalar}, _}:
+      from_string.size(text, 0,
+        U32.is_le(0, (MAX_RECORD_BYTES() - utf8.width(scalar) : U32)))
+
 # Reject text fields outside the configured storage record cap.
 def from_string.checked(+len: U32, buf: Array<U32>) -> Result<&1, &1, U32 & String, Bytes.Bytes>:
   Bool.pick(Result<&1, &1, U32 & String, Bytes.Bytes>,
     U32.is_le(len, MAX_RECORD_BYTES()),
     Done{Bytes.Bytes{len, buf}}, Fail{(2, "record too large")})
 
-# Adapt and bound the encoded UTF-8 buffer.
-def from_string.fin(old: Bytes030.Bytes) -> Result<&1, &1, U32 & String, Bytes.Bytes>:
-  match old:
-    case Bytes030.Bytes{+len, buf}:
-      from_string.checked(len, buf)
+def utf8.put.result(pair: Bytes.Cursor & Bool) -> Bytes.Cursor:
+  match pair:
+    case (cursor, _):
+      cursor
+
+def utf8.put.byte(cursor: Bytes.Cursor, +byte: U32) -> Bytes.Cursor:
+  utf8.put.result(Bytes.Cursor.put.u8(cursor, byte))
+
+def utf8.put.two(cursor: Bytes.Cursor, +scalar: U32) -> Bytes.Cursor:
+  utf8.put.byte(utf8.put.byte(cursor, (192 + U32.shrn(scalar, 6n) : U32)),
+    (128 + U32.and(scalar, 63) : U32))
+
+def utf8.put.three(cursor: Bytes.Cursor, +scalar: U32) -> Bytes.Cursor:
+  utf8.put.byte(utf8.put.byte(
+    utf8.put.byte(cursor, (224 + U32.shrn(scalar, 12n) : U32)),
+    (128 + U32.and(U32.shrn(scalar, 6n), 63) : U32)),
+    (128 + U32.and(scalar, 63) : U32))
+
+def utf8.put.four(cursor: Bytes.Cursor, +scalar: U32) -> Bytes.Cursor:
+  utf8.put.byte(utf8.put.byte(
+    utf8.put.byte(utf8.put.byte(cursor, (240 + U32.shrn(scalar, 18n) : U32)),
+      (128 + U32.and(U32.shrn(scalar, 12n), 63) : U32)),
+    (128 + U32.and(U32.shrn(scalar, 6n), 63) : U32)),
+    (128 + U32.and(scalar, 63) : U32))
+
+def utf8.put.scalar(
+  cursor: Bytes.Cursor,
+  +scalar: U32,
+  ascii: Bool,
+  two_byte: Bool,
+  three_byte: Bool
+) -> Bytes.Cursor:
+  match ascii two_byte three_byte:
+    case True{} _ _:
+      utf8.put.byte(cursor, scalar)
+    case False{} True{} _:
+      utf8.put.two(cursor, scalar)
+    case False{} False{} True{}:
+      utf8.put.three(cursor, scalar)
+    case False{} False{} False{}:
+      utf8.put.four(cursor, scalar)
+
+def utf8.encode.go(text: String, cursor: Bytes.Cursor) -> Bytes.Cursor:
+  match text:
+    case SNil{}:
+      cursor
+    case SCon{Chr{+scalar}, tail}:
+      utf8.encode.go(tail, utf8.put.scalar(cursor, scalar,
+        U32.is_le(scalar, 127), U32.is_le(scalar, 2047), U32.is_le(scalar, 65535)))
+
+def from_string.output.pair(result: Bytes.Bytes & U32) -> Bytes.Bytes:
+  match result:
+    case (bytes, _):
+      bytes
+
+def from_string.output(+text: String, +len: U32) -> Bytes.Bytes:
+  from_string.output.pair(Bytes.Cursor.finish(utf8.encode.go(text,
+    Bytes.Cursor.new(Bytes.Bytes{len, Bytes.alloc(len)}))))
+
+def from_string.preflight(+text: String, size: Maybe<&2, U32>) -> Result<&1, &1, U32 & String, Bytes.Bytes>:
+  match size:
+    case None{}:
+      Fail{(2, "record too large")}
+    case Some{len}:
+      Done{from_string.output(text, len)}
 
 # Encode public text at the packed storage boundary.
 def from_string(+text: String) -> Result<&1, &1, U32 & String, Bytes.Bytes>:
-  from_string.fin(Encoding.utf8.encode(text))
+  from_string.preflight(text, from_string.size.begin(text))
 
 # Decode bytes after strict RFC 3629 validation.
-def decode_checked(old: Bytes030.Bytes) -> Result<&1, &1, U32 & String, String>:
-  match old:
-    case Bytes030.Bytes{len, buf}:
-      utf8.scan(U32.to_nat(len), 0, Bytes030.peek(buf, 0), Utf8State{0, 128, 191, 0, SNil{}, True{}})
+def decode_checked(bytes: Bytes.Bytes) -> Result<&1, &1, U32 & String, String>:
+  match bytes:
+    case Bytes.Bytes{len, buf}:
+      utf8.scan(U32.to_nat(len), 0, Bytes.peek(buf, 0), Utf8State{0, 128, 191, 0, SNil{}, True{}})
 
 # Decode a packed buffer, rejecting malformed UTF-8.
 def to_string_strict(bytes: Bytes.Bytes) -> Result<&1, &1, U32 & String, String>:
-  decode_checked(current_to_bytes030(bytes))
+  decode_checked(bytes)
 
 # Read one bounded big-endian u32 through a package cursor.
 def read_u32be(cursor: Bytes.Cursor) -> Bytes.Cursor & Maybe<&2, U32>:

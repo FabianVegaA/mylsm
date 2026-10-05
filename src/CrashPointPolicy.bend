@@ -7,5 +7,6 @@ def nonempty(value: String) -> Bool:
     case SNil{}: False{}
     case SCon{_, _}: True{}
 
+# Handle enabled in the crash injection policy.
 def enabled(+configured: String, requested: String) -> Bool:
   Bool.and(nonempty(configured), String.eq(configured, requested))

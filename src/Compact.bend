@@ -29,6 +29,7 @@ import ./Db.bend as Db
 # it in the hull and in a hull-disjoint range — contradiction); keys inside
 # resolve to the same newest version (subset order == read order).
 
+# Handle ov and in the level compaction.
 def ov_and(lhs: Bool, rhs: Bool) -> Bool:
   match lhs:
     case True{}:
@@ -36,6 +37,7 @@ def ov_and(lhs: Bool, rhs: Bool) -> Bool:
     case False{}:
       False{}
 
+# Handle le cmp in the level compaction.
 def le_cmp(ord: Cmp) -> Bool:
   match ord:
     case LT{}:
@@ -45,6 +47,7 @@ def le_cmp(ord: Cmp) -> Bool:
     case GT{}:
       False{}
 
+# Handle ov12 in the level compaction.
 def ov12(fa: Maybe<&2, String>, lb: Maybe<&2, String>) -> Bool:
   match fa lb:
     case None{} _:
@@ -55,6 +58,7 @@ def ov12(fa: Maybe<&2, String>, lb: Maybe<&2, String>) -> Bool:
       le_cmp(Keys.cmp(x, y))
 
 
+# Return the table overlap for the level compaction.
 def table_overlap(+ta: Sstable.Table, +tb: Sstable.Table) -> Bool:
   ov_and(ov12(Sstable.table_smallest(ta), Sstable.table_largest(tb)), ov12(Sstable.table_smallest(tb), Sstable.table_largest(ta)))
 
@@ -68,6 +72,7 @@ def pick_lo(ord: Cmp, k1: String, k2: String) -> Maybe<&2, String>:
     case GT{}:
       Some{k2}
 
+# Handle min step in the level compaction.
 def min_step(fm: Maybe<&2, String>, cur: Maybe<&2, String>) -> Maybe<&2, String>:
   match fm cur:
     case None{} _:
@@ -77,6 +82,7 @@ def min_step(fm: Maybe<&2, String>, cur: Maybe<&2, String>) -> Maybe<&2, String>
     case Some{+a} Some{+b}:
       pick_lo(Keys.cmp(a, b), a, b)
 
+# Handle min go in the level compaction.
 def min_go(fuel: Nat, +cur: Maybe<&2, String>, tabs: List<&2, Sstable.Table>) -> Maybe<&2, String>:
   match fuel:
     case 0n:
@@ -88,9 +94,11 @@ def min_go(fuel: Nat, +cur: Maybe<&2, String>, tabs: List<&2, Sstable.Table>) ->
         case Con{h, t}:
           min_go(f, min_step(Sstable.table_smallest(h), cur), t)
 
+# Handle min first in the level compaction.
 def min_first(+tabs: List<&2, Sstable.Table>) -> Maybe<&2, String>:
   min_go(List.length(&2, Sstable.Table, tabs), None{}, tabs)
 
+# Select hi for the level compaction.
 def pick_hi(ord: Cmp, k1: String, k2: String) -> Maybe<&2, String>:
   match ord:
     case LT{}:
@@ -100,6 +108,7 @@ def pick_hi(ord: Cmp, k1: String, k2: String) -> Maybe<&2, String>:
     case GT{}:
       Some{k1}
 
+# Handle max step in the level compaction.
 def max_step(lm: Maybe<&2, String>, cur: Maybe<&2, String>) -> Maybe<&2, String>:
   match lm cur:
     case None{} _:
@@ -109,6 +118,7 @@ def max_step(lm: Maybe<&2, String>, cur: Maybe<&2, String>) -> Maybe<&2, String>
     case Some{+a} Some{+b}:
       pick_hi(Keys.cmp(a, b), a, b)
 
+# Handle max go in the level compaction.
 def max_go(fuel: Nat, +cur: Maybe<&2, String>, tabs: List<&2, Sstable.Table>) -> Maybe<&2, String>:
   match fuel:
     case 0n:
@@ -120,6 +130,7 @@ def max_go(fuel: Nat, +cur: Maybe<&2, String>, tabs: List<&2, Sstable.Table>) ->
         case Con{h, t}:
           max_go(f, max_step(Sstable.table_largest(h), cur), t)
 
+# Handle max last in the level compaction.
 def max_last(+tabs: List<&2, Sstable.Table>) -> Maybe<&2, String>:
   max_go(List.length(&2, Sstable.Table, tabs), None{}, tabs)
 
@@ -131,6 +142,7 @@ def hull_step(keep: Bool, +tab: Sstable.Table, +acc: List<&2, Sstable.Table>) ->
     case False{}:
       acc
 
+# Handle hull neg in the level compaction.
 def hull_neg(keep: Bool, +tab: Sstable.Table, +acc: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
   match keep:
     case True{}:
@@ -138,10 +150,18 @@ def hull_neg(keep: Bool, +tab: Sstable.Table, +acc: List<&2, Sstable.Table>) -> 
     case False{}:
       Con{tab, acc}
 
+# Handle ov hull in the level compaction.
 def ov_hull(+tab: Sstable.Table, +lo: Maybe<&2, String>, +hi: Maybe<&2, String>) -> Bool:
   ov_and(ov12(Sstable.table_smallest(tab), hi), ov12(lo, Sstable.table_largest(tab)))
 
-def filt_go(fuel: Nat, +lo: Maybe<&2, String>, +hi: Maybe<&2, String>, +acc: List<&2, Sstable.Table>, rest: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
+# Handle filt go in the level compaction.
+def filt_go(
+  fuel: Nat,
+  +lo: Maybe<&2, String>,
+  +hi: Maybe<&2, String>,
+  +acc: List<&2, Sstable.Table>,
+  rest: List<&2, Sstable.Table>
+) -> List<&2, Sstable.Table>:
   match fuel:
     case 0n:
       List.reverse(&2, Sstable.Table, acc)
@@ -152,10 +172,22 @@ def filt_go(fuel: Nat, +lo: Maybe<&2, String>, +hi: Maybe<&2, String>, +acc: Lis
         case Con{+h, t}:
           filt_go(f, lo, hi, hull_step(ov_hull(h, lo, hi), h, acc), t)
 
-def filter_pos(+rest: List<&2, Sstable.Table>, +lo: Maybe<&2, String>, +hi: Maybe<&2, String>) -> List<&2, Sstable.Table>:
+# Handle filter pos in the level compaction.
+def filter_pos(
+  +rest: List<&2, Sstable.Table>,
+  +lo: Maybe<&2, String>,
+  +hi: Maybe<&2, String>
+) -> List<&2, Sstable.Table>:
   filt_go(List.length(&2, Sstable.Table, rest), lo, hi, Nil{}, rest)
 
-def filt_neg_go(fuel: Nat, +lo: Maybe<&2, String>, +hi: Maybe<&2, String>, +acc: List<&2, Sstable.Table>, rest: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
+# Handle filt neg go in the level compaction.
+def filt_neg_go(
+  fuel: Nat,
+  +lo: Maybe<&2, String>,
+  +hi: Maybe<&2, String>,
+  +acc: List<&2, Sstable.Table>,
+  rest: List<&2, Sstable.Table>
+) -> List<&2, Sstable.Table>:
   match fuel:
     case 0n:
       List.reverse(&2, Sstable.Table, acc)
@@ -166,15 +198,30 @@ def filt_neg_go(fuel: Nat, +lo: Maybe<&2, String>, +hi: Maybe<&2, String>, +acc:
         case Con{+h, t}:
           filt_neg_go(f, lo, hi, hull_neg(ov_hull(h, lo, hi), h, acc), t)
 
-def filter_neg(+rest: List<&2, Sstable.Table>, +lo: Maybe<&2, String>, +hi: Maybe<&2, String>) -> List<&2, Sstable.Table>:
+# Handle filter neg in the level compaction.
+def filter_neg(
+  +rest: List<&2, Sstable.Table>,
+  +lo: Maybe<&2, String>,
+  +hi: Maybe<&2, String>
+) -> List<&2, Sstable.Table>:
   filt_neg_go(List.length(&2, Sstable.Table, rest), lo, hi, Nil{}, rest)
 
 # The production policy is conservative: every winning tombstone is retained
 # regardless of the lower-level shadow list.
-def drop_none(+key: String, +_shadow: List<&2, MemTable.Entry>, +acc: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
+def drop_none(
+  +key: String,
+  +_shadow: List<&2, MemTable.Entry>,
+  +acc: List<&2, MemTable.Entry>
+) -> List<&2, MemTable.Entry>:
   Con{MemTable.Entry{key, None{}}, acc}
 
-def drop_go(fuel: Nat, +shadow: List<&2, MemTable.Entry>, +acc: List<&2, MemTable.Entry>, xs: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
+# Handle drop go in the level compaction.
+def drop_go(
+  fuel: Nat,
+  +shadow: List<&2, MemTable.Entry>,
+  +acc: List<&2, MemTable.Entry>,
+  xs: List<&2, MemTable.Entry>
+) -> List<&2, MemTable.Entry>:
   match fuel:
     case 0n:
       List.reverse(&2, MemTable.Entry, acc)
@@ -189,6 +236,7 @@ def drop_go(fuel: Nat, +shadow: List<&2, MemTable.Entry>, +acc: List<&2, MemTabl
             case Some{s}:
               drop_go(f, shadow, Con{MemTable.Entry{k, Some{s}}, acc}, t)
 
+# Handle shadow drop in the level compaction.
 def shadow_drop(+xs: List<&2, MemTable.Entry>, +shadow: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
   drop_go(List.length(&2, MemTable.Entry, xs), shadow, Nil{}, xs)
 
@@ -205,7 +253,11 @@ def table_runs(tabs: List<&2, Sstable.Table>) -> List<&2, List<&2, MemTable.Entr
 # Production output: merge L0 in chronological stored order, merge absorbed L1
 # in its original stored order, then merge L0 as strictly newer than L1.
 # Tombstones are retained, so a triggered compaction publishes exactly one table.
-def finish_runs(+l0_runs: List<&2, List<&2, MemTable.Entry>>, +l1_runs: List<&2, List<&2, MemTable.Entry>>, +rest: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
+def finish_runs(
+  +l0_runs: List<&2, List<&2, MemTable.Entry>>,
+  +l1_runs: List<&2, List<&2, MemTable.Entry>>,
+  +rest: List<&2, Sstable.Table>
+) -> List<&2, Sstable.Table>:
   merged_l0 merged_l1 = SortedRun.merge_many_newest(l0_runs) SortedRun.merge_many_newest(l1_runs)
   +merged = SortedRun.merge_many_newest(Con{merged_l0, Con{merged_l1, Nil{}}})
   Con{Sstable.from_sorted_unique(shadow_drop(merged, Nil{}), 1n), rest}
@@ -229,20 +281,29 @@ def closed_runs_go(
 
 
 # Top dispatch (all matches on params; count gate inside).
-def compact_snd(+l0: List<&2, Sstable.Table>, rest1: List<&2, List<&2, Sstable.Table>>) -> List<&2, List<&2, Sstable.Table>>:
+def compact_snd(
+  +l0: List<&2, Sstable.Table>,
+  rest1: List<&2, List<&2, Sstable.Table>>
+) -> List<&2, List<&2, Sstable.Table>>:
   match rest1:
     case Nil{}:
       Con{Nil{}, Con{finish_runs(table_runs(l0), Nil{}, Nil{}), Nil{}}}
     case Con{+l1, +below}:
       Con{Nil{}, Con{closed_runs_go(Nat.add(List.length(&2, Sstable.Table, l1), 1n), min_first(l0), max_last(l0), table_runs(l0), l1, l1), below}}
 
-def compact_dec(gt: Bool, +l0: List<&2, Sstable.Table>, +rest1: List<&2, List<&2, Sstable.Table>>) -> List<&2, List<&2, Sstable.Table>>:
+# Compact dec for the level compaction.
+def compact_dec(
+  gt: Bool,
+  +l0: List<&2, Sstable.Table>,
+  +rest1: List<&2, List<&2, Sstable.Table>>
+) -> List<&2, List<&2, Sstable.Table>>:
   match gt:
     case True{}:
       compact_snd(l0, rest1)
     case False{}:
       Con{l0, rest1}
 
+# Compact levels for the level compaction.
 def compact_levels(levels: List<&2, List<&2, Sstable.Table>>) -> List<&2, List<&2, Sstable.Table>>:
   match levels:
     case Nil{}:
@@ -254,6 +315,7 @@ def compact_levels(levels: List<&2, List<&2, Sstable.Table>>) -> List<&2, List<&
 # Remainder test via ranges (sound by old-L1 disjointness, spec law 12):
 # in a disjoint family, overlap with a remainder table means identity.
 
+# Combine leaf for the level compaction.
 def or_leaf(+hit: Bool, +acc: Bool) -> Bool:
   match hit:
     case True{}:
@@ -261,6 +323,7 @@ def or_leaf(+hit: Bool, +acc: Bool) -> Bool:
     case False{}:
       acc
 
+# Handle in go in the level compaction.
 def in_go(fuel: Nat, +tab: Sstable.Table, +acc: Bool, rem: List<&2, Sstable.Table>) -> Bool:
   match fuel:
     case 0n:
@@ -272,9 +335,11 @@ def in_go(fuel: Nat, +tab: Sstable.Table, +acc: Bool, rem: List<&2, Sstable.Tabl
         case Con{h, tt}:
           in_go(f, tab, or_leaf(table_overlap(tab, h), acc), tt)
 
+# Handle in rem in the level compaction.
 def in_rem(+tab: Sstable.Table, +rem: List<&2, Sstable.Table>) -> Bool:
   in_go(List.length(&2, Sstable.Table, rem), tab, False{}, rem)
 
+# Handle abs pick in the level compaction.
 def abs_pick(+inr: Bool, +name: String, +acc: List<&2, String>) -> List<&2, String>:
   match inr:
     case True{}:
@@ -282,7 +347,14 @@ def abs_pick(+inr: Bool, +name: String, +acc: List<&2, String>) -> List<&2, Stri
     case False{}:
       Con{name, acc}
 
-def abs_go(fuel: Nat, +rem: List<&2, Sstable.Table>, +acc: List<&2, String>, tabs: List<&2, Sstable.Table>, names: List<&2, String>) -> List<&2, String>:
+# Handle abs go in the level compaction.
+def abs_go(
+  fuel: Nat,
+  +rem: List<&2, Sstable.Table>,
+  +acc: List<&2, String>,
+  tabs: List<&2, Sstable.Table>,
+  names: List<&2, String>
+) -> List<&2, String>:
   match fuel:
     case 0n:
       List.reverse(&2, String, acc)
@@ -297,9 +369,15 @@ def abs_go(fuel: Nat, +rem: List<&2, Sstable.Table>, +acc: List<&2, String>, tab
         case Con{th, tt} Con{nh, nt}:
           abs_go(f, rem, abs_pick(in_rem(th, rem), nh, acc), tt, nt)
 
-def abs_names(+tabs: List<&2, Sstable.Table>, +names: List<&2, String>, +rem: List<&2, Sstable.Table>) -> List<&2, String>:
+# Handle abs names in the level compaction.
+def abs_names(
+  +tabs: List<&2, Sstable.Table>,
+  +names: List<&2, String>,
+  +rem: List<&2, Sstable.Table>
+) -> List<&2, String>:
   abs_go(List.length(&2, Sstable.Table, tabs), rem, Nil{}, tabs, names)
 
+# Handle rem pick in the level compaction.
 def rem_pick(+inr: Bool, +name: String, +acc: List<&2, String>) -> List<&2, String>:
   match inr:
     case True{}:
@@ -307,7 +385,14 @@ def rem_pick(+inr: Bool, +name: String, +acc: List<&2, String>) -> List<&2, Stri
     case False{}:
       acc
 
-def rem_go(fuel: Nat, +rem: List<&2, Sstable.Table>, +acc: List<&2, String>, tabs: List<&2, Sstable.Table>, names: List<&2, String>) -> List<&2, String>:
+# Handle rem go in the level compaction.
+def rem_go(
+  fuel: Nat,
+  +rem: List<&2, Sstable.Table>,
+  +acc: List<&2, String>,
+  tabs: List<&2, Sstable.Table>,
+  names: List<&2, String>
+) -> List<&2, String>:
   match fuel:
     case 0n:
       List.reverse(&2, String, acc)
@@ -322,7 +407,12 @@ def rem_go(fuel: Nat, +rem: List<&2, Sstable.Table>, +acc: List<&2, String>, tab
         case Con{th, tt} Con{nh, nt}:
           rem_go(f, rem, rem_pick(in_rem(th, rem), nh, acc), tt, nt)
 
-def rem_names(+tabs: List<&2, Sstable.Table>, +names: List<&2, String>, +rem: List<&2, Sstable.Table>) -> List<&2, String>:
+# Handle rem names in the level compaction.
+def rem_names(
+  +tabs: List<&2, Sstable.Table>,
+  +names: List<&2, String>,
+  +rem: List<&2, Sstable.Table>
+) -> List<&2, String>:
   rem_go(List.length(&2, Sstable.Table, tabs), rem, Nil{}, tabs, names)
 
 # --- Closed-vector laws live in laws/Compact.bend (spec laws 6, 11, 12) ---
@@ -334,6 +424,7 @@ def rem_names(+tabs: List<&2, Sstable.Table>, +names: List<&2, String>, +rem: Li
 # drift (exact serialized Manifest identity mismatch) aborts fail-closed;
 # names stay positionally aligned with tables (output head, remainder tail).
 
+# Handle l1hd in the level compaction.
 def l1hd(r1: List<&2, List<&2, Sstable.Table>>) -> List<&2, Sstable.Table>:
   match r1:
     case Nil{}:
@@ -341,6 +432,7 @@ def l1hd(r1: List<&2, List<&2, Sstable.Table>>) -> List<&2, Sstable.Table>:
     case Con{l1, below}:
       l1
 
+# Handle l1list in the level compaction.
 def l1list(lvls: List<&2, List<&2, Sstable.Table>>) -> List<&2, Sstable.Table>:
   match lvls:
     case Nil{}:
@@ -348,6 +440,7 @@ def l1list(lvls: List<&2, List<&2, Sstable.Table>>) -> List<&2, Sstable.Table>:
     case Con{l0, r1}:
       l1hd(r1)
 
+# Handle l0list in the level compaction.
 def l0list(lvls: List<&2, List<&2, Sstable.Table>>) -> List<&2, Sstable.Table>:
   match lvls:
     case Nil{}:
@@ -355,6 +448,7 @@ def l0list(lvls: List<&2, List<&2, Sstable.Table>>) -> List<&2, Sstable.Table>:
     case Con{l0, r1}:
       l0
 
+# Handle hd tbl in the level compaction.
 def hd_tbl(tabs: List<&2, Sstable.Table>) -> Sstable.Table:
   match tabs:
     case Nil{}:
@@ -362,6 +456,7 @@ def hd_tbl(tabs: List<&2, Sstable.Table>) -> Sstable.Table:
     case Con{h, t}:
       h
 
+# Process the remaining of for the level compaction.
 def tail_of(tabs: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
   match tabs:
     case Nil{}:
@@ -369,6 +464,7 @@ def tail_of(tabs: List<&2, Sstable.Table>) -> List<&2, Sstable.Table>:
     case Con{h, t}:
       t
 
+# Handle ml0 in the level compaction.
 def ml0(mfst: Manifest.Manifest) -> List<&2, String>:
   match mfst:
     case Manifest.M{lvs}:
@@ -378,6 +474,7 @@ def ml0(mfst: Manifest.Manifest) -> List<&2, String>:
         case Con{l0n, r1}:
           l0n
 
+# Handle ml1b in the level compaction.
 def ml1b(r1: List<&2, List<&2, String>>) -> List<&2, String>:
   match r1:
     case Nil{}:
@@ -385,6 +482,7 @@ def ml1b(r1: List<&2, List<&2, String>>) -> List<&2, String>:
     case Con{l1n, below}:
       l1n
 
+# Handle ml1 in the level compaction.
 def ml1(mfst: Manifest.Manifest) -> List<&2, String>:
   match mfst:
     case Manifest.M{lvs}:
@@ -394,6 +492,7 @@ def ml1(mfst: Manifest.Manifest) -> List<&2, String>:
         case Con{l0n, r1}:
           ml1b(r1)
 
+# Handle mbelb in the level compaction.
 def mbelb(r1: List<&2, List<&2, String>>) -> List<&2, List<&2, String>>:
   match r1:
     case Nil{}:
@@ -401,6 +500,7 @@ def mbelb(r1: List<&2, List<&2, String>>) -> List<&2, List<&2, String>>:
     case Con{l1n, below}:
       below
 
+# Handle mbelow in the level compaction.
 def mbelow(mfst: Manifest.Manifest) -> List<&2, List<&2, String>>:
   match mfst:
     case Manifest.M{lvs}:
@@ -410,9 +510,11 @@ def mbelow(mfst: Manifest.Manifest) -> List<&2, List<&2, String>>:
         case Con{l0n, r1}:
           mbelb(r1)
 
+# Handle mfst new in the level compaction.
 def mfst_new(+mfst: Manifest.Manifest, +remnames: List<&2, String>, +outname: String) -> Manifest.Manifest:
   Manifest.M{Con{Nil{}, Con{Con{outname, remnames}, mbelow(mfst)}}}
 
+# Handle prefix go in the level compaction.
 def prefix_go(names: List<&2, String>, +dir: String, +acc: List<&2, String>) -> List<&2, String>:
   match names:
     case Nil{}:
@@ -420,5 +522,6 @@ def prefix_go(names: List<&2, String>, +dir: String, +acc: List<&2, String>) -> 
     case Con{h, t}:
       prefix_go(t, dir, Con{dir ++ "/" ++ h, acc})
 
+# Handle prefix in the level compaction.
 def prefix(+names: List<&2, String>, +dir: String) -> List<&2, String>:
   prefix_go(names, dir, Nil{})

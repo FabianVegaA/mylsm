@@ -7,25 +7,31 @@ import ./Keys.bend as Keys
 # 4096-entry cap); the scan state machine below is provable with only the
 # Keys.str_eq_refl rewrite (no ordering lemmas needed until flush sorts).
 
+# Represent Entry data used by the in-memory table operations.
 type Entry is Data:
   Entry{key: String, val: Maybe<&2, String>}
 
+# Represent MemTable data used by the in-memory table operations.
 type MemTable is Data:
   MT{entries: List<&2, Entry>}
 
+# Handle empty in the in-memory table operations.
 def empty() -> MemTable:
   MT{Nil{}}
 
+# Handle put in the in-memory table operations.
 def put(tab: MemTable, key: String, val: String) -> MemTable:
   match tab:
     case MT{entries}:
       MT{Con{Entry{key, Some{val}}, entries}}
 
+# Handle del in the in-memory table operations.
 def del(tab: MemTable, key: String) -> MemTable:
   match tab:
     case MT{entries}:
       MT{Con{Entry{key, None{}}, entries}}
 
+# Handle count in the in-memory table operations.
 def count(tab: MemTable) -> Nat:
   match tab:
     case MT{entries}:
@@ -45,6 +51,7 @@ def scan_step(done: Bool, eq: Bool, hv: Maybe<&2, String>, ans: Maybe<&2, String
         case False{}:
           (False{}, ans)
 
+# Scan go for the in-memory table operations.
 def scan_go(fuel: Nat, +key: String, st: (Bool & Maybe<&2, String>), entries: List<&2, Entry>) -> Maybe<&2, String>:
   match fuel:
     case 0n:
@@ -58,6 +65,7 @@ def scan_go(fuel: Nat, +key: String, st: (Bool & Maybe<&2, String>), entries: Li
         case Con{Entry{ekey, val}, t}:
           scan_go(f, key, scan_step(done, Keys.eq(ekey, key), val, ans), t)
 
+# Handle get in the in-memory table operations.
 def get(tab: MemTable, +key: String) -> Maybe<&2, String>:
   match tab:
     case MT{+entries}:
@@ -65,7 +73,12 @@ def get(tab: MemTable, +key: String) -> Maybe<&2, String>:
 
 # Hit-detecting scan: outer None = miss (keep searching older sources),
 # Some{val} = hit (val may be the None{} tombstone — stop, it shadows).
-def scan_hit_step(done: Bool, eq: Bool, hv: Maybe<&2, String>, ans: Maybe<&2, Maybe<&2, String>>) -> (Bool & Maybe<&2, Maybe<&2, String>>):
+def scan_hit_step(
+  done: Bool,
+  eq: Bool,
+  hv: Maybe<&2, String>,
+  ans: Maybe<&2, Maybe<&2, String>>
+) -> (Bool & Maybe<&2, Maybe<&2, String>>):
   match done:
     case True{}:
       (True{}, ans)
@@ -76,7 +89,13 @@ def scan_hit_step(done: Bool, eq: Bool, hv: Maybe<&2, String>, ans: Maybe<&2, Ma
         case False{}:
           (False{}, ans)
 
-def scan_hit(fuel: Nat, +key: String, st: (Bool & Maybe<&2, Maybe<&2, String>>), entries: List<&2, Entry>) -> Maybe<&2, Maybe<&2, String>>:
+# Scan hit for the in-memory table operations.
+def scan_hit(
+  fuel: Nat,
+  +key: String,
+  st: (Bool & Maybe<&2, Maybe<&2, String>>),
+  entries: List<&2, Entry>
+) -> Maybe<&2, Maybe<&2, String>>:
   match fuel:
     case 0n:
       (done, ans) = st
@@ -89,13 +108,19 @@ def scan_hit(fuel: Nat, +key: String, st: (Bool & Maybe<&2, Maybe<&2, String>>),
         case Con{Entry{ekey, val}, t}:
           scan_hit(f, key, scan_hit_step(done, Keys.eq(ekey, key), val, ans), t)
 
+# Return hit for the in-memory table operations.
 def get_hit(tab: MemTable, +key: String) -> Maybe<&2, Maybe<&2, String>>:
   match tab:
     case MT{+entries}:
       scan_hit(List.length(&2, Entry, entries), key, (False{}, None{}), entries)
 
 # Lemma: a frozen (done) scan always answers ans.
-def frozen_lemma(fuel: Nat, key: String, ans: Maybe<&2, String>, entries: List<&2, Entry>) -> {scan_go(fuel, key, (True{}, ans), entries) == ans : Maybe<&2, String>}:
+def frozen_lemma(
+  fuel: Nat,
+  key: String,
+  ans: Maybe<&2, String>,
+  entries: List<&2, Entry>
+) -> {scan_go(fuel, key, (True{}, ans), entries) == ans : Maybe<&2, String>}:
   match fuel:
     case 0n:
       {==}
@@ -113,11 +138,17 @@ def ryw_core(
   +key: String,
   val: String,
 ) -> {scan_go(List.length(&2, Entry, Con{Entry{key, Some{val}}, entries}), key, (False{}, None{}), Con{Entry{key, Some{val}}, entries}) == Some{val} : Maybe<&2, String>}:
-  %Equal.sym(Bool, Keys.eq(key, key), True{}, Keys.str_eq_refl(key)) : {scan_go(List.length(&2, Entry, entries), key, scan_step(False{}, _, Some{val}, None{}), entries) == Some{val} : Maybe<&2, String>}
+  %Equal.sym(Bool, Keys.eq(key, key), True{}, Keys.str_eq_refl(key)) : {scan_go(List.length(&2, Entry, entries), key, scan_step(False{}, _, Some{val}, None{}),
+  entries) == Some{val} : Maybe<&2, String>}
   %frozen_lemma(List.length(&2, Entry, entries), key, Some{val}, entries) : {scan_go(List.length(&2, Entry, entries), key, (True{}, Some{val}), entries) == _ : Maybe<&2, String>}
   {==}
 
-def ryw_bridge(tab: MemTable, +key: String, +val: String) -> {get(put(tab, key, val), key) == Some{val} : Maybe<&2, String>}:
+# Handle ryw bridge in the in-memory table operations.
+def ryw_bridge(
+  tab: MemTable,
+  +key: String,
+  +val: String
+) -> {get(put(tab, key, val), key) == Some{val} : Maybe<&2, String>}:
   match tab:
     case MT{entries}:
       ryw_core(entries, key, val)
@@ -131,13 +162,23 @@ def del_core(
   %frozen_lemma(List.length(&2, Entry, entries), key, None{}, entries) : {scan_go(List.length(&2, Entry, entries), key, (True{}, None{}), entries) == _ : Maybe<&2, String>}
   {==}
 
-def del_bridge(tab: MemTable, +key: String, val: String) -> {get(del(put(tab, key, val), key), key) == None{} : Maybe<&2, String>}:
+# Handle del bridge in the in-memory table operations.
+def del_bridge(
+  tab: MemTable,
+  +key: String,
+  val: String
+) -> {get(del(put(tab, key, val), key), key) == None{} : Maybe<&2, String>}:
   match tab:
     case MT{entries}:
       del_core(Con{Entry{key, Some{val}}, entries}, key)
 
 # Lemma: a frozen hit-scan always answers ans.
-def frozen_hit_lemma(fuel: Nat, key: String, ans: Maybe<&2, Maybe<&2, String>>, entries: List<&2, Entry>) -> {scan_hit(fuel, key, (True{}, ans), entries) == ans : Maybe<&2, Maybe<&2, String>>}:
+def frozen_hit_lemma(
+  fuel: Nat,
+  key: String,
+  ans: Maybe<&2, Maybe<&2, String>>,
+  entries: List<&2, Entry>
+) -> {scan_hit(fuel, key, (True{}, ans), entries) == ans : Maybe<&2, Maybe<&2, String>>}:
   match fuel:
     case 0n:
       {==}
@@ -155,11 +196,18 @@ def ryw_hit_core(
   +key: String,
   val: String,
 ) -> {scan_hit(List.length(&2, Entry, Con{Entry{key, Some{val}}, entries}), key, (False{}, None{}), Con{Entry{key, Some{val}}, entries}) == Some{Some{val}} : Maybe<&2, Maybe<&2, String>>}:
-  %Equal.sym(Bool, Keys.eq(key, key), True{}, Keys.str_eq_refl(key)) : {scan_hit(List.length(&2, Entry, entries), key, scan_hit_step(False{}, _, Some{val}, None{}), entries) == Some{Some{val}} : Maybe<&2, Maybe<&2, String>>}
-  %frozen_hit_lemma(List.length(&2, Entry, entries), key, Some{Some{val}}, entries) : {scan_hit(List.length(&2, Entry, entries), key, (True{}, Some{Some{val}}), entries) == _ : Maybe<&2, Maybe<&2, String>>}
+  %Equal.sym(Bool, Keys.eq(key, key), True{}, Keys.str_eq_refl(key)) : {scan_hit(List.length(&2, Entry, entries), key, scan_hit_step(False{}, _, Some{val}, None{}),
+  entries) == Some{Some{val}} : Maybe<&2, Maybe<&2, String>>}
+  %frozen_hit_lemma(List.length(&2, Entry, entries), key, Some{Some{val}}, entries) : {scan_hit(List.length(&2, Entry, entries), key, (True{}, Some{Some{val}}),
+  entries) == _ : Maybe<&2, Maybe<&2, String>>}
   {==}
 
-def hit_ryw_bridge(tab: MemTable, +key: String, +val: String) -> {get_hit(put(tab, key, val), key) == Some{Some{val}} : Maybe<&2, Maybe<&2, String>>}:
+# Resolve the hit for ryw bridge for the in-memory table operations.
+def hit_ryw_bridge(
+  tab: MemTable,
+  +key: String,
+  +val: String
+) -> {get_hit(put(tab, key, val), key) == Some{Some{val}} : Maybe<&2, Maybe<&2, String>>}:
   match tab:
     case MT{entries}:
       ryw_hit_core(entries, key, val)
@@ -169,11 +217,17 @@ def del_hit_core(
   +entries: List<&2, Entry>,
   +key: String,
 ) -> {scan_hit(List.length(&2, Entry, Con{Entry{key, None{}}, entries}), key, (False{}, None{}), Con{Entry{key, None{}}, entries}) == Some{None{}} : Maybe<&2, Maybe<&2, String>>}:
-  %Equal.sym(Bool, Keys.eq(key, key), True{}, Keys.str_eq_refl(key)) : {scan_hit(List.length(&2, Entry, entries), key, scan_hit_step(False{}, _, None{}, None{}), entries) == Some{None{}} : Maybe<&2, Maybe<&2, String>>}
+  %Equal.sym(Bool, Keys.eq(key, key), True{}, Keys.str_eq_refl(key)) : {scan_hit(List.length(&2, Entry, entries), key, scan_hit_step(False{}, _, None{}, None{}),
+  entries) == Some{None{}} : Maybe<&2, Maybe<&2, String>>}
   %frozen_hit_lemma(List.length(&2, Entry, entries), key, Some{None{}}, entries) : {scan_hit(List.length(&2, Entry, entries), key, (True{}, Some{None{}}), entries) == _ : Maybe<&2, Maybe<&2, String>>}
   {==}
 
-def hit_del_bridge(tab: MemTable, +key: String, val: String) -> {get_hit(del(put(tab, key, val), key), key) == Some{None{}} : Maybe<&2, Maybe<&2, String>>}:
+# Resolve the hit for del bridge for the in-memory table operations.
+def hit_del_bridge(
+  tab: MemTable,
+  +key: String,
+  val: String
+) -> {get_hit(del(put(tab, key, val), key), key) == Some{None{}} : Maybe<&2, Maybe<&2, String>>}:
   match tab:
     case MT{entries}:
       del_hit_core(Con{Entry{key, Some{val}}, entries}, key)

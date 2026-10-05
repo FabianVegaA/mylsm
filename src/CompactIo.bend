@@ -2,7 +2,7 @@ import Base
 import ./Compact.bend as Compact
 import ./MemTable.bend as MemTable
 import ./Sstable.bend as Sstable
-import ./SstFile.bend as SstFile
+import ./SstStreamIo.bend as SstStreamIo
 import ./Wal.bend as Wal
 import ./Manifest.bend as Manifest
 import ./Flush.bend as Flush
@@ -10,6 +10,7 @@ import ./Fs.bend as Fs
 import ./Db.bend as Db
 import ./CrashPoint.bend as CrashPoint
 
+# Handle remove list in the compaction filesystem effects.
 def remove_list(names: List<&2, String>) -> IO(Result<&1, &1, U32 & String, Unit>):
   match names:
     case Nil{}:
@@ -19,6 +20,7 @@ def remove_list(names: List<&2, String>) -> IO(Result<&1, &1, U32 & String, Unit
         _rm : Result<&1, &1, U32 & String, Unit> <- Fs.remove(n)
         remove_list(t)
 
+# Compact goB for the compaction filesystem effects.
 def compact_goB(
   +dir: String,
   +mpath: String,
@@ -34,14 +36,15 @@ def compact_goB(
   +frozen_count: Nat,
 ) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
-    _v1 : Unit <- IO.try(Unit, Flush.write_file(mtmp, Manifest.serialize(m2)))
+    _v1 : Unit <- IO.try(Unit, Flush.write_manifest(mtmp, m2))
     _cp1 : Unit <- IO.try(Unit, CrashPoint.hit("compact.manifest_synced"))
     _v2 : Unit <- IO.try(Unit, Fs.rename(mtmp, mpath))
     _v3 : Unit <- IO.try(Unit, Fs.fsync(dir))
     _cp2 : Unit <- IO.try(Unit, CrashPoint.hit("compact.manifest_published"))
     _ign : Result<&1, &1, U32 & String, Unit> <- remove_list(dels)
-    return Done{Db.Db{dir, mem, frozen, batch_cap, Nil{}, levels2, Nat.add(flushed, 1n), Manifest.serialize(m2), mem_count, frozen_count}}
+    return Done{Db.Db{dir, mem, frozen, batch_cap, Nil{}, levels2, Nat.add(flushed, 1n), Manifest.token(m2), mem_count, frozen_count}}
 
+# Handle drift go in the compaction filesystem effects.
 def drift_go(
   ok: Bool,
   +dir: String,
@@ -68,6 +71,7 @@ def drift_go(
     case False{}:
       IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{(U32.from_nat(2n), "manifest drift")})
 
+# Compact goA for the compaction filesystem effects.
 def compact_goA(
   +dir: String,
   +l1dir: String,
@@ -75,7 +79,8 @@ def compact_goA(
   +final: String,
   +mpath: String,
   +mtmp: String,
-  +content: String,
+  +entries: List<&2, MemTable.Entry>,
+  +level: U32,
   +outname: String,
   +mem: MemTable.MemTable,
   +levels2: List<&2, List<&2, Sstable.Table>>,
@@ -90,14 +95,15 @@ def compact_goA(
 ) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
     _u1 : Unit <- IO.try(Unit, Flush.ensure_dir(l1dir))
-    _u2 : Unit <- IO.try(Unit, Flush.write_file(tmp, content))
+    _u2 : Unit <- IO.try(Unit, SstStreamIo.write_table(tmp, entries, level))
     _cp1 : Unit <- IO.try(Unit, CrashPoint.hit("compact.output_synced"))
     _u3 : Unit <- IO.try(Unit, Fs.rename(tmp, final))
     _u4 : Unit <- IO.try(Unit, Fs.fsync(l1dir))
     _cp2 : Unit <- IO.try(Unit, CrashPoint.hit("compact.output_published"))
     +m : Manifest.Manifest <- IO.try(Manifest.Manifest, Flush.load_mfst(mpath))
-    drift_go(String.eq(Manifest.serialize(m), manifest_token), dir, mpath, mtmp, m, oldl1, remt, outname, mem, levels2, flushed, frozen, batch_cap, mem_count, frozen_count)
+    drift_go(String.eq(Manifest.token(m), manifest_token), dir, mpath, mtmp, m, oldl1, remt, outname, mem, levels2, flushed, frozen, batch_cap, mem_count, frozen_count)
 
+# Compact pre for the compaction filesystem effects.
 def compact_pre(
   +dir: String,
   +mem: MemTable.MemTable,
@@ -117,13 +123,13 @@ def compact_pre(
   +outname = "l1-" ++ Nat.show(flushed) ++ ".tbl"
   +tmp = l1dir ++ "/" ++ outname ++ ".tmp"
   +final = l1dir ++ "/" ++ outname
-  +content = SstFile.serialize(Db.table_entries(out), 1n)
   compact_goA(
     dir, l1dir, tmp, final, dir ++ "/MANIFEST", dir ++ "/MANIFEST.tmp",
-    content, outname, mem, levels2, Compact.l1list(levels), remt, flushed,
+    Db.table_entries(out), 1, outname, mem, levels2, Compact.l1list(levels), remt, flushed,
     manifest_token, frozen, batch_cap, mem_count, frozen_count,
   )
 
+# Compact trig for the compaction filesystem effects.
 def compact_trig(
   gt: Bool,
   +dir: String,
@@ -143,6 +149,7 @@ def compact_trig(
     case False{}:
       IO.pure(Result<&1, &1, U32 & String, Db.Db>, Done{Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}})
 
+# Handle compact in the compaction filesystem effects.
 def compact(+db: Db.Db) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   match db:
     case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:

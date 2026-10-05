@@ -5,6 +5,7 @@ import ./MemTable.bend as MemTable
 # Pure reference semantics and stable sorted-run merging. This module stays
 # independent of Sstable so table construction can depend on it later.
 
+# Evaluate not for the sorted-run operations.
 def bool_not(rhs: Bool) -> Bool:
   match rhs:
     case False{}:
@@ -12,6 +13,7 @@ def bool_not(rhs: Bool) -> Bool:
     case True{}:
       False{}
 
+# Evaluate and for the sorted-run operations.
 def bool_and(lhs: Bool, rhs: Bool) -> Bool:
   match lhs:
     case False{}:
@@ -19,6 +21,7 @@ def bool_and(lhs: Bool, rhs: Bool) -> Bool:
     case True{}:
       rhs
 
+# Evaluate or for the sorted-run operations.
 def bool_or(lhs: Bool, rhs: Bool) -> Bool:
   match lhs:
     case False{}:
@@ -26,6 +29,7 @@ def bool_or(lhs: Bool, rhs: Bool) -> Bool:
     case True{}:
       True{}
 
+# Handle the entry cmp for the sorted-run operations.
 def entry_cmp(e1: MemTable.Entry, e2: MemTable.Entry) -> Cmp:
   match e1:
     case MemTable.Entry{k1, v1}:
@@ -33,6 +37,7 @@ def entry_cmp(e1: MemTable.Entry, e2: MemTable.Entry) -> Cmp:
         case MemTable.Entry{k2, v2}:
           Keys.cmp(k1, k2)
 
+# Handle the entry key eq for the sorted-run operations.
 def entry_key_eq(entry: MemTable.Entry, +key: String) -> Bool:
   match entry:
     case MemTable.Entry{k, v}:
@@ -40,6 +45,7 @@ def entry_key_eq(entry: MemTable.Entry, +key: String) -> Bool:
 
 # --- Reference predicates and observable model ---
 
+# Check membership for whether key holds for the sorted-run operations.
 def contains_key(+entry: MemTable.Entry, entries: List<&2, MemTable.Entry>) -> Bool:
   match entry:
     case MemTable.Entry{+key, val}:
@@ -49,6 +55,7 @@ def contains_key(+entry: MemTable.Entry, entries: List<&2, MemTable.Entry>) -> B
         case Con{h, t}:
           bool_or(entry_key_eq(h, key), contains_key(MemTable.Entry{key, val}, t))
 
+# Check whether unique holds for the sorted-run operations.
 def is_unique(entries: List<&2, MemTable.Entry>) -> Bool:
   match entries:
     case Nil{}:
@@ -56,6 +63,7 @@ def is_unique(entries: List<&2, MemTable.Entry>) -> Bool:
     case Con{+h, +t}:
       bool_and(bool_not(contains_key(h, t)), is_unique(t))
 
+# Check whether strict holds for the sorted-run operations.
 def is_strict(entries: List<&2, MemTable.Entry>) -> Bool:
   match entries:
     case Nil{}:
@@ -65,7 +73,13 @@ def is_strict(entries: List<&2, MemTable.Entry>) -> Bool:
     case Con{+h, Con{+next, +rest}}:
       bool_and(Keys.cmp_is_lt(entry_cmp(h, next)), is_strict(Con{next, rest}))
 
-def resolve_step(done: Bool, hit: Bool, val: Maybe<&2, String>, ans: Maybe<&2, Maybe<&2, String>>) -> Bool & Maybe<&2, Maybe<&2, String>>:
+# Resolve step for the sorted-run operations.
+def resolve_step(
+  done: Bool,
+  hit: Bool,
+  val: Maybe<&2, String>,
+  ans: Maybe<&2, Maybe<&2, String>>
+) -> Bool & Maybe<&2, Maybe<&2, String>>:
   match done:
     case True{}:
       (True{}, ans)
@@ -76,7 +90,12 @@ def resolve_step(done: Bool, hit: Bool, val: Maybe<&2, String>, ans: Maybe<&2, M
         case False{}:
           (False{}, ans)
 
-def resolve_state(entries: List<&2, MemTable.Entry>, +key: String, state: Bool & Maybe<&2, Maybe<&2, String>>) -> Bool & Maybe<&2, Maybe<&2, String>>:
+# Resolve state for the sorted-run operations.
+def resolve_state(
+  entries: List<&2, MemTable.Entry>,
+  +key: String,
+  state: Bool & Maybe<&2, Maybe<&2, String>>
+) -> Bool & Maybe<&2, Maybe<&2, String>>:
   match entries:
     case Nil{}:
       state
@@ -84,25 +103,34 @@ def resolve_state(entries: List<&2, MemTable.Entry>, +key: String, state: Bool &
       (done, ans) = state
       resolve_state(t, key, resolve_step(done, Keys.eq(k, key), val, ans))
 
+# Resolve answer for the sorted-run operations.
 def resolve_answer(state: Bool & Maybe<&2, Maybe<&2, String>>) -> Maybe<&2, Maybe<&2, String>>:
   match state:
     case (done, ans):
       ans
 
+# Handle resolve in the sorted-run operations.
 def resolve(entries: List<&2, MemTable.Entry>, key: String) -> Maybe<&2, Maybe<&2, String>>:
   resolve_answer(resolve_state(entries, key, (False{}, None{})))
 
-def resolve_newest_go(runs: List<&2, List<&2, MemTable.Entry>>, +key: String, state: Bool & Maybe<&2, Maybe<&2, String>>) -> Bool & Maybe<&2, Maybe<&2, String>>:
+# Resolve newest go for the sorted-run operations.
+def resolve_newest_go(
+  runs: List<&2, List<&2, MemTable.Entry>>,
+  +key: String,
+  state: Bool & Maybe<&2, Maybe<&2, String>>
+) -> Bool & Maybe<&2, Maybe<&2, String>>:
   match runs:
     case Nil{}:
       state
     case Con{run, rest}:
       resolve_newest_go(rest, key, resolve_state(run, key, state))
 
+# Resolve newest for the sorted-run operations.
 def resolve_newest(runs: List<&2, List<&2, MemTable.Entry>>, key: String) -> Maybe<&2, Maybe<&2, String>>:
   resolve_answer(resolve_newest_go(runs, key, (False{}, None{})))
 
 
+# Run s well formed for the sorted-run operations.
 def runs_well_formed(runs: List<&2, List<&2, MemTable.Entry>>) -> Bool:
   match runs:
     case Nil{}:
@@ -118,6 +146,7 @@ def first_key(entries: List<&2, MemTable.Entry>) -> Maybe<&2, String>:
     case Con{MemTable.Entry{key, val}, t}:
       Some{key}
 
+# Return the last key go in the sorted-run operations.
 def last_key_go(entries: List<&2, MemTable.Entry>, last: String) -> Maybe<&2, String>:
   match entries:
     case Nil{}:
@@ -125,6 +154,7 @@ def last_key_go(entries: List<&2, MemTable.Entry>, last: String) -> Maybe<&2, St
     case Con{MemTable.Entry{key, val}, t}:
       last_key_go(t, key)
 
+# Return the last key in the sorted-run operations.
 def last_key(entries: List<&2, MemTable.Entry>) -> Maybe<&2, String>:
   match entries:
     case Nil{}:
@@ -132,6 +162,7 @@ def last_key(entries: List<&2, MemTable.Entry>) -> Maybe<&2, String>:
     case Con{MemTable.Entry{key, val}, t}:
       last_key_go(t, key)
 
+# Handle range disjoint bounds in the sorted-run operations.
 def range_disjoint_bounds(
   af: Maybe<&2, String>,
   al: Maybe<&2, String>,
@@ -150,9 +181,11 @@ def range_disjoint_bounds(
     case Some{a_first} Some{a_last} Some{b_first} Some{b_last}:
       bool_or(Keys.lt(a_last, b_first), Keys.lt(b_last, a_first))
 
+# Handle range disjoint in the sorted-run operations.
 def range_disjoint(+xs: List<&2, MemTable.Entry>, +ys: List<&2, MemTable.Entry>) -> Bool:
   range_disjoint_bounds(first_key(xs), last_key(xs), first_key(ys), last_key(ys))
 
+# Check disjointness of whether with holds for the sorted-run operations.
 def disjoint_with(+run: List<&2, MemTable.Entry>, runs: List<&2, List<&2, MemTable.Entry>>) -> Bool:
   match runs:
     case Nil{}:
@@ -160,6 +193,7 @@ def disjoint_with(+run: List<&2, MemTable.Entry>, runs: List<&2, List<&2, MemTab
     case Con{+h, t}:
       bool_and(range_disjoint(run, h), disjoint_with(run, t))
 
+# Handle pairwise disjoint in the sorted-run operations.
 def pairwise_disjoint(runs: List<&2, List<&2, MemTable.Entry>>) -> Bool:
   match runs:
     case Nil{}:
@@ -167,9 +201,11 @@ def pairwise_disjoint(runs: List<&2, List<&2, MemTable.Entry>>) -> Bool:
     case Con{+h, +t}:
       bool_and(disjoint_with(h, t), pairwise_disjoint(t))
 
+# Return the level disjoint for the sorted-run operations.
 def level_disjoint(+runs: List<&2, List<&2, MemTable.Entry>>) -> Bool:
   bool_and(runs_well_formed(runs), pairwise_disjoint(runs))
 
+# Return the level s well formed for the sorted-run operations.
 def levels_well_formed(levels: List<&2, List<&2, List<&2, MemTable.Entry>>>) -> Bool:
   match levels:
     case Nil{}:
@@ -190,6 +226,7 @@ def lower_levels_well_formed(levels: List<&2, List<&2, List<&2, MemTable.Entry>>
 
 # --- Fuel-bounded stable two-run linear merge ---
 
+# Merge step for the sorted-run operations.
 def merge_step(
   order: Cmp,
   +newer_head: MemTable.Entry,
@@ -206,6 +243,7 @@ def merge_step(
     case GT{}:
       (Con{older_head, acc}, Con{newer_head, newer_tail}, older_tail)
 
+# Merge go for the sorted-run operations.
 def merge_go(
   fuel: Nat,
   state: List<&2, MemTable.Entry> & List<&2, MemTable.Entry> & List<&2, MemTable.Entry>
@@ -226,12 +264,14 @@ def merge_go(
         case Con{+nh, nt} Con{+oh, ot}:
           merge_go(f, merge_step(entry_cmp(nh, oh), nh, nt, oh, ot, acc))
 
+# Merge newer for the sorted-run operations.
 def merge_newer(+newer: List<&2, MemTable.Entry>, +older: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
   fuel = Nat.add(Nat.add(List.length(&2, MemTable.Entry, newer), List.length(&2, MemTable.Entry, older)), 1n)
   merge_go(fuel, (Nil{}, newer, older))
 
 # --- Precedence-preserving balanced multi-run merge ---
 
+# Represent RunGroup data used by the sorted-run operations.
 type RunGroup is Data:
   RunGroup{
     newest_rank: Nat,
@@ -239,6 +279,7 @@ type RunGroup is Data:
     entries: List<&2, MemTable.Entry>
   }
 
+# Rank runs for the sorted-run operations.
 def rank_runs(runs: List<&2, List<&2, MemTable.Entry>>, +rank: Nat) -> List<&2, RunGroup>:
   match runs:
     case Nil{}:
@@ -246,6 +287,7 @@ def rank_runs(runs: List<&2, List<&2, MemTable.Entry>>, +rank: Nat) -> List<&2, 
     case Con{entries, rest}:
       Con{RunGroup{rank, rank, entries}, rank_runs(rest, 1n+rank)}
 
+# Merge groups for the sorted-run operations.
 def merge_groups(newer: RunGroup, older: RunGroup) -> RunGroup:
   match newer:
     case RunGroup{newest_rank, oldest_rank, newer_entries}:
@@ -253,6 +295,7 @@ def merge_groups(newer: RunGroup, older: RunGroup) -> RunGroup:
         case RunGroup{older_newest, older_oldest, older_entries}:
           RunGroup{newest_rank, older_oldest, merge_newer(newer_entries, older_entries)}
 
+# Merge round for the sorted-run operations.
 def merge_round(groups: List<&2, RunGroup>) -> List<&2, RunGroup>:
   match groups:
     case Nil{}:
@@ -263,6 +306,7 @@ def merge_round(groups: List<&2, RunGroup>) -> List<&2, RunGroup>:
       merged tail = merge_groups(newer, older) merge_round(rest)
       Con{merged, tail}
 
+# Group entries for the sorted-run operations.
 def group_entries(groups: List<&2, RunGroup>) -> List<&2, MemTable.Entry>:
   match groups:
     case Nil{}:
@@ -270,6 +314,7 @@ def group_entries(groups: List<&2, RunGroup>) -> List<&2, MemTable.Entry>:
     case Con{RunGroup{newest_rank, oldest_rank, entries}, rest}:
       entries
 
+# Merge many go for the sorted-run operations.
 def merge_many_go(fuel: Nat, groups: List<&2, RunGroup>) -> List<&2, MemTable.Entry>:
   match fuel:
     case 0n:
@@ -277,6 +322,7 @@ def merge_many_go(fuel: Nat, groups: List<&2, RunGroup>) -> List<&2, MemTable.En
     case 1n+f:
       merge_many_go(f, merge_round(groups))
 
+# Merge many newest for the sorted-run operations.
 def merge_many_newest(+runs: List<&2, List<&2, MemTable.Entry>>) -> List<&2, MemTable.Entry>:
   fuel = Nat.add(List.length(&2, List<&2, MemTable.Entry>, runs), 1n)
   merge_many_go(fuel, rank_runs(runs, 0n))
@@ -290,9 +336,11 @@ def singleton_runs(entries: List<&2, MemTable.Entry>) -> List<&2, List<&2, MemTa
     case Con{entry, rest}:
       Con{Con{entry, Nil{}}, singleton_runs(rest)}
 
+# Sort newest for the sorted-run operations.
 def sort_newest(entries: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
   merge_many_newest(singleton_runs(entries))
 
+# Merge disjoint dec for the sorted-run operations.
 def merge_disjoint_dec(ok: Bool, runs: List<&2, List<&2, MemTable.Entry>>) -> Maybe<&2, List<&2, MemTable.Entry>>:
   match ok:
     case False{}:
@@ -317,6 +365,7 @@ def partition_target(target: Nat) -> Nat:
     case 1n+n:
       1n+n
 
+# Partition finish for the sorted-run operations.
 def partition_finish(
   current_rev: List<&2, MemTable.Entry>,
   chunks_rev: List<&2, List<&2, MemTable.Entry>>
@@ -328,6 +377,7 @@ def partition_finish(
       chunk = List.reverse(&2, MemTable.Entry, Con{entry, rest})
       List.reverse(&2, List<&2, MemTable.Entry>, Con{chunk, chunks_rev})
 
+# Represent PartitionState data used by the sorted-run operations.
 type PartitionState is Data:
   PartitionState{
     room: Nat,
@@ -336,6 +386,7 @@ type PartitionState is Data:
     chunks_rev: List<&2, List<&2, MemTable.Entry>>
   }
 
+# Partition step for the sorted-run operations.
 def partition_step(
   full: Bool,
   target: Nat,
@@ -352,6 +403,7 @@ def partition_step(
       chunk = List.reverse(&2, MemTable.Entry, Con{entry, current_rev})
       PartitionState{target, rest, Nil{}, Con{chunk, chunks_rev}}
 
+# Partition go for the sorted-run operations.
 def partition_go(
   fuel: Nat,
   +target: Nat,
@@ -367,10 +419,12 @@ def partition_go(
     case 1n+f PartitionState{1n++r, Con{entry, rest}, current_rev, chunks_rev}:
       partition_go(f, target, partition_step(Nat.is_eq(r, 0n), target, r, entry, rest, current_rev, chunks_rev))
 
+# Handle partition in the sorted-run operations.
 def partition(+target: Nat, +entries: List<&2, MemTable.Entry>) -> List<&2, List<&2, MemTable.Entry>>:
   +size = partition_target(target)
   partition_go(List.length(&2, MemTable.Entry, entries), size, PartitionState{size, entries, Nil{}, Nil{}})
 
+# Concatenate chunks for the sorted-run operations.
 def concat_chunks(chunks: List<&2, List<&2, MemTable.Entry>>) -> List<&2, MemTable.Entry>:
   match chunks:
     case Nil{}:
@@ -378,6 +432,7 @@ def concat_chunks(chunks: List<&2, List<&2, MemTable.Entry>>) -> List<&2, MemTab
     case Con{chunk, rest}:
       List.append(&2, MemTable.Entry, chunk, concat_chunks(rest))
 
+# Handle the chunk s bounded go for the sorted-run operations.
 def chunks_bounded_go(+target: Nat, chunks: List<&2, List<&2, MemTable.Entry>>) -> Bool:
   match chunks:
     case Nil{}:
@@ -387,11 +442,14 @@ def chunks_bounded_go(+target: Nat, chunks: List<&2, List<&2, MemTable.Entry>>) 
         Nat.is_le(List.length(&2, MemTable.Entry, chunk), target),
         chunks_bounded_go(target, rest))
 
+# Handle the chunk s bounded for the sorted-run operations.
 def chunks_bounded(target: Nat, chunks: List<&2, List<&2, MemTable.Entry>>) -> Bool:
   chunks_bounded_go(partition_target(target), chunks)
 
+# Handle the chunk s strict unique for the sorted-run operations.
 def chunks_strict_unique(chunks: List<&2, List<&2, MemTable.Entry>>) -> Bool:
   runs_well_formed(chunks)
 
+# Handle the chunk s pairwise disjoint for the sorted-run operations.
 def chunks_pairwise_disjoint(chunks: List<&2, List<&2, MemTable.Entry>>) -> Bool:
   pairwise_disjoint(chunks)

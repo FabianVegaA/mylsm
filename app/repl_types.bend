@@ -1,15 +1,18 @@
 import Base
 
+# Represent TimingMode data used by the interactive shell data model.
 type TimingMode is Data:
   TimingOff{}
   TimingOn{}
   TimingOnce{}
 
+# Represent ComputeMode data used by the interactive shell data model.
 type ComputeMode is Data:
   Cpu{}
   Gpu{}
   Auto{}
 
+# Represent Command data used by the interactive shell data model.
 type Command is Data:
   Noop{}
   Put{key: String, value: String}

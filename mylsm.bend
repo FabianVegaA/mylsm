@@ -8,6 +8,8 @@ import ./src/Wal.bend as Wal
 import ./src/Manifest.bend as Manifest
 import ./src/MergeIter.bend as MergeIter
 import ./src/Db.bend as Db
+import ./src/Recover.bend as Recover
+import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # --- Level 2: part control (1:1 delegates) ---
 def cmp(+s1: String, +s2: String) -> Cmp:
@@ -57,29 +59,34 @@ def sst_from_sorted_unique(+entries: List<&2, MemTable.Entry>, level: Nat) -> Ss
 def sst_build_sorted(+entries: List<&2, MemTable.Entry>, level: Nat, est_keys: Nat) -> Sstable.Table:
   Sstable.build_sorted(entries, level, est_keys)
 
-# Encode a WAL batch to its exact on-disk bytes.
-def wal_encode(batch: Wal.Batch) -> String:
-  Wal.encode(batch)
+# Handle wal encode in the public module exports.
+def wal_encode(batch: Wal.Batch) -> Result<&1, &1, Wal.Error, Bytes.Bytes>:
+  Wal.encode_frame(batch)
 
-# Decode WAL bytes; None on corrupt or truncated input (fail-closed).
-def wal_decode(+str: String) -> Maybe<&2, Wal.Batch>:
-  Wal.decode(str)
+# Handle wal decode in the public module exports.
+def wal_decode(encoded: Bytes.Bytes) -> Result<&1, &1, Wal.Error, Wal.Batch>:
+  Wal.decode_frame(encoded)
 
-# Serialize entries to the compact v2 table wire format.
-def sst_serialize(+entries: List<&2, MemTable.Entry>, +level: Nat) -> String:
-  SstFile.serialize(entries, level)
+# Encode an SST as packed v3 bytes.
+def sst_encode(
+  +entries: List<&2, MemTable.Entry>,
+  +level: U32
+) -> Result<&1, &1, SstFile.Error, Bytes.Bytes>:
+  SstFile.encode_file(entries, level)
 
-# Parse v2 table bytes with checksum verification; None when rejected.
-def sst_parse(+encoded: String) -> Maybe<&2, Sstable.Table>:
+# Parse packed v3 bytes with strict bounds and checksum verification.
+def sst_parse(
+  encoded: Bytes.Bytes
+) -> Result<&1, &1, SstFile.Error, Sstable.Table>:
   SstFile.parse(encoded)
 
 # Serialize a Manifest to its exact on-disk bytes.
-def mfst_serialize(mfst: Manifest.Manifest) -> String:
+def mfst_serialize(mfst: Manifest.Manifest) -> Result<&1, &1, Manifest.Error, Bytes.Bytes>:
   Manifest.serialize(mfst)
 
-# Parse Manifest bytes; None on corrupt input (fail-closed).
-def mfst_parse(+str: String) -> Maybe<&2, Manifest.Manifest>:
-  Manifest.parse(str)
+# Handle mfst parse in the public module exports.
+def mfst_parse(encoded: Bytes.Bytes) -> Maybe<&2, Manifest.Manifest>:
+  Manifest.parse(encoded)
 
 # --- Level 1: Sess session monad (primary API) ---
 type Sess<a, -A: Kind(a)> is Kind(a <&> &1):
@@ -102,6 +109,10 @@ def Sess.bind(a, -A: Kind(a), -B: Kind(a), sess: Sess<a, A>, fun: A -> Sess<a, B
 # Open a database handle over a directory label (pure; no IO touched).
 def open(+dir: String) -> Db.Db:
   Db.open_db(dir)
+
+# Recover a persisted database from its directory.
+def open_recovering(+dir: String) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+  Recover.open_db(dir)
 
 # Pure put transition used by the session action.
 def put_go(+db: Db.Db, +key: String, +val: String) -> Db.Db:
@@ -149,7 +160,3 @@ def run_sess(a, -A: Kind(a), st: Db.Db, sess: Sess<a, A>) -> Db.Db & A:
 def value_of(a, -A: Kind(a), pair: Db.Db & A) -> A:
   match pair:
     case (db, x): x
-
-# Render the exact WAL bytes a VFS adapter frames with wal_frame plus fsync.
-def encode_batch(batch: Wal.Batch) -> String:
-  Wal.encode(batch)

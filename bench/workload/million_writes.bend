@@ -7,6 +7,7 @@ import ../../src/Sstable.bend as Sstable
 import ../../src/Wal.bend as Wal
 import ../lib/common.bend as Common
 
+# Write many for the write throughput benchmark.
 def write_many(fuel: Nat, +index: Nat, db: Db.Db) -> IO(Db.Db):
   match fuel:
     case 0n:

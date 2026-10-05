@@ -8,9 +8,11 @@ import ../src/FlushPolicy.bend as Flush
 def scan_mem() -> List<&2, MemTable.Entry>:
   Con{MemTable.Entry{"b", Some{"v2"}}, Con{MemTable.Entry{"a", Some{"v1"}}, Nil{}}}
 
+# Handle fl pre in the flush laws.
 def fl_pre() -> Db.Db:
   Db.Db{"/d", MemTable.MT{scan_mem()}, MemTable.MT{Nil{}}, 1n, Nil{}, Nil{}, 0n, "", 2n, 0n}
 
+# Handle fl post in the flush laws.
 def fl_post() -> Db.Db:
   Db.Db{"/d", MemTable.MT{Nil{}}, MemTable.MT{Nil{}}, 1n, Nil{}, Con{Con{Sstable.build(scan_mem(), 0n, 2n), Nil{}}, Nil{}}, 1n, "", 0n, 0n}
 
@@ -31,5 +33,6 @@ law flush_preserve:
 law flush_miss:
   {Db.db_get(fl_pre(), "z") == Db.db_get(fl_post(), "z") : Maybe<&2, String>}
 
+# State the table name decimal property for the flush laws.
 law table_name_decimal:
   {Flush.table_name(12n) == "l0-12.tbl" : String}

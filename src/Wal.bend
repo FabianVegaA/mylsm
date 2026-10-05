@@ -1,355 +1,543 @@
 import Base
-import ./Keys.bend as Keys
-import bend-mathlib@0.7.0.0/string.bend as MString
-import bend-mathlib@0.7.0.0/nat.bend as MNat
+import ./MemTable.bend as MemTable
+import ./SstFile.bend as SstFile
+import ./StorageBytes.bend as StorageBytes
+import ./hub_sha/sha256.bend as SHA
+import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
-# WAL record codec (Task 3). Format (lengths are UNARY dash runs — no
-# decimal show/parse inverse lemmas; data is opaque — counted, never
-# inspected; checksums are COMPARED, never parsed):
-#   Put: 'P' dashes(klen) ':' key dashes(vlen) ':' val chk4 ';'
-#   Del: 'D' dashes(klen) ':' key chk4 ';'
-# chk4 = 4 raw bytes of hash3(tag, key, val) (Del hashes val="").
-# Every pump step consumes exactly one char (handoffs are fused into the
-# step that sees the boundary char), so fuel = length fits exactly.
-
+# Represent Mut data used by the write-ahead log data model.
 type Mut is Data:
   Put{key: String, val: String}
   Del{key: String}
 
+# Represent Batch data used by the write-ahead log data model.
 type Batch is Data:
   Batch{muts: List<&2, Mut>}
 
-# --- Encode (structural, no fuel) ---
-
-def dashes(num: Nat) -> String:
-  match num:
-    case 0n:
-      ""
-    case 1n+m:
-      SCon{'-', dashes(m)}
-
-def hash_str(str: String, acc: U32) -> U32:
-  match str:
-    case SNil{}:
-      acc
-    case SCon{c, t}:
-      hash_str(t, U32.add(U32.mul(acc, 31), Char.to_u32(c)))
-
-def hash3(tag: Char, key: String, val: String) -> U32:
-  hash_str(val, hash_str(key, hash_str(SCon{tag, SNil{}}, 7)))
-
-def chk4(+word: U32) -> String:
-  SCon{Char.from_u32(U32.and(word, 255)), SCon{Char.from_u32(U32.and(U32.shrn(word, 8n), 255)), SCon{Char.from_u32(U32.and(U32.shrn(word, 16n), 255)), SCon{Char.from_u32(U32.and(U32.shrn(word, 24n), 255)), SNil{}}}}}
-
-def enc_mut(mut: Mut) -> String:
-  match mut:
-    case Put{+key, +val}:
-      "P" ++ dashes(String.length(key)) ++ ":" ++ key ++ dashes(String.length(val)) ++ ":" ++ val ++ chk4(hash3('P', key, val)) ++ ";"
-    case Del{+key}:
-      "D" ++ dashes(String.length(key)) ++ ":" ++ key ++ chk4(hash3('D', key, "")) ++ ";"
-
-def enc_muts(muts: List<&2, Mut>) -> String:
-  match muts:
-    case Nil{}:
-      ""
-    case Con{m, t}:
-      enc_mut(m) ++ enc_muts(t)
-
-def encode(batch: Batch) -> String:
-  match batch:
-    case Batch{muts}:
-      enc_muts(muts)
-
+# Handle stage in the write-ahead log data model.
 def stage(+staged: List<&2, Batch>, +batch: Batch) -> List<&2, Batch>:
   Con{batch, staged}
 
-# --- Decode pump (fuel + state; Nat counters; unified dash phase) ---
+# Represent Error data used by the packed WAL codec.
+type Error is Data:
+  TooLarge{}
+  InvalidUtf8{}
+  Malformed{}
+  ChecksumMismatch{}
 
-type Phase is Data:
-  PTag{} RLen{next: Phase} PKey{} PVal{} PChk{} PSemi{} DKey{} DChk{} DSemi{}
+def record.error(error: SstFile.Error) -> Error:
+  match error:
+    case SstFile.TooLarge{}:
+      TooLarge{}
+    case SstFile.InvalidUtf8{}:
+      InvalidUtf8{}
+    case SstFile.ChecksumMismatch{}:
+      ChecksumMismatch{}
+    case _:
+      Malformed{}
 
-type DecState is Data:
-  DS{phase: Phase, muts: List<&2, Mut>, tag: Char, num: Nat, kacc: String, vacc: String, cacc: String, ok: Bool}
-
-def tag_dispatch(put: Bool, del: Bool, +muts: List<&2, Mut>) -> DecState:
-  match put:
-    case True{}:
-      DS{RLen{PKey{}}, muts, 'P', 0n, "", "", "", True{}}
-    case False{}:
-      match del:
-        case True{}:
-          DS{RLen{DKey{}}, muts, 'D', 0n, "", "", "", True{}}
-        case False{}:
-          DS{PTag{}, muts, 'P', 0n, "", "", "", False{}}
-
-def dash_step(dash: Bool, colon: Bool, next: Phase, +muts: List<&2, Mut>, +tag: Char, +num: Nat, +kacc: String, +vacc: String, +cacc: String) -> DecState:
-  match dash:
-    case True{}:
-      DS{RLen{next}, muts, tag, 1n+num, kacc, vacc, cacc, True{}}
-    case False{}:
-      match colon:
-        case True{}:
-          DS{next, muts, tag, num, kacc, vacc, cacc, True{}}
-        case False{}:
-          DS{PTag{}, muts, tag, 0n, "", "", "", False{}}
-
-def chk_next(ceq: Bool, next: Phase, +muts: List<&2, Mut>, +tag: Char, +key: String, +val: String) -> DecState:
-  match ceq:
-    case True{}:
-      DS{next, muts, tag, 0n, key, val, "", True{}}
-    case False{}:
-      DS{PTag{}, muts, tag, 0n, "", "", "", False{}}
-
-def semi_step(semi: Bool, put: Bool, +muts: List<&2, Mut>, +key: String, +val: String) -> DecState:
-  match semi:
-    case True{}:
-      match put:
-        case True{}:
-          DS{PTag{}, List.append(&2, Mut, muts, Con{Put{key, val}, Nil{}}), 'P', 0n, "", "", "", True{}}
-        case False{}:
-          DS{PTag{}, List.append(&2, Mut, muts, Con{Del{key}, Nil{}}), 'P', 0n, "", "", "", True{}}
-    case False{}:
-      DS{PTag{}, muts, 'P', 0n, "", "", "", False{}}
-
-def phase_router(phase: Phase, +muts: List<&2, Mut>, +tag: Char, +num: Nat, +kacc: String, +vacc: String, +cacc: String, +ch: Char) -> DecState:
-  match phase:
-    case PTag{}:
-      tag_dispatch(Char.is_eq(ch, 'P'), Char.is_eq(ch, 'D'), muts)
-    case RLen{next}:
-      dash_step(Char.is_eq(ch, '-'), Char.is_eq(ch, ':'), next, muts, tag, num, kacc, vacc, cacc)
-    case PKey{}:
-      match num:
-        case 0n:
-          dash_step(Char.is_eq(ch, '-'), Char.is_eq(ch, ':'), PVal{}, muts, tag, 0n, kacc, vacc, cacc)
-        case 1n+m:
-          DS{PKey{}, muts, tag, m, kacc ++ SCon{ch, SNil{}}, vacc, cacc, True{}}
-    case PVal{}:
-      match num:
-        case 0n:
-          DS{PChk{}, muts, tag, 1n+(1n+(1n+0n)), kacc, vacc, SCon{ch, SNil{}}, True{}}
-        case 1n+m:
-          DS{PVal{}, muts, tag, m, kacc, vacc ++ SCon{ch, SNil{}}, cacc, True{}}
-    case PChk{}:
-      match num:
-        case 0n:
-          chk_next(String.eq(cacc, chk4(hash3(tag, kacc, vacc))), PSemi{}, muts, tag, kacc, vacc)
-        case 1n+m:
-          match m:
-            case 0n:
-              chk_next(String.eq(cacc ++ SCon{ch, SNil{}}, chk4(hash3(tag, kacc, vacc))), PSemi{}, muts, tag, kacc, vacc)
-            case 1n+p:
-              DS{PChk{}, muts, tag, 1n+p, kacc, vacc, cacc ++ SCon{ch, SNil{}}, True{}}
-    case PSemi{}:
-      semi_step(Char.is_eq(ch, ';'), True{}, muts, kacc, vacc)
-    case DKey{}:
-      match num:
-        case 0n:
-          DS{DChk{}, muts, tag, 1n+(1n+(1n+0n)), kacc, vacc, SCon{ch, SNil{}}, True{}}
-        case 1n+m:
-          DS{DKey{}, muts, tag, m, kacc ++ SCon{ch, SNil{}}, vacc, cacc, True{}}
-    case DChk{}:
-      match num:
-        case 0n:
-          chk_next(String.eq(cacc, chk4(hash3(tag, kacc, ""))), DSemi{}, muts, tag, kacc, "")
-        case 1n+m:
-          match m:
-            case 0n:
-              chk_next(String.eq(cacc ++ SCon{ch, SNil{}}, chk4(hash3(tag, kacc, ""))), DSemi{}, muts, tag, kacc, "")
-            case 1n+p:
-              DS{DChk{}, muts, tag, 1n+p, kacc, vacc, cacc ++ SCon{ch, SNil{}}, True{}}
-    case DSemi{}:
-      semi_step(Char.is_eq(ch, ';'), False{}, muts, kacc, vacc)
-
-def dec_step(st: DecState, ch: Char) -> DecState:
-  match st:
-    case DS{phase, muts, tag, num, kacc, vacc, cacc, ok}:
-      match ok:
-        case False{}:
-          DS{PTag{}, muts, tag, 0n, "", "", "", False{}}
-        case True{}:
-          phase_router(phase, muts, tag, num, kacc, vacc, cacc, ch)
-
-def dec_finish(ok: Bool, phase: Phase, +muts: List<&2, Mut>) -> (List<&2, Mut> & Bool):
-  match ok:
-    case False{}:
-      (muts, False{})
-    case True{}:
-      match phase:
-        case PTag{}:
-          (muts, True{})
-        case _:
-          (muts, False{})
-
-def dec_extract(st: DecState) -> (List<&2, Mut> & Bool):
-  match st:
-    case DS{phase, muts, tag, num, kacc, vacc, cacc, ok}:
-      dec_finish(ok, phase, muts)
-
-def dec_go(fuel: Nat, rest: String, st: DecState) -> (List<&2, Mut> & Bool):
-  match fuel rest:
-    case 0n _:
-      dec_extract(st)
-    case 1n+f SNil{}:
-      dec_extract(st)
-    case 1n+f SCon{h, +t}:
-      dec_go(f, t, dec_step(st, h))
-
-# Fuel-exact runner: consumes exactly len-bounded input, returns the state
-# (no extraction — callers extract). Proof-only workhorse.
-def dec_run(fuel: Nat, rest: String, st: DecState) -> DecState:
-  match fuel rest:
-    case 0n _:
-      st
-    case 1n+f SNil{}:
-      st
-    case 1n+f SCon{h, +t}:
-      dec_run(f, t, dec_step(st, h))
-
-def dec_wrap(pair: (List<&2, Mut> & Bool)) -> Maybe<&2, Batch>:
+def record.convert(
+  pair: Bytes.Cursor & Result<&1, &1, SstFile.Error, SstFile.ParsedRecord>
+) -> Bytes.Cursor & Result<&1, &1, Error, Mut>:
   match pair:
-    case (muts, ok):
-      match ok:
-        case True{}:
-          Some{Batch{muts}}
-        case False{}:
-          None{}
+    case (cursor, Fail{error}):
+      (cursor, Fail{record.error(error)})
+    case (cursor, Done{SstFile.Rec{MemTable.Entry{key, None{}}, _}}):
+      (cursor, Done{Del{key}})
+    case (cursor, Done{SstFile.Rec{MemTable.Entry{key, Some{value}}, _}}):
+      (cursor, Done{Put{key, value}})
 
-def decode(+str: String) -> Maybe<&2, Batch>:
-  dec_wrap(dec_go(Nat.add(String.length(str), 1n), str, DS{PTag{}, Nil{}, 'P', 0n, "", "", "", True{}}))
+def record.read(
+  cursor: Bytes.Cursor
+) -> Bytes.Cursor & Result<&1, &1, Error, Mut>:
+  record.convert(SstFile.parse.record(cursor))
 
-# --- Proof scaffolding ---
+# Encode or decode a 32-bit word for bytes for the packed WAL codec.
+def u32_bytes(value: U32) -> Bytes.Bytes:
+  Bytes.set.u32be(Bytes.new(4), 0, value)
 
-def app_assoc(sa: String, sb: String, sc: String) -> {((sa ++ sb) ++ sc) == (sa ++ (sb ++ sc)) : String}:
-  MString.append_assoc(sa, sb, sc)
+# Encode an 8-bit value for bytes for the packed WAL codec.
+def u8_bytes(value: U32) -> Bytes.Bytes:
+  Bytes.set(Bytes.new(1), 0, value)
 
-def app_nil_r(str: String) -> {(str ++ "") == str : String}:
-  MString.append_nil(str)
+def header.finish(value: Maybe<&1, Bytes.Bytes>) -> Bytes.Bytes:
+  match value:
+    case Some{bytes}:
+      bytes
+    case None{}:
+      Bytes.new(0)
 
-def len_append(sa: String, sb: String) -> {String.length(sa ++ sb) == Nat.add(String.length(sa), String.length(sb)) : Nat}:
-  MString.length_append(sa, sb)
+# Handle log header in the packed WAL codec.
+def log_header() -> Bytes.Bytes:
+  header.finish(Bytes.from_hex("4d594c534d335700"))
 
-def add_assoc(n1: Nat, n2: Nat, n3: Nat) -> {Nat.add(Nat.add(n1, n2), n3) == Nat.add(n1, Nat.add(n2, n3)) : Nat}:
-  MNat.add_assoc(n1, n2, n3)
+def header.valid(
+  comparison: Bytes.Bytes & Bytes.Bytes & Bool
+) -> Result<&1, &1, Error, Unit>:
+  match comparison:
+    case (_, _, True{}):
+      Done{Unit{}}
+    case (_, _, False{}):
+      Fail{Malformed{}}
 
-def list_app_assoc(
-  xs: List<&2, Mut>,
-  ys: List<&2, Mut>,
-  zs: List<&2, Mut>,
-) -> {List.append(&2, Mut, List.append(&2, Mut, xs, ys), zs) == List.append(&2, Mut, xs, List.append(&2, Mut, ys, zs)) : List<&2, Mut>}:
-  match xs:
+# Decode header for the packed WAL codec.
+def decode_header(bytes: Bytes.Bytes) -> Result<&1, &1, Error, Unit>:
+  header.valid(Bytes.eq(log_header(), bytes))
+
+def record.delete.valid(
+  tag: U32,
+  key: Bytes.Bytes,
+  +key_len: U32,
+  valid: Bool
+) -> Result<&1, &1, Error, Bytes.Bytes>:
+  match valid:
+    case False{}:
+      Fail{TooLarge{}}
+    case True{}:
+      Done{Bytes.concat([u8_bytes(tag), u32_bytes(key_len), key])}
+
+
+def record.delete(
+  pair: Bytes.Bytes & U32
+) -> Result<&1, &1, Error, Bytes.Bytes>:
+  match pair:
+    case (key, +key_len):
+      record.delete.valid(1, key, key_len,
+        U32.is_le(key_len, (StorageBytes.MAX_RECORD_BYTES() - 5 : U32)))
+
+
+def record.put.valid(
+  key: Bytes.Bytes,
+  +key_len: U32,
+  value: Bytes.Bytes,
+  +value_len: U32,
+  valid: Bool
+) -> Result<&1, &1, Error, Bytes.Bytes>:
+  match valid:
+    case False{}:
+      Fail{TooLarge{}}
+    case True{}:
+      Done{Bytes.concat([Bytes.new(1), u32_bytes(key_len), key,
+        u32_bytes(value_len), value])}
+
+
+def record.put.checked(
+  key: Bytes.Bytes,
+  +key_len: U32,
+  value: Bytes.Bytes,
+  +value_len: U32,
+  sum: Maybe<&2, U32>
+) -> Result<&1, &1, Error, Bytes.Bytes>:
+  match sum:
+    case None{}:
+      Fail{TooLarge{}}
+    case Some{size}:
+      record.put.valid(key, key_len, value, value_len,
+        U32.is_le(size, (StorageBytes.MAX_RECORD_BYTES() - 9 : U32)))
+
+
+def record.put.value(
+  key: Bytes.Bytes,
+  +key_len: U32,
+  value_pair: Bytes.Bytes & U32
+) -> Result<&1, &1, Error, Bytes.Bytes>:
+  match value_pair:
+    case (value, +value_len):
+      record.put.checked(key, key_len, value, value_len,
+        StorageBytes.checked_add(key_len, value_len))
+
+def record.put(
+  key_pair: Bytes.Bytes & U32,
+  value_pair: Bytes.Bytes & U32
+) -> Result<&1, &1, Error, Bytes.Bytes>:
+  match key_pair:
+    case (key, +key_len):
+      record.put.value(key, key_len, value_pair)
+
+
+def record.encode.put(
+  key_result: Result<&1, &1, U32 & String, Bytes.Bytes>,
+  value_result: Result<&1, &1, U32 & String, Bytes.Bytes>
+) -> Result<&1, &1, Error, Bytes.Bytes>:
+  match key_result value_result:
+    case Fail{_} _:
+      Fail{TooLarge{}}
+    case _ Fail{_}:
+      Fail{TooLarge{}}
+    case Done{key} Done{value}:
+      record.put(Bytes.length(key), Bytes.length(value))
+
+
+def record.encode.delete(
+  key_result: Result<&1, &1, U32 & String, Bytes.Bytes>
+) -> Result<&1, &1, Error, Bytes.Bytes>:
+  match key_result:
+    case Fail{_}:
+      Fail{TooLarge{}}
+    case Done{key}:
+      record.delete(Bytes.length(key))
+
+
+def record.encode(mut: Mut) -> Result<&1, &1, Error, Bytes.Bytes>:
+  match mut:
+    case Put{key, val}:
+      record.encode.put(StorageBytes.from_string(key), StorageBytes.from_string(val))
+    case Del{key}:
+      record.encode.delete(StorageBytes.from_string(key))
+
+
+
+def records.step(
+  rest: List<&2, Mut>,
+  current: Result<&1, &1, Error, Bytes.Bytes>,
+  acc: List<&1, Bytes.Bytes>
+) -> Result<&1, &1, Error, List<&1, Bytes.Bytes>>:
+  match rest current:
+    case Nil{} Fail{error}:
+      Fail{error}
+    case Nil{} Done{bytes}:
+      Done{List.reverse(&1, Bytes.Bytes, bytes <> acc)}
+    case Con{_mut, _tail} Fail{error}:
+      Fail{error}
+    case Con{mut, tail} Done{bytes}:
+      records.step(tail, record.encode(mut), bytes <> acc)
+
+# Handle the record s for the packed WAL codec.
+def records(
+  muts: List<&2, Mut>
+) -> Result<&1, &1, Error, List<&1, Bytes.Bytes>>:
+  match muts:
     case Nil{}:
-      {==}
-    case Con{h, t}:
-      %list_app_assoc(t, ys, zs) : {Con{h, List.append(&2, Mut, List.append(&2, Mut, t, ys), zs)} == Con{h, _} : List<&2, Mut>}
-      {==}
+      Done{Nil{}}
+    case Con{mut, tail}:
+      records.step(tail, record.encode(mut), Nil{})
 
-def append_nil_r(+xs: List<&2, Mut>) -> {List.append(&2, Mut, xs, Nil{}) == xs : List<&2, Mut>}:
-  match xs:
-    case Nil{}:
-      {==}
-    case Con{h, t}:
-      %append_nil_r(t) : {Con{h, List.append(&2, Mut, t, Nil{})} == Con{h, _} : List<&2, Mut>}
-      {==}
+def bytes.clone.pair(
+  +len: U32,
+  copied: Array<U32> & Array<U32>
+) -> Bytes.Bytes & Bytes.Bytes:
+  match copied:
+    case (left, right):
+      (Bytes.Bytes{len, left}, Bytes.Bytes{len, right})
 
-# Unary counter: jump(n, num0) = num0 + n as 1n-chains (no appends, no assoc).
-def jump(num: Nat, num0: Nat) -> Nat:
-  match num:
-    case 0n:
-      num0
-    case 1n+m:
-      1n+jump(m, num0)
+def bytes.clone.split(bytes: Bytes.Bytes) -> Bytes.Bytes & Bytes.Bytes:
+  match bytes:
+    case Bytes.Bytes{+len, buf}:
+      bytes.clone.pair(len, Bytes.copy.bytes(len, buf, Bytes.alloc(len), 0, 0))
 
-def jump_zero(num: Nat) -> {jump(num, 0n) == num : Nat}:
-  match num:
-    case 0n:
-      {==}
-    case 1n+m:
-      %jump_zero(m) : {1n+jump(m, 0n) == 1n+_ : Nat}
-      {==}
+def frame.digest.pair(
+  +count: U32,
+  +frame_len: U32,
+  output_payload: Bytes.Bytes,
+  hash_payload: Bytes.Bytes
+) -> Result<&1, &1, Error, Bytes.Bytes>:
+  digest = SHA.sha256_packed_bytes(Bytes.concat([u32_bytes(frame_len),
+    u32_bytes(count), hash_payload]))
+  Done{Bytes.concat([u32_bytes(frame_len), u32_bytes(count),
+    output_payload, digest])}
 
-def jump_succ(num: Nat, num0: Nat) -> {jump(num, 1n+num0) == 1n+jump(num, num0) : Nat}:
-  match num:
-    case 0n:
-      {==}
-    case 1n+p:
-      %jump_succ(p, num0) : {1n+jump(p, 1n+num0) == 1n+_ : Nat}
-      {==}
 
-# RLen dash-run skip (unified len phase; next stored, never matched here).
-# Fuel is len(span++tail): deconstructs with the Nat induction, tail opaque.
-def dashspan(
-  num: Nat,
-  tail: String,
-  muts0: List<&2, Mut>,
-  tag: Char,
-  next: Phase,
-  +num0: Nat,
-  kacc0: String,
-) -> {dec_run(String.length(dashes(num) ++ tail), dashes(num) ++ tail, DS{RLen{next}, muts0, tag, num0, kacc0, "", "", True{}}) == dec_run(String.length(tail), tail, DS{RLen{next}, muts0, tag, jump(num, num0), kacc0, "", "", True{}}) : DecState}:
-  match num:
-    case 0n:
-      {==}
-    case 1n++m:
-      %jump_succ(m, num0) : {dec_run(String.length(dashes(m) ++ tail), dashes(m) ++ tail, DS{RLen{next}, muts0, tag, 1n+num0, kacc0, "", "", True{}}) == dec_run(String.length(tail), tail, DS{RLen{next}, muts0, tag, _, kacc0, "", "", True{}}) : DecState}
-      %dashspan(m, tail, muts0, tag, next, 1n+num0, kacc0) : {dec_run(String.length(dashes(m) ++ tail), dashes(m) ++ tail, DS{RLen{next}, muts0, tag, 1n+num0, kacc0, "", "", True{}}) == _ : DecState}
-      {==}
 
-# PKEY take: consumes key bytes; kacc0 generalized. Fuel is len(key++tail).
-def keyspan(
-  key: String,
-  +kacc0: String,
-  tail: String,
-  muts0: List<&2, Mut>,
-  tag: Char,
-  vacc0: String,
-) -> {dec_run(String.length(key ++ tail), key ++ tail, DS{PKey{}, muts0, tag, String.length(key), kacc0, vacc0, "", True{}}) == dec_run(String.length(tail), tail, DS{PKey{}, muts0, tag, 0n, kacc0 ++ key, vacc0, "", True{}}) : DecState}:
-  match key:
-    case SNil{}:
-      %Equal.sym(String, kacc0 ++ "", kacc0, app_nil_r(kacc0)) : {dec_run(String.length(tail), tail, DS{PKey{}, muts0, tag, 0n, kacc0, vacc0, "", True{}}) == dec_run(String.length(tail), tail, DS{PKey{}, muts0, tag, 0n, _, vacc0, "", True{}}) : DecState}
-      {==}
-    case SCon{+h, +t}:
-      %app_assoc(kacc0, SCon{h, SNil{}}, t) : {dec_run(String.length(t ++ tail), t ++ tail, DS{PKey{}, muts0, tag, String.length(t), kacc0 ++ SCon{h, SNil{}}, vacc0, "", True{}}) == dec_run(String.length(tail), tail, DS{PKey{}, muts0, tag, 0n, _, vacc0, "", True{}}) : DecState}
-      %keyspan(t, kacc0 ++ SCon{h, SNil{}}, tail, muts0, tag, vacc0) : {dec_run(String.length(t ++ tail), t ++ tail, DS{PKey{}, muts0, tag, String.length(t), kacc0 ++ SCon{h, SNil{}}, vacc0, "", True{}}) == _ : DecState}
-      {==}
+def frame.digest(
+  +count: U32,
+  payload: Bytes.Bytes,
+  +frame_len: U32,
+  hash_payload: Bytes.Bytes
+) -> Result<&1, &1, Error, Bytes.Bytes>:
+  frame.digest.pair(count, frame_len, payload, hash_payload)
 
-# PVAL take: mirror for values.
-def valspan(
-  val: String,
-  +vacc0: String,
-  tail: String,
-  muts0: List<&2, Mut>,
-  tag: Char,
-  kacc: String,
-) -> {dec_run(String.length(val ++ tail), val ++ tail, DS{PVal{}, muts0, tag, String.length(val), kacc, vacc0, "", True{}}) == dec_run(String.length(tail), tail, DS{PVal{}, muts0, tag, 0n, kacc, vacc0 ++ val, "", True{}}) : DecState}:
-  match val:
-    case SNil{}:
-      %Equal.sym(String, vacc0 ++ "", vacc0, app_nil_r(vacc0)) : {dec_run(String.length(tail), tail, DS{PVal{}, muts0, tag, 0n, kacc, vacc0, "", True{}}) == dec_run(String.length(tail), tail, DS{PVal{}, muts0, tag, 0n, kacc, _, "", True{}}) : DecState}
-      {==}
-    case SCon{+h, +t}:
-      %app_assoc(vacc0, SCon{h, SNil{}}, t) : {dec_run(String.length(t ++ tail), t ++ tail, DS{PVal{}, muts0, tag, String.length(t), kacc, vacc0 ++ SCon{h, SNil{}}, "", True{}}) == dec_run(String.length(tail), tail, DS{PVal{}, muts0, tag, 0n, kacc, _, "", True{}}) : DecState}
-      %valspan(t, vacc0 ++ SCon{h, SNil{}}, tail, muts0, tag, kacc) : {dec_run(String.length(t ++ tail), t ++ tail, DS{PVal{}, muts0, tag, String.length(t), kacc, vacc0 ++ SCon{h, SNil{}}, "", True{}}) == _ : DecState}
-      {==}
 
-# DKEY take: mirror for delete keys.
-def dkeyspan(
-  key: String,
-  +kacc0: String,
-  tail: String,
-  muts0: List<&2, Mut>,
-  tag: Char,
-) -> {dec_run(String.length(key ++ tail), key ++ tail, DS{DKey{}, muts0, tag, String.length(key), kacc0, "", "", True{}}) == dec_run(String.length(tail), tail, DS{DKey{}, muts0, tag, 0n, kacc0 ++ key, "", "", True{}}) : DecState}:
-  match key:
-    case SNil{}:
-      %Equal.sym(String, kacc0 ++ "", kacc0, app_nil_r(kacc0)) : {dec_run(String.length(tail), tail, DS{DKey{}, muts0, tag, 0n, kacc0, "", "", True{}}) == dec_run(String.length(tail), tail, DS{DKey{}, muts0, tag, 0n, _, "", "", True{}}) : DecState}
-      {==}
-    case SCon{+h, +t}:
-      %app_assoc(kacc0, SCon{h, SNil{}}, t) : {dec_run(String.length(t ++ tail), t ++ tail, DS{DKey{}, muts0, tag, String.length(t), kacc0 ++ SCon{h, SNil{}}, "", "", True{}}) == dec_run(String.length(tail), tail, DS{DKey{}, muts0, tag, 0n, _, "", "", True{}}) : DecState}
-      %dkeyspan(t, kacc0 ++ SCon{h, SNil{}}, tail, muts0, tag) : {dec_run(String.length(t ++ tail), t ++ tail, DS{DKey{}, muts0, tag, String.length(t), kacc0 ++ SCon{h, SNil{}}, "", "", True{}}) == _ : DecState}
-      {==}
 
-# (valsec/record/gen open-proof deferred — see laws/Wal.bend.
-# Closed round-trip vectors in laws/Wal.bend + Task-12 fuzz cover correctness.)
+def frame.payload.valid(
+  +count: U32,
+  payload: Bytes.Bytes,
+  +frame_len: U32,
+  hash_payload: Bytes.Bytes,
+  valid: Bool
+) -> Result<&1, &1, Error, Bytes.Bytes>:
+  match valid:
+    case False{}:
+      Fail{TooLarge{}}
+    case True{}:
+      frame.digest(count, payload, frame_len, hash_payload)
 
-# Total-parser witness used by the hardening law.
-def is_decided(+_m: Maybe<&2, Batch>) -> Bool:
-  True{}
+
+
+def frame.payload.fin(
+  +count: U32,
+  payload: Bytes.Bytes,
+  hash_payload: Bytes.Bytes,
+  frame_len: Maybe<&2, U32>
+) -> Result<&1, &1, Error, Bytes.Bytes>:
+  match frame_len:
+    case None{}:
+      Fail{TooLarge{}}
+    case Some{+length}:
+      frame.payload.valid(count, payload, length, hash_payload,
+        U32.is_le(length, StorageBytes.MAX_BLOCK_BYTES()) ||
+          U32.is_eq(count, 1) && U32.is_le(length,
+            (StorageBytes.MAX_RECORD_BYTES() + 36 : U32)))
+
+
+
+def frame.payload.output(
+  count: U32,
+  hash_payload: Bytes.Bytes,
+  measured: Bytes.Bytes & U32
+) -> Result<&1, &1, Error, Bytes.Bytes>:
+  match measured:
+    case (payload, +payload_len):
+      frame.payload.fin(count, payload, hash_payload,
+        StorageBytes.checked_add(payload_len, 36))
+
+def frame.payload.size(
+  count: U32,
+  pair: Bytes.Bytes & Bytes.Bytes
+) -> Result<&1, &1, Error, Bytes.Bytes>:
+  match pair:
+    case (output, hash_payload):
+      frame.payload.output(count, hash_payload, Bytes.length(output))
+
+
+
+def frame.payload(
+  +count: U32,
+  records: Result<&1, &1, Error, List<&1, Bytes.Bytes>>
+) -> Result<&1, &1, Error, Bytes.Bytes>:
+  match records:
+    case Fail{error}:
+      Fail{error}
+    case Done{parts}:
+      frame.payload.size(count, bytes.clone.split(Bytes.concat(parts)))
+
+# Encode frame for the packed WAL codec.
+def encode_frame(batch: Batch) -> Result<&1, &1, Error, Bytes.Bytes>:
+  match batch:
+    case Batch{+muts}:
+      frame.payload(U32.from_nat(List.length(&2, Mut, muts)), records(muts))
+
+# Represent DigestRead data used by the packed WAL codec.
+type DigestRead is Type:
+  DigestInput{cursor: Bytes.Cursor, value: Maybe<&2, U32>}
+
+def digest.read.wrap(pair: Bytes.Cursor & Maybe<&2, U32>) -> DigestRead:
+  match pair:
+    case (cursor, value):
+      DigestInput{cursor, value}
+
+def digest.read.go(
+  remaining: Nat,
+  input: DigestRead,
+  digest: Bytes.Bytes,
+  +offset: U32
+) -> Bytes.Cursor & Result<&1, &1, Error, Bytes.Bytes>:
+  match remaining input:
+    case 0n DigestInput{cursor, _}:
+      (cursor, Done{digest})
+    case 1n+0n DigestInput{cursor, Some{word}}:
+      (cursor, Done{Bytes.set.u32be(digest, offset, word)})
+    case 1n+1n+rest DigestInput{cursor, Some{word}}:
+      digest.read.go(1n+rest, digest.read.wrap(Bytes.Cursor.u32be(cursor)),
+        Bytes.set.u32be(digest, offset, word), (offset + 4 : U32))
+    case 1n+_ DigestInput{cursor, None{}}:
+      (cursor, Fail{Malformed{}})
+
+def digest.read(
+  cursor: Bytes.Cursor
+) -> Bytes.Cursor & Result<&1, &1, Error, Bytes.Bytes>:
+  digest.read.go(8n, digest.read.wrap(Bytes.Cursor.u32be(cursor)),
+    Bytes.new(32), 0)
+
+# Represent RecordRead data used by the packed WAL codec.
+type RecordRead is Type:
+  RecordInput{cursor: Bytes.Cursor,
+    result: Result<&1, &1, Error, Mut>}
+
+def records.read.wrap(
+  pair: Bytes.Cursor & Result<&1, &1, Error, Mut>
+) -> RecordRead:
+  match pair:
+    case (cursor, result):
+      RecordInput{cursor, result}
+
+def records.read.go(
+  remaining: Nat,
+  input: RecordRead,
+  reversed: List<&2, Mut>
+) -> Bytes.Cursor & Result<&1, &1, Error, List<&2, Mut>>:
+  match remaining input:
+    case 0n RecordInput{cursor, Fail{error}}:
+      (cursor, Fail{error})
+    case 0n RecordInput{cursor, Done{mut}}:
+      (cursor, Done{List.reverse(&2, Mut, mut <> reversed)})
+    case 1n+rest RecordInput{cursor, Fail{error}}:
+      (cursor, Fail{error})
+    case 1n+rest RecordInput{cursor, Done{mut}}:
+      records.read.go(rest, records.read.wrap(record.read(cursor)),
+        mut <> reversed)
+
+def records.read.start(
+  cursor: Bytes.Cursor,
+  +count: U32
+) -> Bytes.Cursor & Result<&1, &1, Error, List<&2, Mut>>:
+  match count:
+    case 0:
+      (cursor, Done{Nil{}})
+    case _:
+      records.read.go(Nat.sub(U32.to_nat(count), 1n),
+        records.read.wrap(record.read(cursor)), Nil{})
+
+def frame.digest.prefix(pair: Bytes.Bytes & Bytes.Bytes) -> Bytes.Bytes:
+  match pair:
+    case (_, prefix):
+      prefix
+
+def frame.verify.equal(
+  records: List<&2, Mut>,
+  comparison: Bytes.Bytes & Bytes.Bytes & Bool
+) -> Result<&1, &1, Error, Batch>:
+  match comparison:
+    case (_, _, False{}):
+      Fail{ChecksumMismatch{}}
+    case (_, _, True{}):
+      Done{Batch{records}}
+
+
+
+def frame.verify.end(
+  at_end: Bool,
+  bytes: Bytes.Bytes,
+  claimed: Bytes.Bytes,
+  records: List<&2, Mut>,
+  +end: U32
+) -> Result<&1, &1, Error, Batch>:
+  match at_end:
+    case False{}:
+      Fail{Malformed{}}
+    case True{}:
+      frame.verify.equal(records, Bytes.eq(claimed,
+        SHA.sha256_packed_bytes(frame.digest.prefix(
+          Bytes.slice(bytes, 0, (end - 32 : U32))))))
+
+
+
+def frame.verify.finish(
+  cursor: Bytes.Cursor,
+  claimed: Bytes.Bytes,
+  records: List<&2, Mut>
+) -> Result<&1, &1, Error, Batch>:
+  match cursor:
+    case Bytes.Cursor{bytes, +pos, _, +end}:
+      frame.verify.end(U32.is_eq(pos, end), bytes, claimed, records, end)
+
+
+def frame.verify.cursor(
+  pair: Bytes.Cursor & Result<&1, &1, Error, Bytes.Bytes>,
+  records: List<&2, Mut>
+) -> Result<&1, &1, Error, Batch>:
+  match pair:
+    case (_, Fail{error}):
+      Fail{error}
+    case (cursor, Done{claimed}):
+      frame.verify.finish(cursor, claimed, records)
+
+
+
+def frame.records(
+  pair: Bytes.Cursor & Result<&1, &1, Error, List<&2, Mut>>
+) -> Result<&1, &1, Error, Batch>:
+  match pair:
+    case (_, Fail{error}):
+      Fail{error}
+    case (cursor, Done{muts}):
+      frame.verify.cursor(digest.read(cursor), muts)
+
+
+def frame.bound.valid(
+  +frame_len: U32,
+  +count: U32,
+  valid: Bool
+) -> Bool:
+  valid && U32.is_le(count,
+    U32.from_nat(Nat.div(U32.to_nat(frame_len), 5n))) &&
+    (U32.is_le(frame_len, StorageBytes.MAX_BLOCK_BYTES()) ||
+      U32.is_eq(count, 1) && U32.is_le(frame_len,
+        (StorageBytes.MAX_RECORD_BYTES() + 36 : U32)))
+
+def frame.bound.checked(
+  cursor: Bytes.Cursor,
+  +count: U32,
+  valid: Bool
+) -> Result<&1, &1, Error, Batch>:
+  match valid:
+    case False{}:
+      Fail{Malformed{}}
+    case True{}:
+      frame.records(records.read.start(cursor, count))
+
+
+def frame.bound.count(
+  pair: Bytes.Cursor & Maybe<&2, U32>,
+  +frame_len: U32,
+  within: Bool
+) -> Result<&1, &1, Error, Batch>:
+  match pair:
+    case (_, None{}):
+      Fail{Malformed{}}
+    case (cursor, Some{+count}):
+      frame.bound.checked(cursor, count,
+        frame.bound.valid(frame_len, count, within))
+
+
+def frame.bound.total.valid(
+  cursor: Bytes.Cursor,
+  +frame_len: U32,
+  valid: Bool
+) -> Result<&1, &1, Error, Batch>:
+  match valid:
+    case False{}:
+      Fail{Malformed{}}
+    case True{}:
+      frame.bound.count(Bytes.Cursor.u32be(cursor), frame_len,
+        U32.is_le(36, frame_len))
+
+
+def frame.bound.total(
+  cursor: Bytes.Cursor,
+  +frame_len: U32,
+  +end: U32,
+  checked: Maybe<&2, U32>
+) -> Result<&1, &1, Error, Batch>:
+  match checked:
+    case None{}:
+      Fail{TooLarge{}}
+    case Some{+expected_end}:
+      frame.bound.total.valid(cursor, frame_len,
+        U32.is_eq(expected_end, end))
+
+
+def frame.bound.end(
+  cursor: Bytes.Cursor,
+  +frame_len: U32
+) -> Result<&1, &1, Error, Batch>:
+  match cursor:
+    case Bytes.Cursor{bytes, +pos, +start, +end}:
+      frame.bound.total(Bytes.Cursor{bytes, pos, start, end},
+        frame_len, end, StorageBytes.checked_add(frame_len, 4))
+
+
+def frame.bound.length(
+  pair: Bytes.Cursor & Maybe<&2, U32>
+) -> Result<&1, &1, Error, Batch>:
+  match pair:
+    case (_, None{}):
+      Fail{Malformed{}}
+    case (cursor, Some{+frame_len}):
+      frame.bound.end(cursor, frame_len)
+
+
+# Decode frame for the packed WAL codec.
+def decode_frame(
+  bytes: Bytes.Bytes
+) -> Result<&1, &1, Error, Batch>:
+  frame.bound.length(Bytes.Cursor.u32be(Bytes.Cursor.new(bytes)))

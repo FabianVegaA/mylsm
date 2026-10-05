@@ -3,6 +3,7 @@ import ../src/MemTable.bend as MemTable
 import ../src/Sstable.bend as Sstable
 import ../src/Wal.bend as Wal
 import ../src/Db.bend as Db
+import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # Small local fixture duplicated from the WAL domain for recovery composition.
 def batch_multi() -> Wal.Batch:
@@ -12,30 +13,46 @@ def batch_multi() -> Wal.Batch:
 # IO itself is unprovable; the laws pin the pure core (batch application,
 # replay) that the IO path must funnel through after fsync.
 
+# Handle db muts1 in the database laws.
 def db_muts1() -> List<&2, Wal.Mut>:
   Con{Wal.Put{"k", "v"}, Nil{}}
 
+# Handle db muts2 in the database laws.
 def db_muts2() -> List<&2, Wal.Mut>:
   Con{Wal.Put{"a", "1"}, Con{Wal.Del{"b"}, Con{Wal.Put{"c", "3"}, Nil{}}}}
 
+# Handle db mem2 in the database laws.
 def db_mem2() -> MemTable.MemTable:
   MemTable.MT{Con{MemTable.Entry{"c", Some{"3"}}, Con{MemTable.Entry{"b", None{}}, Con{MemTable.Entry{"a", Some{"1"}}, Nil{}}}}}
 
+# Handle batch muts in the database laws.
 def batch_muts(+batch: Wal.Batch) -> List<&2, Wal.Mut>:
   match batch:
     case Wal.Batch{m}:
       m
 
-def db_decoded(+batch: Wal.Batch) -> Maybe<&2, Wal.Batch>:
-  Wal.decode(Wal.encode(batch))
+def db_decoded.frame(
+  encoded: Result<&1, &1, Wal.Error, Bytes.Bytes>
+) -> Result<&1, &1, Wal.Error, Wal.Batch>:
+  match encoded:
+    case Fail{error}:
+      Fail{error}
+    case Done{bytes}:
+      Wal.decode_frame(bytes)
 
-def db_replay_go(+opt: Maybe<&2, Wal.Batch>) -> MemTable.MemTable:
-  match opt:
-    case None{}:
+# Handle db decoded in the database laws.
+def db_decoded(+batch: Wal.Batch) -> Result<&1, &1, Wal.Error, Wal.Batch>:
+  db_decoded.frame(Wal.encode_frame(batch))
+
+# Handle db replay go in the database laws.
+def db_replay_go(result: Result<&1, &1, Wal.Error, Wal.Batch>) -> MemTable.MemTable:
+  match result:
+    case Fail{_}:
       MemTable.empty()
-    case Some{Wal.Batch{muts}}:
+    case Done{Wal.Batch{muts}}:
       Db.apply_batch(muts, MemTable.empty())
 
+# Handle db replay in the database laws.
 def db_replay(+batch: Wal.Batch) -> MemTable.MemTable:
   db_replay_go(db_decoded(batch))
 
@@ -51,21 +68,26 @@ law db_del:
 law db_batch_atomic:
   {Db.apply_batch(db_muts2(), MemTable.empty()) == db_mem2() : MemTable.MemTable}
 
-# LAW: recovery replay equals direct application (closed; composes wal_rt)
+# State the db recover property for the database laws.
 law db_recover:
   {db_replay(batch_multi()) == Db.apply_batch(batch_muts(batch_multi()), MemTable.empty()) : MemTable.MemTable}
 
 # --- db_get per-source search (Phase A2): closed vectors ---
 
+# Handle two level db in the database laws.
 def two_level_db() -> Db.Db:
-  Db.Db{"/d", MemTable.MT{Con{MemTable.Entry{"m", Some{"mv"}}, Nil{}}}, MemTable.MT{Nil{}}, 1n, Nil{}, Con{Con{Sstable.build(Con{MemTable.Entry{"l0", Some{"l0v"}}, Nil{}}, 0n, 1n), Nil{}}, Con{Con{Sstable.build(Con{MemTable.Entry{"l1", Some{"l1v"}}, Nil{}}, 0n, 1n), Nil{}}, Nil{}}}, 2n, "", 1n, 0n}
+  Db.Db{"/d", MemTable.MT{Con{MemTable.Entry{"m", Some{"mv"}}, Nil{}}}, MemTable.MT{Nil{}}, 1n, Nil{}, Con{Con{Sstable.build(Con{MemTable.Entry{"l0", Some{"l0v"}}, Nil{}}, 0n, 1n),
+  Nil{}}, Con{Con{Sstable.build(Con{MemTable.Entry{"l1", Some{"l1v"}}, Nil{}}, 0n, 1n), Nil{}}, Nil{}}}, 2n, "", 1n, 0n}
 
+# Handle tomb db in the database laws.
 def tomb_db() -> Db.Db:
-  Db.Db{"/d", MemTable.MT{Con{MemTable.Entry{"x", None{}}, Nil{}}}, MemTable.MT{Nil{}}, 1n, Nil{}, Con{Con{Sstable.build(Con{MemTable.Entry{"x", Some{"old"}}, Nil{}}, 0n, 1n), Nil{}}, Nil{}}, 1n, "", 1n, 0n}
+  Db.Db{"/d", MemTable.MT{Con{MemTable.Entry{"x", None{}}, Nil{}}}, MemTable.MT{Nil{}}, 1n, Nil{}, Con{Con{Sstable.build(Con{MemTable.Entry{"x", Some{"old"}}, Nil{}}, 0n, 1n),
+  Nil{}}, Nil{}}, 1n, "", 1n, 0n}
 
 # LAW: mem shadows L0 shadows L1 (closed)
 law db_get_newest_wins:
-  {(Db.db_get(two_level_db(), "m"), Db.db_get(two_level_db(), "l0"), Db.db_get(two_level_db(), "l1")) == (Some{"mv"}, Some{"l0v"}, Some{"l1v"}) : Maybe<&2, String> & Maybe<&2, String> & Maybe<&2, String>}
+  {(Db.db_get(two_level_db(), "m"), Db.db_get(two_level_db(), "l0"), Db.db_get(two_level_db(), "l1")) == (Some{"mv"}, Some{"l0v"}, Some{"l1v"}) : Maybe<&2, String> & Maybe<&2,
+  String> & Maybe<&2, String>}
 
 # LAW: mem tombstone hides the L0 value (closed)
 law db_get_tombstone_hides:
@@ -77,11 +99,13 @@ law db_get_miss:
 
 # --- db_get_cached transparency (Phase A3): closed vectors ---
 
+# Read the cached snd for the database laws.
 def cached_snd(pair: (Db.Db & Maybe<&2, String>)) -> Maybe<&2, String>:
   match pair:
     case (db2, v):
       v
 
+# Read the cached val for the database laws.
 def cached_val(+db: Db.Db, +key: String) -> Maybe<&2, String>:
   cached_snd(Db.db_get_cached(db, key))
 
@@ -99,23 +123,28 @@ law db_cache_transparent_miss:
 
 # --- grouped commits (Phase B1): closed vectors ---
 
+# Stage two for the database laws.
 def stage_two() -> List<&2, Wal.Batch>:
   Con{Wal.Batch{Con{Wal.Put{"b", "2"}, Nil{}}}, Con{Wal.Batch{Con{Wal.Put{"a", "1"}, Nil{}}}, Nil{}}}
 
 # LAW: staged fold applies oldest batch first, equal to sequential writes (closed)
 law db_staged_order:
-  {Db.apply_batch(Db.staged_muts(List.reverse(&2, Wal.Batch, stage_two())), MemTable.empty()) == Db.apply_batch(Con{Wal.Put{"b", "2"}, Nil{}}, Db.apply_batch(Con{Wal.Put{"a", "1"}, Nil{}}, MemTable.empty())) : MemTable.MemTable}
+  {Db.apply_batch(Db.staged_muts(List.reverse(&2, Wal.Batch, stage_two())), MemTable.empty()) == Db.apply_batch(Con{Wal.Put{"b", "2"}, Nil{}}, Db.apply_batch(Con{Wal.Put{"a", "1"},
+  Nil{}}, MemTable.empty())) : MemTable.MemTable}
 
 # --- active/frozen rotation (Phase B2): closed vectors ---
 
+# Compute the small sigma function for mem for the database laws.
 def small_mem() -> MemTable.MemTable:
   MemTable.MT{Con{MemTable.Entry{"a", Some{"1"}}, Nil{}}}
 
+# Return the memory entries for the database laws.
 def mem_entries(tab: MemTable.MemTable) -> List<&2, MemTable.Entry>:
   match tab:
     case MemTable.MT{entries}:
       entries
 
+# Handle pair entries in the database laws.
 def pair_entries(res: Db.RotRes) -> List<&2, MemTable.Entry>:
   match res:
     case Db.Rot{mem2, frozen2, mc, fc}:

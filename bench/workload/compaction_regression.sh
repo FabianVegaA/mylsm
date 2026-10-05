@@ -50,7 +50,9 @@ if [[ -e "$OUTPUT_DIR" ]]; then
 fi
 mkdir -p -- "$OUTPUT_DIR/pure"
 
-read -r DISK_TOTAL DISK_AVAILABLE < <(df -Pk "$OUTPUT_DIR" | awk 'NR == 2 { print $2, $4 }')
+DISK_INFO=$(df -Pk "$OUTPUT_DIR" | awk 'NR == 2 { print $2, $4 }')
+DISK_TOTAL=${DISK_INFO%% *}
+DISK_AVAILABLE=${DISK_INFO##* }
 if [[ -z ${DISK_TOTAL:-} || -z ${DISK_AVAILABLE:-} || "$DISK_TOTAL" == 0 ]]; then
   echo "unable to determine free disk for $OUTPUT_DIR" >&2
   exit 2
@@ -82,7 +84,7 @@ case "$THREADS" in ''|*[!0-9]*) echo "MYLSM_THREADS must be an integer" >&2; exi
 (( THREADS >= 1 && THREADS <= 256 )) || { echo "MYLSM_THREADS must be between 1 and 256" >&2; exit 2; }
 
 RESULT="$OUTPUT_DIR/result-$MODE.log"
-exec > >(tee "$RESULT") 2>&1
+exec >"$RESULT" 2>&1
 
 COMMIT=$(git -C "$ROOT" rev-parse HEAD)
 if [[ -n $(git -C "$ROOT" --no-optional-locks status --short) ]]; then DIRTY=true; else DIRTY=false; fi

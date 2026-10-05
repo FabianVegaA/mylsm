@@ -1,6 +1,7 @@
 import Base
 import ../../src/Fs.bend as Fs
 
+# Print all for the effect smoke test.
 def print_all(xs: List<String>) -> IO(Unit):
   match xs:
     case Nil{}:
@@ -10,6 +11,7 @@ def print_all(xs: List<String>) -> IO(Unit):
         IO.print(h)
         print_all(t)
 
+# Close checked for the effect smoke test.
 def close_checked(pair: (File & Result<&1, &1, U32 & String, Unit>)) -> IO(Unit):
   match pair:
     case (a, b):

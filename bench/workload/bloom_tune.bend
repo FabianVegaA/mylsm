@@ -6,6 +6,7 @@ import ../../src/Sstable.bend as Sstable
 # schedule and one at double bits over the same keys, then counts observed
 # false positives over absent keys. bloom_bits changes only if data supports it.
 
+# Handle mk entries in the Bloom filter benchmark.
 def mk_entries(fuel: Nat, +start: Nat, acc: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
   match fuel:
     case 0n:
@@ -13,6 +14,7 @@ def mk_entries(fuel: Nat, +start: Nat, acc: List<&2, MemTable.Entry>) -> List<&2
     case 1n+f:
       mk_entries(f, Nat.add(start, 1n), Con{MemTable.Entry{"key-" ++ Nat.show(start), Some{"v"}}, acc})
 
+# Handle absent keys in the Bloom filter benchmark.
 def absent_keys(fuel: Nat, +start: Nat, acc: List<&2, String>) -> List<&2, String>:
   match fuel:
     case 0n:
@@ -20,6 +22,7 @@ def absent_keys(fuel: Nat, +start: Nat, acc: List<&2, String>) -> List<&2, Strin
     case 1n+f:
       absent_keys(f, Nat.add(start, 1n), Con{"zz-quux-" ++ Nat.show(start) ++ "-wombat", acc})
 
+# Compute the false-positive rate for add for the Bloom filter benchmark.
 def fpr_add(present: Bool, acc: Nat) -> Nat:
   match present:
     case True{}:
@@ -27,9 +30,11 @@ def fpr_add(present: Bool, acc: Nat) -> Nat:
     case False{}:
       acc
 
+# Compute the false-positive rate for go for the Bloom filter benchmark.
 def fpr_go(+probes: List<&2, String>, +tab: Sstable.Table, acc: Nat) -> Nat:
   Nat.add(Sstable.probe_count_par(probes, tab), acc)
 
+# Handle report in the Bloom filter benchmark.
 def report(+tag: String, +tab: Sstable.Table, +probes: Nat) -> IO(Unit):
   do IO<Unit>:
     _rp : Unit <- IO.print("bloom_schedule=" ++ tag ++ " bits=" ++ Nat.show(Sstable.table_bits(tab)) ++ " false_positives=" ++ Nat.show(fpr_go(absent_keys(probes, 0n, Nil{}), tab, 0n)) ++ " probes=" ++ Nat.show(probes))

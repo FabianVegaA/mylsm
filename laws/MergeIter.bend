@@ -5,27 +5,35 @@ import ../src/MergeIter.bend as MergeIter
 # --- Merge iterator (Task 6): closed vectors + fuzz (spec laws 4, 5, 10) ---
 # Merge of newest-first mem [b=v2, a=v1] over L1 [a=v0, c=v3].
 
+# Scan mem for the merge iterator laws.
 def scan_mem() -> List<&2, MemTable.Entry>:
   Con{MemTable.Entry{"b", Some{"v2"}}, Con{MemTable.Entry{"a", Some{"v1"}}, Nil{}}}
 
+# Scan l1 for the merge iterator laws.
 def scan_l1() -> List<&2, MemTable.Entry>:
   Con{MemTable.Entry{"a", Some{"v0"}}, Con{MemTable.Entry{"c", Some{"v3"}}, Nil{}}}
 
+# Scan levels for the merge iterator laws.
 def scan_levels() -> List<&2, List<&2, MemTable.Entry>>:
   Con{scan_l1(), Nil{}}
 
+# Scan merged for the merge iterator laws.
 def scan_merged() -> List<&2, MemTable.Entry>:
   Con{MemTable.Entry{"a", Some{"v1"}}, Con{MemTable.Entry{"b", Some{"v2"}}, Con{MemTable.Entry{"c", Some{"v3"}}, Nil{}}}}
 
+# Scan abc for the merge iterator laws.
 def scan_abc() -> List<&2, MemTable.Entry>:
   Con{MemTable.Entry{"a", Some{"v1"}}, Con{MemTable.Entry{"b", Some{"v2"}}, Con{MemTable.Entry{"c", Some{"v3"}}, Nil{}}}}
 
+# Scan ab for the merge iterator laws.
 def scan_ab() -> List<&2, MemTable.Entry>:
   Con{MemTable.Entry{"a", Some{"v1"}}, Con{MemTable.Entry{"b", Some{"v2"}}, Nil{}}}
 
+# Scan del for the merge iterator laws.
 def scan_del() -> List<&2, MemTable.Entry>:
   Con{MemTable.Entry{"a", Some{"v1"}}, Con{MemTable.Entry{"b", None{}}, Con{MemTable.Entry{"c", Some{"v3"}}, Nil{}}}}
 
+# Scan ac for the merge iterator laws.
 def scan_ac() -> List<&2, MemTable.Entry>:
   Con{MemTable.Entry{"a", Some{"v1"}}, Con{MemTable.Entry{"c", Some{"v3"}}, Nil{}}}
 

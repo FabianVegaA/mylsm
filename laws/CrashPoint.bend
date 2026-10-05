@@ -8,8 +8,10 @@ law crash_point_unset_disabled_for_any_requested:
   {CrashPoint.enabled("", requested) == False{} : Bool}
 
 
+# State the crash point mismatch disabled property for the crash policy laws.
 law crash_point_mismatch_disabled:
   {CrashPoint.enabled("wal.appended", "wal.synced") == False{} : Bool}
 
+# State the crash point exact enabled property for the crash policy laws.
 law crash_point_exact_enabled:
   {CrashPoint.enabled("wal.synced", "wal.synced") == True{} : Bool}

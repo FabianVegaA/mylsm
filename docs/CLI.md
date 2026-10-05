@@ -201,7 +201,7 @@ support. CPU and GPU worker agreement is covered by closed laws in `laws/Demo.be
 ```sh
 ./proofs/run.sh
 printf 'hello\n' | MYLSM_TEST_ENV=world bend bench/console_smoke.bend
-bench/cli_smoke.sh
+./bench/smoke/cli.sh
 ```
 
 The smoke script covers capability reporting, the proof gate, console effects,
@@ -214,16 +214,14 @@ export <path>
 import <path>
 ```
 
-Export writes a sorted, deduplicated live view using a versioned, length-framed
-WAL payload and a Manifest-style checksum. It writes `<path>.tmp` and renames it
-into place. Import validates version, framing, payload, and checksum before
-applying one durable batch. Quoted paths are accepted.
+Export writes a sorted, deduplicated live view as a version-2 envelope around a
+hex-encoded WAL v3 frame. The frame carries its SHA-256 digest. Export writes
+`<path>.tmp`, renames it into place, and syncs the parent directory. Import
+validates the version and complete frame before applying one durable batch;
+version-1 exports are rejected. Quoted paths are accepted.
 
 ## Current limitations
 
 - The REPL accepts at most 256 commands per process.
-- Fuzzing currently uses a small deterministic corpus, not a million-input
-  randomized campaign.
-- The benchmark remains a smoke measurement, not evidence of competitiveness.
 - Formal proofs cover selected pure laws and closed vectors, not the host OS or
   all open inputs.

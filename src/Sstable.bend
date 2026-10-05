@@ -8,9 +8,11 @@ import ./SortedRun.bend as SortedRun
 # `build` canonicalizes newest-first raw entries; `from_sorted_unique` trusts an
 # already strict, unique run and deliberately performs no sorting.
 
+# Represent Bloom data used by the SSTable indexes, filters, and lookup.
 type Bloom is Data:
   Blm{bits: BitTree.BitTree, size: Nat}
 
+# Represent Table data used by the SSTable indexes, filters, and lookup.
 type Table is Data:
   Tbl{
     entries: List<&2, MemTable.Entry>,
@@ -23,10 +25,18 @@ type Table is Data:
     blocks: List<&2, String>
   }
 
+# Handle the block entries for the SSTable indexes, filters, and lookup.
 def block_entries() -> Nat:
   64n
 
-def chunk_go(fuel: Nat, +entries: List<&2, MemTable.Entry>, +cur: List<&2, MemTable.Entry>, room: Nat, acc: List<&2, List<&2, MemTable.Entry>>) -> List<&2, List<&2, MemTable.Entry>>:
+# Handle the chunk go for the SSTable indexes, filters, and lookup.
+def chunk_go(
+  fuel: Nat,
+  +entries: List<&2, MemTable.Entry>,
+  +cur: List<&2, MemTable.Entry>,
+  room: Nat,
+  acc: List<&2, List<&2, MemTable.Entry>>
+) -> List<&2, List<&2, MemTable.Entry>>:
   match fuel:
     case 0n:
       List.reverse(&2, List<&2, MemTable.Entry>, Con{List.reverse(&2, MemTable.Entry, cur), acc})
@@ -41,6 +51,7 @@ def chunk_go(fuel: Nat, +entries: List<&2, MemTable.Entry>, +cur: List<&2, MemTa
             case 1n+r:
               chunk_go(f, t, Con{e, cur}, r, acc)
 
+# Handle chunk in the SSTable indexes, filters, and lookup.
 def chunk(+entries: List<&2, MemTable.Entry>) -> List<&2, List<&2, MemTable.Entry>>:
   match entries:
     case Nil{}:
@@ -48,6 +59,7 @@ def chunk(+entries: List<&2, MemTable.Entry>) -> List<&2, List<&2, MemTable.Entr
     case Con{e, t}:
       chunk_go(List.length(&2, MemTable.Entry, entries), t, Con{e, Nil{}}, Nat.sub(block_entries(), 1n), Nil{})
 
+# Handle the chunk head key for the SSTable indexes, filters, and lookup.
 def chunk_head_key(+xs: List<&2, MemTable.Entry>) -> Maybe<&2, String>:
   match xs:
     case Nil{}:
@@ -55,6 +67,7 @@ def chunk_head_key(+xs: List<&2, MemTable.Entry>) -> Maybe<&2, String>:
     case Con{MemTable.Entry{key, val}, t}:
       Some{key}
 
+# Handle the block cons acc for the SSTable indexes, filters, and lookup.
 def block_cons_acc(head: Maybe<&2, String>, acc: List<&2, String>) -> List<&2, String>:
   match head:
     case None{}:
@@ -62,6 +75,7 @@ def block_cons_acc(head: Maybe<&2, String>, acc: List<&2, String>) -> List<&2, S
     case Some{k}:
       Con{k, acc}
 
+# Handle the block keys for the SSTable indexes, filters, and lookup.
 def block_keys(+chunks: List<&2, List<&2, MemTable.Entry>>, acc: List<&2, String>) -> List<&2, String>:
   match chunks:
     case Nil{}:
@@ -69,6 +83,7 @@ def block_keys(+chunks: List<&2, List<&2, MemTable.Entry>>, acc: List<&2, String
     case Con{c, t}:
       block_keys(t, block_cons_acc(chunk_head_key(c), acc))
 
+# Represent Metadata data used by the SSTable indexes, filters, and lookup.
 type Metadata is Data:
   Meta{smallest: Maybe<&2, String>, largest: Maybe<&2, String>, count: Nat}
 
@@ -105,6 +120,7 @@ def bhash(str: String, acc: U32) -> U32:
 def u32_byte(+word: U32, shift: Nat) -> Nat:
   U32.to_nat(U32.and(U32.shrn(word, shift), 255))
 
+# Encode or decode a 32-bit word for to nat exact for the SSTable indexes, filters, and lookup.
 def u32_to_nat_exact(+word: U32) -> Nat:
   +b0 = u32_byte(word, 24n)
   +b1 = u32_byte(word, 16n)
@@ -112,6 +128,7 @@ def u32_to_nat_exact(+word: U32) -> Nat:
   +b3 = u32_byte(word, 0n)
   Nat.add(Nat.mul(b0, Nat.mul(Nat.mul(256n, 256n), 256n)), Nat.add(Nat.mul(b1, Nat.mul(256n, 256n)), Nat.add(Nat.mul(b2, 256n), b3)))
 
+# Handle bhash n pos in the SSTable indexes, filters, and lookup.
 def bhash_n_pos(+str: String, +seed: U32, +mod: Nat) -> Nat:
   +w = bhash(str, seed)
   +a0 = Nat.mod(u32_byte(w, 24n), mod)
@@ -119,6 +136,7 @@ def bhash_n_pos(+str: String, +seed: U32, +mod: Nat) -> Nat:
   +a2 = Nat.mod(Nat.add(Nat.mul(a1, 256n), u32_byte(w, 8n)), mod)
   Nat.mod(Nat.add(Nat.mul(a2, 256n), u32_byte(w, 0n)), mod)
 
+# Handle bhash n in the SSTable indexes, filters, and lookup.
 def bhash_n(str: String, seed: U32, mod: Nat) -> Nat:
   match mod:
     case 0n:
@@ -135,18 +153,23 @@ def bit_words(num: Nat) -> Nat:
     case 1n+m:
       Nat.add(1n, Nat.div(m, 32n))
 
+# Handle bit data for new for the SSTable indexes, filters, and lookup.
 def bits_new(+num: Nat) -> BitTree.BitTree:
   BitTree.new(bit_words(num))
 
+# Handle bit set in the SSTable indexes, filters, and lookup.
 def bit_set(idx: Nat, bits: BitTree.BitTree) -> BitTree.BitTree:
   BitTree.set(bits, idx)
 
+# Handle bit get in the SSTable indexes, filters, and lookup.
 def bit_get(idx: Nat, bits: BitTree.BitTree) -> Bool:
   BitTree.test(bits, idx)
 
+# Handle Bloom filter data for new for the SSTable indexes, filters, and lookup.
 def bloom_new(+num: Nat) -> Bloom:
   Blm{bits_new(num), num}
 
+# Handle Bloom filter data for well formed for the SSTable indexes, filters, and lookup.
 def bloom_well_formed(bloom: Bloom) -> Bool:
   match bloom:
     case Blm{+bits, +size}:
@@ -156,11 +179,13 @@ def bloom_well_formed(bloom: Bloom) -> Bool:
           Nat.is_eq(BitTree.word_count(bits), bit_words(size)),
           Nat.is_le(size, BitTree.bit_count(bits))))
 
+# Handle Bloom filter data for add for the SSTable indexes, filters, and lookup.
 def bloom_add(bloom: Bloom, +key: String) -> Bloom:
   match bloom:
     case Blm{bits, +size}:
       Blm{bit_set(bhash_n(key, 17, size), bit_set(bhash_n(key, 257, size), bits)), size}
 
+# Handle both in the SSTable indexes, filters, and lookup.
 def both(lhs: Bool, rhs: Bool) -> Bool:
   match lhs:
     case True{}:
@@ -168,16 +193,19 @@ def both(lhs: Bool, rhs: Bool) -> Bool:
     case False{}:
       False{}
 
+# Handle Bloom filter data for test for the SSTable indexes, filters, and lookup.
 def bloom_test(bloom: Bloom, +key: String) -> Bool:
   match bloom:
     case Blm{+bits, +size}:
       both(bit_get(bhash_n(key, 17, size), bits), bit_get(bhash_n(key, 257, size), bits))
 
+# Return the table bits for the SSTable indexes, filters, and lookup.
 def table_bits(tab: Table) -> Nat:
   match tab:
     case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
       nbits
 
+# Handle the optional value for present for the SSTable indexes, filters, and lookup.
 def maybe_present(tab: Table, +key: String) -> Bool:
   match tab:
     case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
@@ -236,6 +264,7 @@ def bloom_of(entries: List<&2, MemTable.Entry>, +blm: Bloom) -> Bloom:
         case MemTable.Entry{key, val}:
           bloom_of(t, bloom_add(blm, key))
 
+# Handle Bloom filter data for union trees for the SSTable indexes, filters, and lookup.
 def bloom_union_trees(+abits: BitTree.BitTree, +bbits: BitTree.BitTree, size: Nat) -> Bloom:
   match abits:
     case BitTree.BT{aroot, awords, acap, aheight}:
@@ -243,6 +272,7 @@ def bloom_union_trees(+abits: BitTree.BitTree, +bbits: BitTree.BitTree, size: Na
         case BitTree.BT{broot, bwords, bcap, bheight}:
           Blm{BitTree.BT{BitTree.union_bits(aroot, broot), awords, acap, aheight}, size}
 
+# Handle Bloom filter data for union for the SSTable indexes, filters, and lookup.
 def bloom_union(ba: Bloom, bb: Bloom) -> Bloom:
   match ba:
     case Blm{abits, asize}:
@@ -250,6 +280,7 @@ def bloom_union(ba: Bloom, bb: Bloom) -> Bloom:
         case Blm{bbits, bsize}:
           bloom_union_trees(abits, bbits, Nat.max(asize, bsize))
 
+# Handle Bloom filter data for of chunk for the SSTable indexes, filters, and lookup.
 def bloom_of_chunk(+chunk: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
   bloom_of(chunk, bloom_new(nb))
 
@@ -358,9 +389,11 @@ def bloom_pick(small: Bool, +entries: List<&2, MemTable.Entry>, +nb: Nat) -> Blo
     case False{}:
       bloom_of(entries, bloom_new(nb))
 
+# Handle Bloom filter data for of auto for the SSTable indexes, filters, and lookup.
 def bloom_of_auto(+entries: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
   bloom_pick(Nat.is_lt(List.length(&2, MemTable.Entry, entries), 2048n), entries, nb)
 
+# Build table metadata for tail for the SSTable indexes, filters, and lookup.
 def metadata_tail(entries: List<&2, MemTable.Entry>, +first: String, last: String, +count: Nat) -> Metadata:
   match entries:
     case Nil{}:
@@ -368,6 +401,7 @@ def metadata_tail(entries: List<&2, MemTable.Entry>, +first: String, last: Strin
     case Con{MemTable.Entry{key, val}, rest}:
       metadata_tail(rest, first, key, Nat.add(count, 1n))
 
+# Handle metadata in the SSTable indexes, filters, and lookup.
 def metadata(entries: List<&2, MemTable.Entry>) -> Metadata:
   match entries:
     case Nil{}:
@@ -375,24 +409,29 @@ def metadata(entries: List<&2, MemTable.Entry>) -> Metadata:
     case Con{MemTable.Entry{+key, val}, rest}:
       metadata_tail(rest, key, key, 1n)
 
+# Handle from sorted unique est meta in the SSTable indexes, filters, and lookup.
 def from_sorted_unique_est_meta(+entries: List<&2, MemTable.Entry>, level: Nat, est_keys: Nat, meta: Metadata) -> Table:
   match meta:
     case Meta{smallest, largest, count}:
       +nb = bloom_bits(level, est_keys)
       Tbl{entries, bloom_of_auto(entries, nb), nb, smallest, largest, count, chunk(entries), block_keys(chunk(entries), Nil{})}
 
+# Handle from sorted unique meta in the SSTable indexes, filters, and lookup.
 def from_sorted_unique_meta(+entries: List<&2, MemTable.Entry>, level: Nat, meta: Metadata) -> Table:
   match meta:
     case Meta{smallest, largest, +count}:
       +nb = bloom_bits(level, count)
       Tbl{entries, bloom_of_auto(entries, nb), nb, smallest, largest, count, chunk(entries), block_keys(chunk(entries), Nil{})}
 
+# Handle from sorted unique in the SSTable indexes, filters, and lookup.
 def from_sorted_unique(+entries: List<&2, MemTable.Entry>, level: Nat) -> Table:
   from_sorted_unique_meta(entries, level, metadata(entries))
 
+# Build sorted for the SSTable indexes, filters, and lookup.
 def build_sorted(+entries: List<&2, MemTable.Entry>, level: Nat, est_keys: Nat) -> Table:
   from_sorted_unique_est_meta(entries, level, est_keys, metadata(entries))
 
+# Handle build in the SSTable indexes, filters, and lookup.
 def build(+entries: List<&2, MemTable.Entry>, level: Nat, est_keys: Nat) -> Table:
   +effective = Nat.max(est_keys, List.length(&2, MemTable.Entry, entries))
   build_sorted(SortedRun.sort_newest(entries), level, effective)
@@ -403,11 +442,13 @@ def table_smallest(tab: Table) -> Maybe<&2, String>:
     case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
       smallest
 
+# Return the table largest for the SSTable indexes, filters, and lookup.
 def table_largest(tab: Table) -> Maybe<&2, String>:
   match tab:
     case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
       largest
 
+# Return the table count for the SSTable indexes, filters, and lookup.
 def table_count(tab: Table) -> Nat:
   match tab:
     case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
@@ -421,6 +462,7 @@ def opt_name(+opt: Maybe<&2, String>) -> String:
     case Some{s}:
       s
 
+# Return the table id for the SSTable indexes, filters, and lookup.
 def table_id(tab: Table) -> String:
   match tab:
     case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
@@ -438,6 +480,7 @@ def table_bits_from_meta(
     case Meta{smallest, largest, count}:
       {==}
 
+# Return the table bits build for the SSTable indexes, filters, and lookup.
 def table_bits_build(
   +entries: List<&2, MemTable.Entry>,
   level: Nat,
@@ -447,16 +490,22 @@ def table_bits_build(
   table_bits_from_meta(SortedRun.sort_newest(entries), level, effective, metadata(SortedRun.sort_newest(entries)))
 
 
+# Check key ranges for disjoint for the SSTable indexes, filters, and lookup.
 def ranges_disjoint(+ta: Table, +tb: Table) -> Bool:
   SortedRun.range_disjoint_bounds(table_smallest(ta), table_largest(ta), table_smallest(tb), table_largest(tb))
 
+# Return the size of of in the SSTable indexes, filters, and lookup.
 def size_of(bloom: Bloom) -> Nat:
   match bloom:
     case Blm{bits, size}:
       size
 
 # Bloom insertions only set tree bits and preserve the exact logical size.
-def bloom_size_stable(entries: List<&2, MemTable.Entry>, bits: BitTree.BitTree, +size: Nat) -> {size_of(bloom_of(entries, Blm{bits, size})) == size : Nat}:
+def bloom_size_stable(
+  entries: List<&2, MemTable.Entry>,
+  bits: BitTree.BitTree,
+  +size: Nat
+) -> {size_of(bloom_of(entries, Blm{bits, size})) == size : Nat}:
   match entries:
     case Nil{}:
       {==}
@@ -481,6 +530,7 @@ def pick_ix(bt: List<&2, String>, ct: List<&2, List<&2, MemTable.Entry>>, ix: Na
     case Con{b2, bt2} Con{d2, ct2} EQ{}:
       ix
 
+# Handle the chunk at go for the SSTable indexes, filters, and lookup.
 def chunk_at_go(fuel: Nat, +chunks: List<&2, List<&2, MemTable.Entry>>, ix: Nat) -> List<&2, MemTable.Entry>:
   match fuel chunks:
     case 0n _:
@@ -494,13 +544,20 @@ def chunk_at_go(fuel: Nat, +chunks: List<&2, List<&2, MemTable.Entry>>, ix: Nat)
         case 1n+p:
           chunk_at_go(f, t, p)
 
+# Handle the chunk at for the SSTable indexes, filters, and lookup.
 def chunk_at(+chunks: List<&2, List<&2, MemTable.Entry>>, ix: Nat) -> List<&2, MemTable.Entry>:
   chunk_at_go(List.length(&2, List<&2, MemTable.Entry>, chunks), chunks, ix)
 
+# Handle the block scan for the SSTable indexes, filters, and lookup.
 def block_scan(+chunk: List<&2, MemTable.Entry>, +key: String) -> Maybe<&2, String>:
   MemTable.get(MemTable.MT{chunk}, key)
 
-def block_pick(+chunks: List<&2, List<&2, MemTable.Entry>>, +blocks: List<&2, String>, +key: String) -> List<&2, MemTable.Entry>:
+# Handle the block pick for the SSTable indexes, filters, and lookup.
+def block_pick(
+  +chunks: List<&2, List<&2, MemTable.Entry>>,
+  +blocks: List<&2, String>,
+  +key: String
+) -> List<&2, MemTable.Entry>:
   match chunks blocks:
     case Nil{} _:
       Nil{}
@@ -509,29 +566,42 @@ def block_pick(+chunks: List<&2, List<&2, MemTable.Entry>>, +blocks: List<&2, St
     case Con{c, ct} Con{b, bt}:
       chunk_at(chunks, pick_ix(bt, ct, 0n, key, Keys.cmp(b, key)))
 
-def block_finish(picked: List<&2, MemTable.Entry>, +entries: List<&2, MemTable.Entry>, +key: String) -> Maybe<&2, String>:
+# Handle the block finish for the SSTable indexes, filters, and lookup.
+def block_finish(
+  picked: List<&2, MemTable.Entry>,
+  +entries: List<&2, MemTable.Entry>,
+  +key: String
+) -> Maybe<&2, String>:
   match picked:
     case Nil{}:
       MemTable.get(MemTable.MT{entries}, key)
     case Con{e, t}:
       block_scan(Con{e, t}, key)
 
-def hit_finish(picked: List<&2, MemTable.Entry>, +entries: List<&2, MemTable.Entry>, +key: String) -> Maybe<&2, Maybe<&2, String>>:
+# Resolve the hit for finish for the SSTable indexes, filters, and lookup.
+def hit_finish(
+  picked: List<&2, MemTable.Entry>,
+  +entries: List<&2, MemTable.Entry>,
+  +key: String
+) -> Maybe<&2, Maybe<&2, String>>:
   match picked:
     case Nil{}:
       MemTable.get_hit(MemTable.MT{entries}, key)
     case Con{e, t}:
       MemTable.get_hit(MemTable.MT{Con{e, t}}, key)
 
+# Handle the block get hit for the SSTable indexes, filters, and lookup.
 def block_get_hit(tab: Table, +key: String) -> Maybe<&2, Maybe<&2, String>>:
   match tab:
     case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
       hit_finish(block_pick(chunks, blocks, key), entries, key)
 
+# Handle the block get for the SSTable indexes, filters, and lookup.
 def block_get(tab: Table, +key: String) -> Maybe<&2, String>:
   match tab:
     case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
       block_finish(block_pick(chunks, blocks, key), entries, key)
 
+# Handle lookup in the SSTable indexes, filters, and lookup.
 def lookup(tab: Table, +key: String) -> Maybe<&2, String>:
   block_get(tab, key)

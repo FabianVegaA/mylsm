@@ -1,5 +1,5 @@
 import Base
-import 0x185ae03c75e3e75be1171471f68b43cb/bytes.bend as StorageBytes
+import bend-kit-bytes@0.3.2.0/bytes.bend as StorageBytes
 import 0x6c54b2522c2258baf6f58d2b970c3902/files.bend as PackedFiles
 
 # Audited host effects (spec §3.3). Thin syscall wrappers with .c + .js
@@ -64,6 +64,11 @@ def fsync(path: String) -> IO(Result<&1, &1, U32 & String, Unit>):
   import "./effs/fsync.c"
   import "./effs/fsync.js"
 
+# Handle truncate in the filesystem effects.
+def truncate(path: String, offset: Nat) -> IO(Result<&1, &1, U32 & String, Unit>):
+  import "./effs/truncate.c"
+  import "./effs/truncate.js"
+
 # Atomically rename a filesystem path.
 def rename(old: String, new: String) -> IO(Result<&1, &1, U32 & String, Unit>):
   import "./effs/rename.c"
@@ -103,12 +108,6 @@ def exists(path: String) -> IO(Result<&1, &1, U32 & String, Bool>):
 def file_size(path: String) -> IO(Result<&1, &1, U32 & String, Nat>):
   import "./effs/file_size.c"
   import "./effs/file_size.js"
-
-# Returns `<byte-count>;<text>` for a positional chunk whose end is adjusted to
-# a complete UTF-8 boundary. The byte count advances the next positional read.
-def read_utf8_chunk(path: String, offset: Nat, max_bytes: Nat) -> IO(Result<&1, &1, U32 & String, String>):
-  import "./effs/read_utf8_chunk.c"
-  import "./effs/read_utf8_chunk.js"
 
 # Pure accumulator step (leaf: matches structurally, never recurses).
 # Past-end fetches answer "" (SNil{}), which is skipped.

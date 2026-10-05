@@ -4,12 +4,15 @@ import ../src/DbIo.bend as DbIo
 import ../src/Recover.bend as Recover
 import ./demo_helpers.bend as Demo
 
+# Open or die for the database demo commands.
 def open_or_die(+dir: String) -> IO(Db.Db):
   IO.try(Db.Db, Recover.open_db(dir))
 
+# Handle put or die in the database demo commands.
 def put_or_die(+db: Db.Db, +key: String, +val: String) -> IO(Db.Db):
   IO.try(Db.Db, DbIo.db_put(db, key, val))
 
+# Handle delete or die in the database demo commands.
 def delete_or_die(+db: Db.Db, +key: String) -> IO(Db.Db):
   IO.try(Db.Db, DbIo.db_del(db, key))
 

@@ -3,6 +3,10 @@ node_modules/
 .worktrees/
 *.gpu
 bench/results/
+!bench/results/
+bench/results/*
+!bench/results/*.md
+**/wal.log
 .mylsm/
 .mylsm-demo-data/
 .mylsm-million-write-data/

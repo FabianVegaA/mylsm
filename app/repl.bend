@@ -6,30 +6,36 @@ import ./repl_types.bend as Repl
 import ./repl_parser.bend as Parser
 import ./repl_exec.bend as Exec
 
+# Read the environment setting for default for the interactive shell loop.
 def env_default(value: String, fallback: String) -> String:
   match value:
     case SNil{}: fallback
     case SCon{h, t}: SCon{h, t}
 
+# Read the environment setting for gpu for the interactive shell loop.
 def env_gpu(value: String) -> Bool:
   match value:
     case SCon{'1', SNil{}}: True{}
     case _: False{}
 
+# Read the environment setting for mode for the interactive shell loop.
 def env_mode(value: String) -> Repl.ComputeMode:
   match value:
     case SCon{'g', SCon{'p', SCon{'u', SNil{}}}}: Repl.Gpu{}
     case SCon{'c', SCon{'p', SCon{'u', SNil{}}}}: Repl.Cpu{}
     case _: Repl.Auto{}
 
+# Parse the natural-number setting for default for the interactive shell loop.
 def nat_default(value: Maybe<&2, Nat>) -> Nat:
   match value:
     case None{}: 1n
     case Some{n}: n
 
+# Handle batch clamp in the interactive shell loop.
 def batch_clamp(count: Nat) -> Nat:
   Nat.max(1n, Nat.min(count, 1024n))
 
+# Handle repl loop in the interactive shell loop.
 def repl_loop(commands: Nat, state: Exec.LoopState) -> IO(Unit):
   match commands state:
     case 0n _:

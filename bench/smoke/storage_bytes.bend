@@ -1,6 +1,6 @@
 import Base
 import ../../src/Fs.bend as Fs
-import 0x185ae03c75e3e75be1171471f68b43cb/bytes.bend as Bytes
+import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # Stop the smoke test when an IO assertion fails.
 def require(ok: Bool, message: String) -> IO(Unit):

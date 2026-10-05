@@ -19,16 +19,20 @@ if [[ $(uname -s) != Darwin && $(uname -s) != Linux ]]; then
 fi
 
 RAMDISK_MNT=""
+RAMDISK_DEV=""
 cleanup() {
   if [[ -n "$RAMDISK_MNT" ]]; then
     if [[ $(uname -s) == Darwin ]]; then
-      hdiutil detach "$RAMDISK_MNT" >/dev/null 2>&1 || true
+      umount "$RAMDISK_MNT" >/dev/null 2>&1 || true
+      if [[ -n "$RAMDISK_DEV" ]]; then
+        hdiutil detach "$RAMDISK_DEV" >/dev/null 2>&1 || true
+      fi
     else
       umount "$RAMDISK_MNT" >/dev/null 2>&1 || true
     fi
     rmdir "$RAMDISK_MNT" >/dev/null 2>&1 || true
   fi
-  rm -rf -- "$ROOT/.mylsm-diskfull-work" "$ROOT/.mylsm-diskfull-ramdisk-mnt"
+  rm -rf -- "$ROOT/.mylsm-diskfull-work"
 }
 trap cleanup EXIT
 
@@ -40,11 +44,12 @@ echo "phase=build status=complete binary=$BINARY"
 if [[ $(uname -s) == Darwin ]]; then
   RAMDISK_MNT="$ROOT/.mylsm-diskfull-ramdisk-mnt"
   mkdir -p -- "$RAMDISK_MNT"
-  DEV=$(hdiutil attach -nomount ram://131072) || { echo "SKIP disk suite: ramdisk attach failed (needs mount privileges)" >&2; DEV=""; }
-  if [[ -n "${DEV:-}" ]]; then
-    if ! newfs_hfs -v MyLSMDisk "$DEV" >/dev/null 2>&1 || ! mount -t hfs "$DEV" "$RAMDISK_MNT" >/dev/null 2>&1; then
+  RAMDISK_DEV=$(hdiutil attach -nomount ram://131072 | awk 'NF {print $1; exit}') || { echo "SKIP disk suite: ramdisk attach failed (needs mount privileges)" >&2; RAMDISK_DEV=""; }
+  if [[ -n "$RAMDISK_DEV" ]]; then
+    if ! newfs_hfs -v MyLSMDisk "$RAMDISK_DEV" >/dev/null 2>&1 || ! mount -t hfs "$RAMDISK_DEV" "$RAMDISK_MNT" >/dev/null 2>&1; then
       echo "SKIP disk suite: ramdisk format/mount failed (needs mount privileges)" >&2
-      hdiutil detach "$DEV" >/dev/null 2>&1 || true
+      hdiutil detach "$RAMDISK_DEV" >/dev/null 2>&1 || true
+      RAMDISK_DEV=""
       RAMDISK_MNT=""
     fi
   else
@@ -72,7 +77,7 @@ if [[ -n "$RAMDISK_MNT" ]]; then
   echo "phase=enosp-full status=confirmed filler_bytes=$(wc -c < "$RAMDISK_MNT/filler" | tr -d ' ')"
   # Writes must now fail closed: nonzero exit, no new acknowledgements.
   set +e
-  MYLSM_BENCH_WRITES=5000 MYLSM_BENCH_DIR="$RDDIR" "$BINARY" --threads 4 >"$BUILD_DIR/diskfull-fail.log" 2>&1
+  MYLSM_BENCH_WRITES=100000 MYLSM_BENCH_DIR="$RDDIR" "$BINARY" --threads 4 >"$BUILD_DIR/diskfull-fail.log" 2>&1
   FAIL_STATUS=$?
   set -e
   if [[ "$FAIL_STATUS" -eq 0 ]]; then

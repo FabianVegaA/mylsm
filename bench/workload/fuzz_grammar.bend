@@ -6,6 +6,7 @@ import ../../src/SstFile.bend as SstFile
 import ../../src/Sstable.bend as Sstable
 import ../../src/SortedRun.bend as SortedRun
 import ../../src/MemTable.bend as MemTable
+import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # Directed adversarial corpus (Phase 2A). Every case carries its expected
 # verdict: decoders must ACCEPT the valid ones and REJECT the rest — never
@@ -21,29 +22,39 @@ import ../../src/MemTable.bend as MemTable
 #   take-1).
 # - Trailing garbage after a complete payload always rejects (verified per
 #   format), so every cross-splice rejects.
-# - Flips touch first/last chars only (tag/version/checksum/terminator):
-#   always structurally fatal.
-# - The empty string round-trips in WAL (empty batch accepts) and rejects
-#   elsewhere.
 
+# Represent Expect data used by the storage format grammar test.
 type Expect is Data:
   Accept{}
   Reject{}
 
-def wal_verdict(res: Maybe<&2, Wal.Batch>, want: Expect) -> Bool:
+# Handle wal verdict in the storage format grammar test.
+def wal_verdict(res: Result<&1, &1, Wal.Error, Wal.Batch>, want: Expect) -> Bool:
   match res want:
-    case None{} Reject{}:
+    case Fail{_} Reject{}:
       True{}
-    case None{} Accept{}:
+    case Fail{_} Accept{}:
       False{}
-    case Some{batch} Accept{}:
+    case Done{batch} Accept{}:
       True{}
-    case Some{_} Reject{}:
+    case Done{_} Reject{}:
       False{}
 
+def wal.decode.hex.value(value: Maybe<&1, Bytes.Bytes>) -> Result<&1, &1, Wal.Error, Wal.Batch>:
+  match value:
+    case None{}:
+      Fail{Wal.Malformed{}}
+    case Some{bytes}:
+      Wal.decode_frame(bytes)
+
+def wal.decode.hex(+str: String) -> Result<&1, &1, Wal.Error, Wal.Batch>:
+  wal.decode.hex.value(Bytes.from_hex(str))
+
+# Check whether wal holds for the storage format grammar test.
 def check_wal(+str: String, want: Expect) -> Bool:
-  wal_verdict(Wal.decode(str), want)
+  wal_verdict(wal.decode.hex(str), want)
 
+# Handle mfest verdict in the storage format grammar test.
 def mfest_verdict(res: Maybe<&2, Manifest.Manifest>, want: Expect) -> Bool:
   match res want:
     case None{} Reject{}:
@@ -55,22 +66,34 @@ def mfest_verdict(res: Maybe<&2, Manifest.Manifest>, want: Expect) -> Bool:
     case Some{_} Reject{}:
       False{}
 
-def check_mfest(+str: String, want: Expect) -> Bool:
-  mfest_verdict(Manifest.parse(str), want)
+# Check whether mfest holds for the storage format grammar test.
+def check_mfest(bytes: Bytes.Bytes, want: Expect) -> Bool:
+  mfest_verdict(Manifest.parse(bytes), want)
 
-def sst_verdict(res: Maybe<&2, Sstable.Table>, want: Expect) -> Bool:
+# Handle sst verdict in the storage format grammar test.
+def sst_verdict(res: Result<&1, &1, SstFile.Error, Sstable.Table>, want: Expect) -> Bool:
   match res want:
+    case Fail{_} Reject{}:
+      True{}
+    case Fail{_} Accept{}:
+      False{}
+    case Done{tab} Accept{}:
+      True{}
+    case Done{_} Reject{}:
+      False{}
+
+def sst_hex.verdict(value: Maybe<&1, Bytes.Bytes>, want: Expect) -> Bool:
+  match value want:
     case None{} Reject{}:
       True{}
     case None{} Accept{}:
       False{}
-    case Some{tab} Accept{}:
-      True{}
-    case Some{_} Reject{}:
-      False{}
+    case Some{bytes} _:
+      sst_verdict(SstFile.parse(bytes), want)
 
-def check_sst(+str: String, want: Expect) -> Bool:
-  sst_verdict(SstFile.parse(str), want)
+# Check whether sst holds for the storage format grammar test.
+def check_sst(+hex: String, want: Expect) -> Bool:
+  sst_hex.verdict(Bytes.from_hex(hex), want)
 
 # Every strict non-empty prefix rejects (single-record bases only).
 def truncs_all_go(+base: String, +cut: Nat, acc: List<&1, String & Expect>) -> List<&1, String & Expect>:
@@ -80,6 +103,7 @@ def truncs_all_go(+base: String, +cut: Nat, acc: List<&1, String & Expect>) -> L
     case 1n+m:
       truncs_all_go(base, m, Con{(String.take(base, cut), Reject{}), acc})
 
+# Handle truncs all in the storage format grammar test.
 def truncs_all(+base: String, +len: Nat) -> List<&1, String & Expect>:
   Con{(base, Accept{}), truncs_all_go(base, Nat.sub(len, 1n), Nil{})}
 
@@ -91,6 +115,7 @@ def truncs8_go(+base: String, +len: Nat, +eighth: Nat, acc: List<&1, String & Ex
     case 1n+m:
       truncs8_go(base, len, m, Con{(String.take(base, Nat.div(Nat.mul(len, eighth), 8n)), Reject{}), acc})
 
+# Handle truncs8 in the storage format grammar test.
 def truncs8(+base: String) -> List<&1, String & Expect>:
   Con{(base, Accept{}), truncs8_go(base, String.length(base), 7n, Nil{})}
 
@@ -101,31 +126,46 @@ def truncs3(+base: String) -> List<&1, String & Expect>:
   Con{(String.take(base, Nat.sub(String.length(base), 1n)), Reject{}),
   Con{(String.take(base, 1n), Reject{}), Nil{}}}}
 
+# Handle flip first in the storage format grammar test.
 def flip_first(+base: String) -> String:
   "X" ++ String.drop(base, 1n)
 
+# Handle flip last in the storage format grammar test.
 def flip_last(+base: String) -> String:
   String.take(base, Nat.sub(String.length(base), 1n)) ++ "X"
 
+# Handle splice hostile in the storage format grammar test.
 def splice_hostile(+base: String) -> String:
   +half = Nat.div(String.length(base), 2n)
   String.take(base, half) ++ "../evil" ++ String.drop(base, half)
 
+# Handle hostile prefix in the storage format grammar test.
 def hostile_prefix(+base: String) -> String:
   "../evil" ++ base
 
+# Handle splice mid in the storage format grammar test.
 def splice_mid(+base: String, +frag: String) -> String:
   +half = Nat.div(String.length(base), 2n)
   String.take(base, half) ++ frag ++ String.drop(base, half)
 
 # --- WAL bases ---
 
+def wal.hex(result: Result<&1, &1, Wal.Error, Bytes.Bytes>) -> String:
+  match result:
+    case Fail{_}:
+      ""
+    case Done{bytes}:
+      Bytes.to_hex(bytes)
+
+# Handle wal base single in the storage format grammar test.
 def wal_base_single() -> String:
-  Wal.encode(Wal.Batch{Con{Wal.Put{"k", "v"}, Nil{}}})
+  wal.hex(Wal.encode_frame(Wal.Batch{Con{Wal.Put{"k", "v"}, Nil{}}}))
 
+# Handle wal base multi in the storage format grammar test.
 def wal_base_multi() -> String:
-  Wal.encode(Wal.Batch{Con{Wal.Put{"a", "1"}, Con{Wal.Del{"b"}, Con{Wal.Put{"c", "3"}, Nil{}}}}})
+  wal.hex(Wal.encode_frame(Wal.Batch{Con{Wal.Put{"a", "1"}, Con{Wal.Del{"b"}, Con{Wal.Put{"c", "3"}, Nil{}}}}}))
 
+# Handle wal muts go in the storage format grammar test.
 def wal_muts_go(count: Nat, +idx: Nat, acc: List<&2, Wal.Mut>) -> List<&2, Wal.Mut>:
   match count:
     case 0n:
@@ -133,12 +173,19 @@ def wal_muts_go(count: Nat, +idx: Nat, acc: List<&2, Wal.Mut>) -> List<&2, Wal.M
     case 1n+f:
       wal_muts_go(f, Nat.add(idx, 1n), Con{Wal.Put{"k" ++ Nat.show(idx), "v"}, acc})
 
+# Handle wal base big in the storage format grammar test.
 def wal_base_big() -> String:
-  Wal.encode(Wal.Batch{wal_muts_go(20n, 0n, Nil{})})
+  wal.hex(Wal.encode_frame(Wal.Batch{wal_muts_go(20n, 0n, Nil{})}))
 
+# Handle wal base dels in the storage format grammar test.
 def wal_base_dels() -> String:
-  Wal.encode(Wal.Batch{Con{Wal.Del{"x"}, Con{Wal.Del{"y"}, Nil{}}}})
+  wal.hex(Wal.encode_frame(Wal.Batch{Con{Wal.Del{"x"}, Con{Wal.Del{"y"}, Nil{}}}}))
 
+# Handle wal base empty in the storage format grammar test.
+def wal_base_empty() -> String:
+  wal.hex(Wal.encode_frame(Wal.Batch{Nil{}}))
+
+# Handle wal specials in the storage format grammar test.
 def wal_specials() -> List<&1, String & Expect>:
   Con{(flip_first(wal_base_single()), Reject{}),
   Con{(flip_last(wal_base_single()), Reject{}),
@@ -148,24 +195,27 @@ def wal_specials() -> List<&1, String & Expect>:
   Con{(splice_mid(wal_base_big(), "X"), Reject{}),
   Con{(splice_mid(wal_base_big(), ";"), Reject{}),
   Con{(splice_mid(wal_base_big(), "P"), Reject{}),
-  Con{(Wal.encode(Wal.Batch{Nil{}}), Accept{}),
-  Con{("", Accept{}),
+  Con{(wal_base_empty(), Accept{}),
+  Con{("", Reject{}),
   Con{("garbage", Reject{}),
-  Con{(wal_base_single() ++ wal_base_single(), Accept{}),
-  Con{(wal_base_single() ++ wal_base_multi(), Accept{}),
-  Con{(wal_base_multi() ++ wal_base_single(), Accept{}), Nil{}}}}}}}}}}}}}}}
+  Con{(wal_base_single() ++ wal_base_single(), Reject{}),
+  Con{(wal_base_single() ++ wal_base_multi(), Reject{}),
+  Con{(wal_base_multi() ++ wal_base_single(), Reject{}), Nil{}}}}}}}}}}}}}}}
 
+# Handle wal cases in the storage format grammar test.
 def wal_cases() -> List<&1, String & Expect>:
   List.append(&1, String & Expect, truncs_all(wal_base_single(), String.length(wal_base_single())),
   List.append(&1, String & Expect, truncs3(wal_base_multi()),
   List.append(&1, String & Expect, truncs3(wal_base_big()),
   List.append(&1, String & Expect, truncs3(wal_base_dels()), wal_specials()))))
 
+# Run cons for the storage format grammar test.
 def run_cons(ok: Bool, rest: (Bool & Nat)) -> (Bool & Nat):
   match rest:
     case (rok, n):
       (Bool.and(ok, rok), Nat.add(1n, n))
 
+# Run wal for the storage format grammar test.
 def run_wal(cases: List<&1, String & Expect>) -> (Bool & Nat):
   match cases:
     case Nil{}:
@@ -177,68 +227,66 @@ def run_wal(cases: List<&1, String & Expect>) -> (Bool & Nat):
 
 # --- Manifest bases ---
 
-def mfest_base_empty() -> String:
-  Manifest.serialize(Manifest.M{Nil{}})
+# Handle mfest hex in the storage format grammar test.
+def mfest_hex(value: Maybe<&1, Bytes.Bytes>) -> Bytes.Bytes:
+  match value:
+    case Some{bytes}:
+      bytes
+    case None{}:
+      Bytes.new(0)
 
-def mfest_base_one() -> String:
-  Manifest.serialize(Manifest.M{Con{Con{"l0-1.tbl", Nil{}}, Nil{}}})
+# Handle mfest base empty in the storage format grammar test.
+def mfest_base_empty() -> Bytes.Bytes:
+  mfest_hex(Bytes.from_hex("4d594c534d334d0000000003000000001205c80e921bb2ce3c951dca55299a11f60403d7440d7f3949c06848ca9fd22a"))
 
-def mfest_base_two() -> String:
-  Manifest.serialize(Manifest.M{Con{Con{"l0-2.tbl", Con{"l0-1.tbl", Nil{}}}, Con{Con{"l1-1.tbl", Nil{}}, Nil{}}}})
+# Handle mfest base two in the storage format grammar test.
+def mfest_base_two() -> Bytes.Bytes:
+  mfest_hex(Bytes.from_hex("4d594c534d334d0000000003000000020000000200000005612e74626c00000005622e74626c0000000100000006c3a92e74626cf39b88edf66c32df5f8d45703f73f871850048939b317897290ae7a689d303ad"))
 
-def mfest_names_go(count: Nat, +idx: Nat, acc: List<&2, String>) -> List<&2, String>:
-  match count:
-    case 0n:
-      acc
-    case 1n+f:
-      mfest_names_go(f, Nat.add(idx, 1n), Con{"l0-" ++ Nat.show(idx) ++ ".tbl", acc})
+# Handle mfest cases in the storage format grammar test.
+def mfest_cases() -> List<&1, Bytes.Bytes & Expect>:
+  Con{(mfest_base_empty(), Accept{}),
+  Con{(mfest_base_two(), Accept{}),
+  Con{(Bytes.set(mfest_base_empty(), 0, 0), Reject{}),
+  Con{(Bytes.concat([mfest_base_empty(), Bytes.new(1)]), Reject{}),
+  Con{(Bytes.new(0), Reject{}), Nil{}}}}}}
 
-def mfest_base_big() -> String:
-  Manifest.serialize(Manifest.M{Con{mfest_names_go(10n, 0n, Nil{}), Nil{}}})
-
-def mfest_specials() -> List<&1, String & Expect>:
-  Con{(flip_first(mfest_base_one()), Reject{}),
-  Con{(flip_last(mfest_base_one()), Reject{}),
-  Con{(mfest_base_one() ++ "garbage", Reject{}),
-  Con{(splice_hostile(mfest_base_one()), Reject{}),
-  Con{(hostile_prefix(mfest_base_one()), Reject{}),
-  Con{(splice_mid(mfest_base_big(), "X"), Reject{}),
-  Con{(splice_mid(mfest_base_big(), ";"), Reject{}),
-  Con{(splice_mid(mfest_base_big(), "l"), Reject{}),
-  Con{("", Reject{}),
-  Con{("garbage", Reject{}),
-  Con{(mfest_base_one() ++ mfest_base_two(), Reject{}),
-  Con{(mfest_base_two() ++ mfest_base_one(), Reject{}), Nil{}}}}}}}}}}}}}
-
-def mfest_cases() -> List<&1, String & Expect>:
-  List.append(&1, String & Expect, truncs_all(mfest_base_empty(), String.length(mfest_base_empty())),
-  List.append(&1, String & Expect, truncs_all(mfest_base_one(), String.length(mfest_base_one())),
-  List.append(&1, String & Expect, truncs3(mfest_base_two()),
-  List.append(&1, String & Expect, truncs3(mfest_base_big()), mfest_specials()))))
-
-def run_mfest(cases: List<&1, String & Expect>) -> (Bool & Nat):
+# Run mfest for the storage format grammar test.
+def run_mfest(cases: List<&1, Bytes.Bytes & Expect>) -> (Bool & Nat):
   match cases:
     case Nil{}:
       (True{}, 0n)
     case Con{p, t}:
       match p:
-        case (str, want):
-          run_cons(check_mfest(str, want), run_mfest(t))
+        case (bytes, want):
+          run_cons(check_mfest(bytes, want), run_mfest(t))
 
-# --- S2 bases: empty, one put, two puts, tombstone, big ---
+# --- Packed v3 bases, kept as hex so binary bytes never pass through String. ---
 
+def sst_hex.result(result: Result<&1, &1, SstFile.Error, Bytes.Bytes>) -> String:
+  match result:
+    case Fail{_}:
+      ""
+    case Done{bytes}:
+      Bytes.to_hex(bytes)
+
+# Handle sst base empty in the storage format grammar test.
 def sst_base_empty() -> String:
-  SstFile.serialize(Nil{}, 0n)
+  sst_hex.result(SstFile.encode_file(Nil{}, 0))
 
+# Handle sst base one in the storage format grammar test.
 def sst_base_one() -> String:
-  SstFile.serialize(Con{MemTable.Entry{"k", Some{"v"}}, Nil{}}, 0n)
+  sst_hex.result(SstFile.encode_file(Con{MemTable.Entry{"k", Some{"v"}}, Nil{}}, 0))
 
+# Handle sst base two in the storage format grammar test.
 def sst_base_two() -> String:
-  SstFile.serialize(Con{MemTable.Entry{"a", Some{"1"}}, Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}}, 0n)
+  sst_hex.result(SstFile.encode_file(Con{MemTable.Entry{"a", Some{"1"}}, Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}}, 0))
 
+# Handle sst base tomb in the storage format grammar test.
 def sst_base_tomb() -> String:
-  SstFile.serialize(Con{MemTable.Entry{"gone", None{}}, Nil{}}, 1n)
+  sst_hex.result(SstFile.encode_file(Con{MemTable.Entry{"gone", None{}}, Nil{}}, 1))
 
+# Handle sst big go in the storage format grammar test.
 def sst_big_go(count: Nat, +idx: Nat, acc: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
   match count:
     case 0n:
@@ -246,9 +294,11 @@ def sst_big_go(count: Nat, +idx: Nat, acc: List<&2, MemTable.Entry>) -> List<&2,
     case 1n+f:
       sst_big_go(f, Nat.add(idx, 1n), Con{MemTable.Entry{"k" ++ Nat.show(idx), Some{"v"}}, acc})
 
+# Handle sst base big in the storage format grammar test.
 def sst_base_big() -> String:
-  SstFile.serialize(SortedRun.sort_newest(sst_big_go(70n, 0n, Nil{})), 0n)
+  sst_hex.result(SstFile.encode_file(SortedRun.sort_newest(sst_big_go(70n, 0n, Nil{})), 0))
 
+# Handle sst specials in the storage format grammar test.
 def sst_specials() -> List<&1, String & Expect>:
   Con{(flip_first(sst_base_two()), Reject{}),
   Con{(flip_last(sst_base_two()), Reject{}),
@@ -263,6 +313,7 @@ def sst_specials() -> List<&1, String & Expect>:
   Con{(sst_base_two() ++ sst_base_tomb(), Reject{}),
   Con{(sst_base_tomb() ++ sst_base_two(), Reject{}), Nil{}}}}}}}}}}}}}
 
+# Handle sst cases in the storage format grammar test.
 def sst_cases() -> List<&1, String & Expect>:
   List.append(&1, String & Expect, truncs_all(sst_base_empty(), String.length(sst_base_empty())),
   List.append(&1, String & Expect, truncs_all(sst_base_one(), String.length(sst_base_one())),
@@ -270,6 +321,7 @@ def sst_cases() -> List<&1, String & Expect>:
   List.append(&1, String & Expect, truncs_all(sst_base_tomb(), String.length(sst_base_tomb())),
   List.append(&1, String & Expect, truncs3(sst_base_big()), sst_specials())))))
 
+# Run sst for the storage format grammar test.
 def run_sst(cases: List<&1, String & Expect>) -> (Bool & Nat):
   match cases:
     case Nil{}:
@@ -279,6 +331,7 @@ def run_sst(cases: List<&1, String & Expect>) -> (Bool & Nat):
         case (str, want):
           run_cons(check_sst(str, want), run_sst(t))
 
+# Handle report in the storage format grammar test.
 def report(ok: Bool, total: Nat) -> IO(Unit):
   match ok:
     case True{}:
@@ -286,16 +339,19 @@ def report(ok: Bool, total: Nat) -> IO(Unit):
     case False{}:
       IO.die(Unit, U32.from_nat(1n), "directed case off verdict")
 
+# Report 1 for the storage format grammar test.
 def report1(wokb: Bool, wn: Nat, mokb: Bool, mn: Nat, sok: (Bool & Nat)) -> IO(Unit):
   match sok:
     case (sokb, sn):
       report(Bool.and(wokb, Bool.and(mokb, sokb)), Nat.add(wn, Nat.add(mn, sn)))
 
+# Report 2 for the storage format grammar test.
 def report2(wokb: Bool, wn: Nat, mok: (Bool & Nat), sok: (Bool & Nat)) -> IO(Unit):
   match mok:
     case (mokb, mn):
       report1(wokb, wn, mokb, mn, sok)
 
+# Report 3 for the storage format grammar test.
 def report3(wok: (Bool & Nat), mok: (Bool & Nat), sok: (Bool & Nat)) -> IO(Unit):
   match wok:
     case (wokb, wn):
