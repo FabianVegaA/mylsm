@@ -14,6 +14,9 @@ import ./src/DurableError.bend as DurableError
 import ./src/DurableDbPolicy.bend as DurableDbPolicy
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
+type InMemory.Session<a, -A: Kind(a)> is Kind(a <&> &1):
+  InMemorySession{run: Db.Db -> (Db.Db & A)}
+
 # --- Level 2: part control (1:1 delegates) ---
 def cmp(+s1: String, +s2: String) -> Cmp:
   Keys.cmp(s1, s2)
@@ -91,27 +94,59 @@ def mfst_serialize(mfst: Manifest.Manifest) -> Result<&1, &1, Manifest.Error, By
 def mfst_parse(encoded: Bytes.Bytes) -> Maybe<&2, Manifest.Manifest>:
   Manifest.parse(encoded)
 
-# --- Level 1: Sess session monad (primary API) ---
-type Sess<a, -A: Kind(a)> is Kind(a <&> &1):
-  Sess{run: Db.Db -> (Db.Db & A)}
+def InMemory.Session.pure(a, -A: Kind(a), value: A) -> InMemory.Session<a, A>:
+  InMemorySession{database => (database, value)}
 
-def Sess.pure(a, -A: Kind(a), val: A) -> Sess<a, A>:
-  Sess{db => (db, val)}
+def InMemory.Session.run(a, -A: Kind(a), session: InMemory.Session<a, A>, database: Db.Db) -> Db.Db & A:
+  match session:
+    case InMemorySession{run}: run(database)
 
-def Sess.run_go(b, -B: Kind(b), sess: Sess<b, B>, st: Db.Db) -> Db.Db & B:
-  match sess:
-    case Sess{run}: run(st)
-
-def Sess.apply(a, -A: Kind(a), b, -B: Kind(b), pair: Db.Db & A, fun: A -> Sess<b, B>) -> Db.Db & B:
+def InMemory.Session.apply(a, -A: Kind(a), b, -B: Kind(b), pair: Db.Db & A, next: A -> InMemory.Session<b, B>) -> Db.Db & B:
   match pair:
-    case (st, x): Sess.run_go(b, B, fun(x), st)
+    case (database, value): InMemory.Session.run(b, B, next(value), database)
 
-def Sess.bind(a, -A: Kind(a), -B: Kind(a), sess: Sess<a, A>, fun: A -> Sess<a, B>) -> Sess<a, B>:
-  Sess{st => Sess.apply(a, A, a, B, Sess.run_go(a, A, sess, st), fun)}
+def InMemory.Session.bind(a, -A: Kind(a), -B: Kind(a), session: InMemory.Session<a, A>, next: A -> InMemory.Session<a, B>) -> InMemory.Session<a, B>:
+  InMemorySession{database => InMemory.Session.apply(a, A, a, B, InMemory.Session.run(a, A, session, database), next)}
 
-# Open a database handle over a directory label (pure; no IO touched).
-def open(+dir: String) -> Db.Db:
-  Db.open_db(dir)
+def InMemory.open(+path: String) -> Db.Db:
+  Db.open_db(path)
+
+def InMemory.put_database(+database: Db.Db, +key: String, +value: String) -> Db.Db:
+  match database:
+    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
+      Db.apply_done(Db.apply_and_rotate(Con{Wal.Put{key, value}, Nil{}}, mem, frozen, mem_count, frozen_count), dir, batch_cap, bcache, levels, flushed, manifest_token)
+
+def InMemory.delete_database(+database: Db.Db, +key: String) -> Db.Db:
+  match database:
+    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
+      Db.apply_done(Db.apply_and_rotate(Con{Wal.Del{key}, Nil{}}, mem, frozen, mem_count, frozen_count), dir, batch_cap, bcache, levels, flushed, manifest_token)
+
+def InMemory.write_database_batch(+database: Db.Db, +mutations: List<&2, Wal.Mut>) -> Db.Db:
+  match database:
+    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
+      Db.apply_done(Db.apply_and_rotate(mutations, mem, frozen, mem_count, frozen_count), dir, batch_cap, bcache, levels, flushed, manifest_token)
+
+def InMemory.read_database(+database: Db.Db, +key: String) -> Db.Db & Maybe<&2, String>:
+  Db.db_get_cached(database, key)
+
+def InMemory.Session.put(+key: String, +value: String) -> InMemory.Session<&2, Unit>:
+  InMemorySession{database => (InMemory.put_database(database, key, value), Unit{})}
+
+def InMemory.Session.delete(+key: String) -> InMemory.Session<&2, Unit>:
+  InMemorySession{database => (InMemory.delete_database(database, key), Unit{})}
+
+def InMemory.Session.write_batch(+mutations: List<&2, Wal.Mut>) -> InMemory.Session<&2, Unit>:
+  InMemorySession{database => (InMemory.write_database_batch(database, mutations), Unit{})}
+
+def InMemory.Session.get(+key: String) -> InMemory.Session<&2, Maybe<&2, String>>:
+  InMemorySession{database => InMemory.read_database(database, key)}
+
+def InMemory.run_session(a, -A: Kind(a), database: Db.Db, session: InMemory.Session<a, A>) -> Db.Db & A:
+  InMemory.Session.run(a, A, session, database)
+
+def InMemory.value_of(a, -A: Kind(a), pair: Db.Db & A) -> A:
+  match pair:
+    case (database, value): value
 
 # Recover a persisted database from its directory.
 def open_recovering(+dir: String) -> IO(Result<&1, &1, U32 & String, Db.Db>):
@@ -137,6 +172,17 @@ type Error is Data:
 # Owns the database and its process lock.
 type Handle is Type:
   Handle{inner: DurableDb.Handle}
+
+# Carries failures from scoped session execution.
+type SessionError is Data:
+  OpenFailure{error: Error}
+  OperationFailure{error: Error}
+  CloseFailure{error: Error}
+  OperationAndCloseFailure{operation_error: Error, close_error: Error}
+
+# Holds durable operations that thread one owned handle.
+type Session<a, -A: Kind(a)> is Kind(a <&> &1):
+  Session{run: Handle -> IO(Handle & Result<&1, &1, Error, A>)}
 
 # Reports database size, cache use, errors, and maintenance state.
 type DurableStats is Data:
@@ -334,6 +380,90 @@ def close(handle: Handle) -> IO(Result<&1, &1, Error, Unit>):
         result : Result<&1, &1, DurableError.Error, Unit> <- DurableDb.close(inner)
         return public_error_result(result)
 
+def Session.pure(a, -A: Kind(a), value: A) -> Session<a, A>:
+  Session{handle => IO.pure(Handle & Result<&1, &1, Error, A>, (handle, Done{value}))}
+
+def Session.run(a, -A: Kind(a), session: Session<a, A>, handle: Handle) -> IO(Handle & Result<&1, &1, Error, A>):
+  match session:
+    case Session{run}: run(handle)
+
+def Session.bind_result(a, -A: Kind(a), -B: Kind(a), pair: Handle & Result<&1, &1, Error, A>, next: A -> Session<a, B>) -> IO(Handle & Result<&1, &1, Error, B>):
+  match pair:
+    case (handle, Fail{error}):
+      IO.pure(Handle & Result<&1, &1, Error, B>, (handle, Fail{error}))
+    case (handle, Done{value}):
+      Session.run(a, B, next(value), handle)
+
+def Session.bind(a, -A: Kind(a), -B: Kind(a), session: Session<a, A>, next: A -> Session<a, B>) -> Session<a, B>:
+  Session{handle =>
+    do IO<Handle & Result<&1, &1, Error, B>>:
+      pair : Handle & Result<&1, &1, Error, A> <- Session.run(a, A, session, handle)
+      Session.bind_result(a, A, B, pair, next)
+  }
+
+def Session.put(+key: String, +value: String) -> Session<&2, WriteOutcome>:
+  Session{handle => put(handle, key, value)}
+
+def Session.delete(+key: String) -> Session<&2, WriteOutcome>:
+  Session{handle => delete(handle, key)}
+
+def Session.write_batch(mutations: List<&2, Mutation>) -> Session<&2, WriteOutcome>:
+  Session{handle => write_batch(handle, mutations)}
+
+def Session.get(+key: String) -> Session<&2, Maybe<&2, String>>:
+  Session{handle => get(handle, key)}
+
+def Session.flush() -> Session<&2, Unit>:
+  Session{handle => flush(handle)}
+
+def Session.compact() -> Session<&2, Unit>:
+  Session{handle => compact(handle)}
+
+def Session.stats() -> Session<&2, DurableStats>:
+  Session{handle => stats(handle)}
+
+def Session.finish_result(a, -A: Kind(a), result: Result<&1, &1, Error, A>, close_result: Result<&1, &1, Error, Unit>) -> Result<&1, &1, SessionError, A>:
+  match result close_result:
+    case Done{value} Done{Unit{}}: Done{value}
+    case Fail{error} Done{Unit{}}: Fail{OperationFailure{error}}
+    case Done{_} Fail{error}: Fail{CloseFailure{error}}
+    case Fail{operation_error} Fail{close_error}:
+      Fail{OperationAndCloseFailure{operation_error, close_error}}
+
+def Session.finish(a, -A: Kind(a), handle: Handle, result: Result<&1, &1, Error, A>) -> IO(Result<&1, &1, SessionError, A>):
+  do IO<Result<&1, &1, SessionError, A>>:
+    close_result : Result<&1, &1, Error, Unit> <- close(handle)
+    return Session.finish_result(a, A, result, close_result)
+
+def Session.finish_pair(a, -A: Kind(a), pair: Handle & Result<&1, &1, Error, A>) -> IO(Result<&1, &1, SessionError, A>):
+  match pair:
+    case (handle, result): Session.finish(a, A, handle, result)
+
+def Session.run_opened(a, -A: Kind(a), opened: Result<&1, &1, Error, Handle>, session: Session<a, A>) -> IO(Result<&1, &1, SessionError, A>):
+  match opened:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, SessionError, A>, Fail{OpenFailure{error}})
+    case Done{handle}:
+      do IO<Result<&1, &1, SessionError, A>>:
+        pair : Handle & Result<&1, &1, Error, A> <- Session.run(a, A, session, handle)
+        Session.finish_pair(a, A, pair)
+
+# Runs a program and returns its still-owned handle.
+def run_session(a, -A: Kind(a), handle: Handle, session: Session<a, A>) -> IO(Handle & Result<&1, &1, Error, A>):
+  Session.run(a, A, session, handle)
+
+# Creates, runs, and closes a scoped durable session.
+def create_database(a, -A: Kind(a), +path: String, session: Session<a, A>) -> IO(Result<&1, &1, SessionError, A>):
+  do IO<Result<&1, &1, SessionError, A>>:
+    opened : Result<&1, &1, Error, Handle> <- create(path)
+    Session.run_opened(a, A, opened, session)
+
+# Opens, runs, and closes a scoped durable session.
+def open_database(a, -A: Kind(a), +path: String, session: Session<a, A>) -> IO(Result<&1, &1, SessionError, A>):
+  do IO<Result<&1, &1, SessionError, A>>:
+    opened : Result<&1, &1, Error, Handle> <- open_existing(path)
+    Session.run_opened(a, A, opened, session)
+
 # Checks whether the public error means the path exists.
 def error_is_already_exists(error: Error) -> Bool:
   match error:
@@ -345,50 +475,3 @@ def error_is_busy(error: Error) -> Bool:
   match error:
     case Error{BusyError{}, _, _, _, _}: True{}
     case _: False{}
-
-# Pure put transition used by the session action.
-def put_go(+db: Db.Db, +key: String, +val: String) -> Db.Db:
-  match db:
-    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
-      Db.apply_done(Db.apply_and_rotate(Con{Wal.Put{key, val}, Nil{}}, mem, frozen, mem_count, frozen_count), dir, batch_cap, bcache, levels, flushed, manifest_token)
-
-# Pure delete transition used by the session action.
-def del_go(+db: Db.Db, +key: String) -> Db.Db:
-  match db:
-    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
-      Db.apply_done(Db.apply_and_rotate(Con{Wal.Del{key}, Nil{}}, mem, frozen, mem_count, frozen_count), dir, batch_cap, bcache, levels, flushed, manifest_token)
-
-# Pure batch transition used by the session action.
-def batch_go(+db: Db.Db, +muts: List<&2, Wal.Mut>) -> Db.Db:
-  match db:
-    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
-      Db.apply_done(Db.apply_and_rotate(muts, mem, frozen, mem_count, frozen_count), dir, batch_cap, bcache, levels, flushed, manifest_token)
-
-# Pure point-read transition used by the session action (cache-backed).
-def sget_go(+db: Db.Db, +key: String) -> Db.Db & Maybe<&2, String>:
-  Db.db_get_cached(db, key)
-
-# Session step writing one key.
-def sput(+key: String, +val: String) -> Sess<&2, Unit>:
-  Sess{db => (put_go(db, key, val), Unit{})}
-
-# Session step deleting one key.
-def sdel(+key: String) -> Sess<&2, Unit>:
-  Sess{db => (del_go(db, key), Unit{})}
-
-# Session step applying a whole mutation batch at once.
-def sbatch(+muts: List<&2, Wal.Mut>) -> Sess<&2, Unit>:
-  Sess{db => (batch_go(db, muts), Unit{})}
-
-# Session step reading one key.
-def sget(+key: String) -> Sess<&2, Maybe<&2, String>>:
-  Sess{db => sget_go(db, key)}
-
-# Execute a whole session against a handle.
-def run_sess(a, -A: Kind(a), st: Db.Db, sess: Sess<a, A>) -> Db.Db & A:
-  Sess.run_go(a, A, sess, st)
-
-# Project the answer out of a runner pair.
-def value_of(a, -A: Kind(a), pair: Db.Db & A) -> A:
-  match pair:
-    case (db, x): x

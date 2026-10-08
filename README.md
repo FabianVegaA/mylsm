@@ -40,47 +40,42 @@ Paste the import; the compiler fetches the package from the hub into
 import mylsm-lsm-store@0.5.0.0/mylsm.bend as MyLSM
 ```
 
-`MyLSM.open(dir)` creates an empty in-memory handle. To recover a persisted
-database from that directory, call `MyLSM.open_recovering(dir)`; it returns an
-`IO(Result<&1, &1, U32 & String, Db.Db>)` and reads the Manifest, SSTables, and
-WAL through the filesystem effects.
+`create_database` and `open_database` run a session against a durable database,
+hold its exclusive `LOCK` while the session runs, and close it before returning.
+Writes are confirmed through the WAL. A session is a sequence of individually
+durable operations, not a multi-operation transaction. See
+[docs/DURABLE_API.md](docs/DURABLE_API.md) for error and lifecycle details.
 
-The durable API adds `create`, `open_existing`, `put`, `delete`, `write_batch`,
-`get`, `flush`, `compact`, `stats`, and `close`. It holds an exclusive
-`LOCK` file for the handle lifetime. `close` releases ownership; after a process
-crash, the operating system releases the lock and the lock file remains.
-`stats` reports active bytes from the Manifest and its SSTables, WAL bytes, memtable entry and UTF-8 payload-byte counts, resident read-cache entries (up to 256), and per-handle operation errors. A write or sync failure after append begins is reported as `CommitUnknown`; close
-and reopen before retrying. Successful writes report maintenance completion
-separately from the confirmed commit. See [docs/DURABLE_API.md](docs/DURABLE_API.md) for the
-current lifecycle and limits. Durable batches accept 1–256 mutations; empty batches are invalid.
+The explicit-handle API remains available through `create`, `open_existing`,
+`put`, `delete`, `write_batch`, `get`, `flush`, `compact`, `stats`, and `close`.
+It is useful for long-running processes that should keep ownership open across
+multiple sessions. A write or sync failure after append begins is `CommitUnknown`;
+close and reopen before retrying. Successful writes report maintenance status
+separately from commit confirmation. Durable batches accept 1–256 mutations;
+empty batches are invalid.
 
-Level 1 is a session monad — no manual handle threading. Steps share one
-quantity (`&2`); `v : T <- …` binds a result, bare `sput(…)` is a Unit step,
-`return` wraps the answer:
+Session operations use `do` notation. `Session.put` returns a `WriteOutcome`,
+so bind it when you need the maintenance status; reads return the current value
+or absence:
 
 ```bend
 import Base
 import mylsm-lsm-store@0.5.0.0/mylsm.bend as MyLSM
 
-def show(m: Maybe<&2, String>) -> U32:
-  match m:
-    case Some{v}: 1
-    case None{}: 0
+def session() -> MyLSM.Session<&2, Maybe<&2, String>>:
+  do MyLSM.Session<&2, Maybe<&2, String>>:
+    outcome : MyLSM.WriteOutcome <- MyLSM.Session.put("answer", "42")
+    value : Maybe<&2, String> <- MyLSM.Session.get("answer")
+    return value
 
-# A session describes steps; `run_sess` executes them.
-def session() -> MyLSM.Sess<&2, Maybe<&2, String>>:
-  do MyLSM.Sess<&2, Maybe<&2, String>>:
-    MyLSM.sput("hello", "world")
-    MyLSM.sput("answer", "42")
-    MyLSM.sdel("hello")
-    v : Maybe<&2, String> <- MyLSM.sget("answer")
-    return v
-
-def main() -> U32:
-  db = MyLSM.open("/scratch")
-  result = MyLSM.run_sess(&2, Maybe<&2, String>, db, session())
-  show(MyLSM.value_of(&2, Maybe<&2, String>, result))
+def main() -> IO(Result<&1, &1, MyLSM.SessionError, Maybe<&2, String>>):
+  MyLSM.create_database(&2, Maybe<&2, String>, "/scratch", session())
 ```
+
+Use `MyLSM.open_database` for an existing database. Pure in-memory sessions
+remain available under `MyLSM.InMemory.Session`; they do not write to disk.
+`open_recovering` is a lower-level recovery entry point for callers that manage
+ownership themselves.
 
 Level 2 exposes the parts directly (ordered-map core, key ordering, codecs,
 tables, manifests) without a session. Reads are newest-first with

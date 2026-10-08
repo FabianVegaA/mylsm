@@ -15,10 +15,24 @@ recovery, flush, and compaction code.
 | `stats(handle)` | Return active bytes, WAL bytes, in-memory entry count, read-cache entries, and maintenance state. |
 | `flush(handle)` / `compact(handle)` | Run the selected maintenance operation. |
 | `close(handle)` | Release ownership and consume the handle. |
+| `create_database(path, session)` / `open_database(path, session)` | Open or create a database, run a durable session, then release ownership. |
 
-Each operation that keeps a handle returns it beside its result. Thread the returned handle into
+Each explicit-handle operation that keeps a handle returns it beside its result. Thread the returned handle into
 the next operation. Runnable consumer coverage is in `bench/smoke/durable_api.bend`. `close` consumes the handle and releases its OS lock. The lock file is
 stable and remains on disk; its presence does not mean another process owns the database.
+
+`Session` composes these operations in `do` notation without exposing handle
+threading. `Session.put`, `Session.delete`, and `Session.write_batch` return a
+`WriteOutcome` so callers can observe post-commit maintenance status. A session
+stops at its first operation error, then its scoped runner closes the handle.
+Open and create errors use `SessionError.OpenFailure`; operation and close
+errors use `OperationFailure`, `CloseFailure`, or `OperationAndCloseFailure`.
+If both an operation and close fail, `SessionError.OperationAndCloseFailure`
+preserves both errors. A successful write remains committed if a later session
+step fails; a session is not a transaction. Use `run_session(handle, program)`
+to run on a long-lived handle; it returns the handle with the result so ownership
+can be retained across several programs and explicitly closed later.
+Runnable consumer coverage is in `bench/smoke/durable_session.bend`.
 
 `create` reserves a new directory and initializes its Manifest while holding the lock.
 `open_existing` requires a Manifest before recovery and returns `NotFound` for an empty
@@ -53,5 +67,5 @@ The native lock primitive has been exercised on macOS and Linux. JavaScript lock
 unsupported and returns a typed error. The filesystem adapter keeps the useful `bend-kit-files`
 operations and normalizes its cached C registration ABI locally for Bend 2.0.36.
 
-The pure `open`, `Sess`, and session operations remain available with their existing behavior.
-`open_recovering` also remains available for callers that manage ownership themselves.
+The pure in-memory API is available under `InMemory.Session` and does not persist
+data. `open_recovering` remains available for callers that manage ownership themselves.

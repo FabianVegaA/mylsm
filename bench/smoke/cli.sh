@@ -7,6 +7,7 @@ sh -n bin/mylsm
 bin/mylsm doctor
 bin/mylsm check
 bend bench/smoke/sst_v3_io.bend
+bash bench/smoke/durable_session.sh
 printf 'hello\n' | MYLSM_TEST_ENV=world bend bench/smoke/console.bend >.mylsm-console-smoke.log
 grep '^line=hello$' .mylsm-console-smoke.log
 grep '^env=world$' .mylsm-console-smoke.log

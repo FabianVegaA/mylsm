@@ -9,8 +9,9 @@ aarch64 (Ubuntu 24.04 container, local overlay filesystem).
 | --- | --- | --- |
 | Pure laws and witnesses | `./proofs/run.sh` | `PASS=28 FAIL=0 TIMEOUT=0 TOTAL=28` |
 | Repository checks | `./bin/mylsm check` | `PASS=28 FAIL=0 TIMEOUT=0`, including quantified durable commit laws |
-| CLI smoke | `./bench/smoke/cli.sh` | `OK`; pure and native demos, REPL persistence, export/import, and recovery pass |
+| CLI smoke | `./bench/smoke/cli.sh` | `OK`; pure and native demos, REPL persistence, export/import, recovery, and durable session lifecycle pass |
 | Public durable consumer | `bend bench/smoke/durable_api.bend -o /tmp/durable-api` with Bend 2.0.36 on each host; execute with a fresh `MYLSM_DB_PATH` | Create, Busy, empty and oversized batch rejection, invalid-final frame limit with unchanged WAL and invisible first mutation, 14 UTF-8 memtable payload bytes, active/WAL/cache stats, repeated-key commit, flush, compact, delete, and reopen pass on both hosts without an ABI compiler wrapper |
+| Durable session consumer | `./bench/smoke/durable_session.sh` on Darwin/arm64 | Scoped create/write/close/open/read persists data; missing open and duplicate create are rejected; a failed operation stops later steps and releases the lock; long-lived `run_session` retains the handle; all four operation/close result combinations are checked |
 | Compaction filesystem errors | `./bench/smoke/durable_compaction_errors.sh` | Five L0 tables trigger compaction; replacing L1 with a file makes creation fail as public `Io`; close/reopen still reads committed data |
 | Lock exclusion | `./bench/crash/durable_lock.sh` | `DURABLE LOCK PASS` |
 | Commit crash recovery | `./bench/crash/durable_commit.sh` | `DURABLE COMMIT PASS` |

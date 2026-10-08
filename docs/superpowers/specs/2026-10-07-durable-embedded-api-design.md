@@ -70,9 +70,9 @@ Assumptions: local execution on macOS and Linux, one owning process per
 database, serialized operations in that process, and String keys and values
 through A–E. Windows and network filesystems are not promised.
 
-The existing pure/in-memory API remains available under unambiguous names;
-`sput` does not silently change from pure to IO. A transition guide is part of
-the public documentation.
+The pure/in-memory API remains available under `InMemory.Session`. The durable
+`Session` API is a separate IO-backed program, so existing pure operations do
+not silently change behavior. The public documentation describes the move.
 
 ## 3. Alternativas y decisión propuesta
 
@@ -118,8 +118,8 @@ Los nombres siguientes describen contratos, no firmas Bend compiladas:
 
 El handle durable es opaco, no duplicable, y posee el recurso de exclusión.
 Las operaciones preservan su ownership o lo consumen explícitamente. La API
-pure/in-memory continúa disponible bajo nombres inequívocos; no se cambia
-silenciosamente `sput` de puro a IO. Se publica una guía de transición.
+pure/in-memory continúa disponible bajo `InMemory.Session`. `Session` es un
+programa separado basado en IO; las operaciones puras no cambian su semántica.
 
 Un batch se valida completamente antes de modificar almacenamiento. Su éxito
 solo se devuelve después de sincronizar el WAL y cualquier entrada de directorio
