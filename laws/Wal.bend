@@ -61,3 +61,16 @@ law wal_v3_frame_rejects_trailing_byte:
 # State the wal v3 frame rejects bad digest property for the WAL codec laws.
 law wal_v3_frame_rejects_bad_digest:
   {Wal.decode_frame(Bytes.set(put_delete_expected(), 56, 0)) == Fail{Wal.ChecksumMismatch{}} : Result<&1, &1, Wal.Error, Wal.Batch>}
+
+# States the multi mutation frame limit rejects over block property.
+law multi_mutation_frame_limit_rejects_over_block:
+  {Wal.frame_length_allowed(2, 1048577) == False{} : Bool}
+
+# States the delete record rejects key over codec cap property.
+law delete_record_rejects_key_over_codec_cap:
+  {Wal.record.delete((Bytes.Bytes{0, Bytes.alloc(0)}, 1073741820)) == Fail{Wal.TooLarge{}} : Result<&1, &1, Wal.Error, Bytes.Bytes>}
+
+# States the put record rejects value over combined codec cap property.
+law put_record_rejects_value_over_combined_codec_cap:
+  {Wal.record.put((Bytes.Bytes{0, Bytes.alloc(0)}, 0),
+    (Bytes.Bytes{0, Bytes.alloc(0)}, 1073741816)) == Fail{Wal.TooLarge{}} : Result<&1, &1, Wal.Error, Bytes.Bytes>}

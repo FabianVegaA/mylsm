@@ -89,10 +89,22 @@ def MAX_RECORD_BYTES() -> U32:
 def MAX_MANIFEST_BYTES() -> U32:
   1048576
 
+# Checks a record against the storage codec byte cap.
+def record_bytes_allowed(+length: U32) -> Bool:
+  U32.is_le(length, MAX_RECORD_BYTES())
+
 def utf8.width(+scalar: U32) -> U32:
   Bool.pick(U32, U32.is_le(scalar, 127), 1,
     Bool.pick(U32, U32.is_le(scalar, 2047), 2,
       Bool.pick(U32, U32.is_le(scalar, 65535), 3, 4)))
+
+# Returns a string length as a storage byte count.
+def string_size(+text: String) -> Nat:
+  match text:
+    case SNil{}:
+      0n
+    case SCon{Chr{scalar}, rest}:
+      Nat.add(U32.to_nat(utf8.width(scalar)), string_size(rest))
 
 def from_string.size(+text: String, +size: U32, fits: Bool) -> Maybe<&2, U32>:
   match text fits:
@@ -120,7 +132,7 @@ def from_string.size.begin(+text: String) -> Maybe<&2, U32>:
 # Reject text fields outside the configured storage record cap.
 def from_string.checked(+len: U32, buf: Array<U32>) -> Result<&1, &1, U32 & String, Bytes.Bytes>:
   Bool.pick(Result<&1, &1, U32 & String, Bytes.Bytes>,
-    U32.is_le(len, MAX_RECORD_BYTES()),
+    record_bytes_allowed(len),
     Done{Bytes.Bytes{len, buf}}, Fail{(2, "record too large")})
 
 def utf8.put.result(pair: Bytes.Cursor & Bool) -> Bytes.Cursor:

@@ -35,3 +35,11 @@ law mt_hit_del:
 law mt_hit_miss:
   for +k: String
   {MemTable.get_hit(MemTable.empty(), k) == None{} : Maybe<&2, Maybe<&2, String>>}
+
+# States the mt payload bytes utf8 property.
+law mt_payload_bytes_utf8:
+  {MemTable.payload_bytes(MemTable.put(MemTable.empty(), "é", "😀")) == 6n : Nat}
+
+# States the mt payload bytes tombstone property.
+law mt_payload_bytes_tombstone:
+  {MemTable.payload_bytes(MemTable.del(MemTable.empty(), "key")) == 3n : Nat}

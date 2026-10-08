@@ -15,3 +15,9 @@ def Laws.generation_decimal_branch():
 
 def Laws.generation_shape_branches():
   {==}
+
+def Laws.recovery_rejects_fifth_manifest_level():
+  {==}
+
+def Laws.recovery_accepts_four_manifest_levels():
+  {==}

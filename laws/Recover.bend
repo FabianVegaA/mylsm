@@ -29,3 +29,11 @@ law generation_decimal_branch:
 # State the generation shape branches property for the recovery laws.
 law generation_shape_branches:
   {(Recover.gen_valid_read(Some{12n}), Recover.gen_valid_read(None{})) == (True{}, False{}) : Bool & Bool}
+
+# States the recovery rejects fifth manifest level property.
+law recovery_rejects_fifth_manifest_level:
+  {Recover.manifest_names_ok(Con{Nil{}, Con{Nil{}, Con{Nil{}, Con{Nil{}, Con{Nil{}, Nil{}}}}}}, 0n) == False{} : Bool}
+
+# States the recovery accepts four manifest levels property.
+law recovery_accepts_four_manifest_levels:
+  {Recover.manifest_names_ok(Con{Nil{}, Con{Nil{}, Con{Nil{}, Con{Nil{}, Nil{}}}}}, 0n) == True{} : Bool}

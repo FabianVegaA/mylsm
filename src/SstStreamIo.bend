@@ -5,21 +5,25 @@ import ./Sstable.bend as Sstable
 import ./SstFile.bend as SstFile
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
+# Returns the typed corruption code for SST codec failures.
+def corruption_error_code() -> U32:
+  4294967292
+
 # Map pure format errors to the storage IO error domain.
 def codec_error(error: SstFile.Error) -> U32 & String:
   match error:
     case SstFile.InvalidLevel{}:
-      (U32.from_nat(3n), "invalid SST level")
+      (corruption_error_code(), "invalid SST level")
     case SstFile.InvalidOrder{}:
-      (U32.from_nat(3n), "SST keys are not strictly ordered")
+      (corruption_error_code(), "SST keys are not strictly ordered")
     case SstFile.TooLarge{}:
-      (U32.from_nat(3n), "SST exceeds a size limit")
+      (corruption_error_code(), "SST exceeds a size limit")
     case SstFile.Malformed{}:
-      (U32.from_nat(3n), "malformed v3 SST")
+      (corruption_error_code(), "malformed v3 SST")
     case SstFile.InvalidUtf8{}:
-      (U32.from_nat(3n), "invalid UTF-8 in v3 SST")
+      (corruption_error_code(), "invalid UTF-8 in v3 SST")
     case SstFile.ChecksumMismatch{}:
-      (U32.from_nat(3n), "v3 SST checksum mismatch")
+      (corruption_error_code(), "v3 SST checksum mismatch")
 
 # Represent ExactResult data used by the streaming SSTable filesystem effects.
 type ExactResult is Type:
@@ -105,7 +109,7 @@ def read.exact.complete(bytes: Bytes.Bytes, complete: Bool) -> Result<&1, &1, U3
     case True{}:
       Done{bytes}
     case False{}:
-      Fail{(U32.from_nat(3n), "truncated SST")}
+      Fail{(corruption_error_code(), "truncated SST")}
 
 def read.exact.state(
   pair: File & Result<&1, &1, U32 & String, ExactResult>
@@ -148,7 +152,7 @@ def read.block.header.bound(
 ) -> StreamReadState:
   match valid:
     case False{}:
-      ReadClose{file, Fail{(U32.from_nat(3n), "truncated SST block")}}
+      ReadClose{file, Fail{(corruption_error_code(), "truncated SST block")}}
     case True{}:
       ReadBlockBody{file, size, used, parser, header, tail_len}
 
@@ -162,7 +166,7 @@ def read.block.header.size(
 ) -> StreamReadState:
   match tail:
     case None{}:
-      ReadClose{file, Fail{(U32.from_nat(3n), "invalid SST block size")}}
+      ReadClose{file, Fail{(corruption_error_code(), "invalid SST block size")}}
     case Some{+tail_len}:
       read.block.header.bound(file, size, used, parser, header, tail_len,
         Nat.is_le(Nat.add(Nat.add(used, 8n), U32.to_nat(tail_len)),
@@ -190,7 +194,7 @@ def read.block.header.copied(
 ) -> StreamReadState:
   match inspected:
     case (saved, None{}):
-      ReadClose{file, Fail{(U32.from_nat(3n), "invalid SST block size")}}
+      ReadClose{file, Fail{(corruption_error_code(), "invalid SST block size")}}
     case (saved, Some{+tail_len}):
       read.block.header.size(file, size, used, parser, saved,
         Some{tail_len})
@@ -264,7 +268,7 @@ def read.footer.size(
 ) -> StreamReadState:
   match valid:
     case False{}:
-      ReadClose{file, Fail{(U32.from_nat(3n), "malformed SST size")}}
+      ReadClose{file, Fail{(corruption_error_code(), "malformed SST size")}}
     case True{}:
       read.footer.parsed(file, SstFile.stream.footer(parser, bytes))
 
@@ -358,6 +362,16 @@ def read.loop(fuel: Nat, state: StreamReadState) -> IO(Result<&1, &1, U32 & Stri
             _closed : Unit <- File.close(file)
             return result
 
+def read.table.opened(
+  +size: Nat,
+  opened: Result<&1, &1, U32 & String, File>
+) -> IO(Result<&1, &1, U32 & String, Sstable.Table>):
+  match opened:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, U32 & String, Sstable.Table>, Fail{error})
+    case Done{file}:
+      read.loop(Nat.add(Nat.mul(2n, size), 16n), ReadHeader{file, size})
+
 def read.table.size.checked(
   +path: String,
   +size: Nat,
@@ -366,21 +380,32 @@ def read.table.size.checked(
   match valid:
     case False{}:
       IO.pure(Result<&1, &1, U32 & String, Sstable.Table>,
-        Fail{(U32.from_nat(3n), "malformed or oversized SST")})
+        Fail{(corruption_error_code(), "malformed or oversized SST")})
     case True{}:
       do IO<Result<&1, &1, U32 & String, Sstable.Table>>:
-        file : File <- IO.try(File, File.open(path, "r"))
-        read.loop(Nat.add(Nat.mul(2n, size), 16n), ReadHeader{file, size})
+        opened : Result<&1, &1, U32 & String, File> <- File.open(path, "r")
+        read.table.opened(size, opened)
 
 def read.table.size(+path: String, +size: Nat) -> IO(Result<&1, &1, U32 & String, Sstable.Table>):
   read.table.size.checked(path, size,
     Nat.is_le(60n, size) && Nat.is_le(size, 4294967295n))
 
 # Read table for the streaming SSTable filesystem effects.
+def read.table.file_size(
+  +path: String,
+  result: Result<&1, &1, U32 & String, Nat>
+) -> IO(Result<&1, &1, U32 & String, Sstable.Table>):
+  match result:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, U32 & String, Sstable.Table>, Fail{error})
+    case Done{size}:
+      read.table.size(path, size)
+
+# Reads and validates one SSTable while preserving IO errors.
 def read_table(+path: String) -> IO(Result<&1, &1, U32 & String, Sstable.Table>):
   do IO<Result<&1, &1, U32 & String, Sstable.Table>>:
-    size : Nat <- IO.try(Nat, Fs.file_size(path))
-    read.table.size(path, size)
+    size : Result<&1, &1, U32 & String, Nat> <- Fs.file_size(path)
+    read.table.file_size(path, size)
 
 def write.finish.chmod(
   result: Result<&1, &1, U32 & String, Unit>
@@ -467,6 +492,18 @@ def write.step(
             case (file, Done{Unit{}}):
               write.step(rest, path, WriteNext{file, encoder})
 
+def write.encoder.opened(
+  +path: String,
+  fuel: Nat,
+  encoder: SstFile.Encoder,
+  opened: Result<&1, &1, U32 & String, File>
+) -> IO(Result<&1, &1, U32 & String, Unit>):
+  match opened:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, U32 & String, Unit>, Fail{error})
+    case Done{file}:
+      write.step(fuel, path, WriteNext{file, encoder})
+
 def write.encoder(
   +path: String,
   fuel: Nat,
@@ -477,8 +514,8 @@ def write.encoder(
       IO.pure(Result<&1, &1, U32 & String, Unit>, Fail{codec_error(error)})
     case Done{encoder}:
       do IO<Result<&1, &1, U32 & String, Unit>>:
-        file : File <- IO.try(File, File.open(path, "w"))
-        write.step(fuel, path, WriteNext{file, encoder})
+        opened : Result<&1, &1, U32 & String, File> <- File.open(path, "w")
+        write.encoder.opened(path, fuel, encoder, opened)
 
 # Encode and write one SST as packed chunks, then sync it before publication.
 def write_table(

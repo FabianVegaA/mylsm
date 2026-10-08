@@ -7,6 +7,24 @@ def Laws.checked_add_exact():
 def Laws.checked_add_overflow():
   {==}
 
+def Laws.record_bytes_at_limit():
+  {==}
+
+def Laws.record_bytes_over_limit():
+  {==}
+
+def Laws.utf8_preflight_ascii_at_record_cap():
+  {==}
+
+def Laws.utf8_preflight_ascii_over_record_cap():
+  {==}
+
+def Laws.utf8_preflight_multibyte_at_record_cap():
+  {==}
+
+def Laws.utf8_preflight_multibyte_over_record_cap():
+  {==}
+
 def Laws.cursor_u32be_roundtrip():
   {==}
 

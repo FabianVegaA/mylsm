@@ -24,3 +24,12 @@ def Laws.manifest_v3_rejects_unsafe_name():
 
 def Laws.manifest_v3_total(_bytes):
   {==}
+
+def Laws.manifest_result_accepts_current_format():
+  {==}
+
+def Laws.manifest_result_identifies_unsupported_version():
+  {==}
+
+def Laws.manifest_result_classifies_malformed_current_format():
+  {==}

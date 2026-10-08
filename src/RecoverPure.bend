@@ -97,7 +97,8 @@ def manifest_names_ok(levels: List<&2, List<&2, String>>, +level: Nat) -> Bool:
     case Nil{}:
       True{}
     case Con{names, rest}:
-      mid_and(level_names_ok(level, names), manifest_names_ok(rest, Nat.add(level, 1n)))
+      mid_and(Nat.is_le(level, 3n),
+        mid_and(level_names_ok(level, names), manifest_names_ok(rest, Nat.add(level, 1n))))
 
 # Handle names all in the pure recovery decisions.
 def names_all(lvls: List<&2, List<&2, String>>) -> List<&2, String>:

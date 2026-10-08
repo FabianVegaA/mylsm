@@ -26,5 +26,5 @@ Term stop_run(Env e, Term* f, IoWork* w) {
 }
 
 static void __attribute__((constructor)) stop_use(void) {
-  io_eff(CID(stop), stop_run, 0);
+  io_eff(CID(stop), stop_run);
 }

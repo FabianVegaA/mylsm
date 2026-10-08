@@ -65,3 +65,15 @@ law manifest_v3_rejects_unsafe_name:
 law manifest_v3_total:
   for bytes: Bytes.Bytes
   {Manifest.is_decided(Manifest.parse(bytes)) == True{} : Bool}
+
+# States the manifest result accepts current format property.
+law manifest_result_accepts_current_format:
+  {Manifest.parse_result(empty_expected()) == Manifest.Parsed{empty()} : Manifest.ParseResult}
+
+# States the manifest result identifies unsupported version property.
+law manifest_result_identifies_unsupported_version:
+  {Manifest.parse_result(Bytes.set.u32be(empty_expected(), 8, 4)) == Manifest.UnsupportedVersion{4} : Manifest.ParseResult}
+
+# States the manifest result classifies malformed current format property.
+law manifest_result_classifies_malformed_current_format:
+  {Manifest.parse_result(Bytes.concat([empty_expected(), Bytes.new(1)])) == Manifest.Malformed{} : Manifest.ParseResult}

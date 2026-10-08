@@ -16,3 +16,9 @@ def Laws.mt_hit_del(t, k, v):
 
 def Laws.mt_hit_miss(_k):
   {==}
+
+def Laws.mt_payload_bytes_utf8():
+  {==}
+
+def Laws.mt_payload_bytes_tombstone():
+  {==}

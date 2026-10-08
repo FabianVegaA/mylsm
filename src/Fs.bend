@@ -1,6 +1,7 @@
 import Base
 import bend-kit-bytes@0.3.2.0/bytes.bend as StorageBytes
 import 0x6c54b2522c2258baf6f58d2b970c3902/files.bend as PackedFiles
+import ./FsPolicy.bend as Policy
 
 # Audited host effects (spec §3.3). Thin syscall wrappers with .c + .js
 # twins and matching intended semantics. No laws — validated empirically.
@@ -71,13 +72,11 @@ def truncate(path: String, offset: Nat) -> IO(Result<&1, &1, U32 & String, Unit>
 
 # Atomically rename a filesystem path.
 def rename(old: String, new: String) -> IO(Result<&1, &1, U32 & String, Unit>):
-  import "./effs/rename.c"
-  import "./effs/rename.js"
+  PackedFiles.rename(old, new)
 
 # Remove a file or empty directory.
 def remove(path: String) -> IO(Result<&1, &1, U32 & String, Unit>):
-  import "./effs/remove.c"
-  import "./effs/remove.js"
+  PackedFiles.remove(path)
 
 # Return the number of entries available through the indexed directory API.
 def read_dir_count(path: String) -> IO(Result<&1, &1, U32 & String, Nat>):
@@ -100,9 +99,18 @@ def chmod(path: String, bits: U32) -> IO(Result<&1, &1, U32 & String, Unit>):
   import "./effs/chmod.js"
 
 # Check whether a filesystem path exists.
+def exists.result(result: Result<&1, &1, U32 & String, PackedFiles.Info>) -> Result<&1, &1, U32 & String, Bool>:
+  match result:
+    case Fail{(+code, message)}:
+      Policy.missing_path_result(U32.is_eq(code, 2), code, message)
+    case Done{_}:
+      Done{True{}}
+
+# Returns whether a path exists and preserves other stat errors.
 def exists(path: String) -> IO(Result<&1, &1, U32 & String, Bool>):
-  import "./effs/exists.c"
-  import "./effs/exists.js"
+  do IO<Result<&1, &1, U32 & String, Bool>>:
+    result : Result<&1, &1, U32 & String, PackedFiles.Info> <- PackedFiles.stat(path)
+    return exists.result(result)
 
 # Read-only byte size for Bend-side accounting (no shell wc needed).
 def file_size(path: String) -> IO(Result<&1, &1, U32 & String, Nat>):

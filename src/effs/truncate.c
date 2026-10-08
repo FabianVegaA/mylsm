@@ -14,5 +14,5 @@ Term truncate_run(Env e, Term* f, IoWork* w) {
 }
 
 static void __attribute__((constructor)) truncate_use(void) {
-  io_eff(CID(truncate), truncate_run, 0);
+  io_eff(CID(truncate), truncate_run);
 }

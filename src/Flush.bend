@@ -55,32 +55,75 @@ def mfst_add(+mfst: Manifest.Manifest, +name: String) -> Manifest.Manifest:
 
 # --- File helpers (pair-splits contained; straight-line callers above) ---
 
-# Write tail for the memtable flush.
+def write_tail.chmod(
+  result: Result<&1, &1, U32 & String, Unit>,
+  +path: String
+) -> IO(Result<&1, &1, U32 & String, Unit>):
+  match result:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, U32 & String, Unit>, Fail{error})
+    case Done{Unit{}}:
+      Fs.chmod(path, U32.from_nat(384n))
+
+def write_tail.fsync(
+  result: Result<&1, &1, U32 & String, Unit>,
+  +path: String
+) -> IO(Result<&1, &1, U32 & String, Unit>):
+  match result:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, U32 & String, Unit>, Fail{error})
+    case Done{Unit{}}:
+      do IO<Result<&1, &1, U32 & String, Unit>>:
+        synced : Result<&1, &1, U32 & String, Unit> <- Fs.fsync(path)
+        write_tail.chmod(synced, path)
+
+# Writes the remaining bytes of a file buffer.
 def write_tail(
-  fr: (File & Result<&1, &1, U32 & String, Unit>),
+  fr: File & Result<&1, &1, U32 & String, Unit>,
   +path: String
 ) -> IO(Result<&1, &1, U32 & String, Unit>):
   match fr:
-    case (f2, r):
+    case (file, result):
       do IO<Result<&1, &1, U32 & String, Unit>>:
-        res : Unit <- IO.try(Unit, IO.pure(Result<&1, &1, U32 & String, Unit>, r))
-        _cls : Unit <- File.close(f2)
-        _syn : Unit <- IO.try(Unit, Fs.fsync(path))
-        _p_rm : Unit <- IO.try(Unit, Fs.chmod(path, U32.from_nat(384n)))
-        return Done{res}
+        _closed : Unit <- File.close(file)
+        write_tail.fsync(result, path)
 
-# Write file for the memtable flush.
+def write_file.opened(
+  opened: Result<&1, &1, U32 & String, File>,
+  +path: String,
+  +data: String
+) -> IO(Result<&1, &1, U32 & String, Unit>):
+  match opened:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, U32 & String, Unit>, Fail{error})
+    case Done{file}:
+      do IO<Result<&1, &1, U32 & String, Unit>>:
+        written : File & Result<&1, &1, U32 & String, Unit> <- File.write(file, data)
+        write_tail(written, path)
+
+# Creates and syncs one storage file.
 def write_file(+path: String, +data: String) -> IO(Result<&1, &1, U32 & String, Unit>):
   do IO<Result<&1, &1, U32 & String, Unit>>:
-    f : File <- IO.try(File, File.open(path, "w"))
-    fr : (File & Result<&1, &1, U32 & String, Unit>) <- File.write(f, data)
-    write_tail(fr, path)
+    opened : Result<&1, &1, U32 & String, File> <- File.open(path, "w")
+    write_file.opened(opened, path, data)
+
+def write_manifest.bytes.opened(
+  opened: Result<&1, &1, U32 & String, File>,
+  +path: String,
+  bytes: Bytes.Bytes
+) -> IO(Result<&1, &1, U32 & String, Unit>):
+  match opened:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, U32 & String, Unit>, Fail{error})
+    case Done{file}:
+      do IO<Result<&1, &1, U32 & String, Unit>>:
+        written : File & Result<&1, &1, U32 & String, Unit> <- Fs.write_bytes(file, bytes)
+        write_tail(written, path)
 
 def write_manifest.bytes(+path: String, bytes: Bytes.Bytes) -> IO(Result<&1, &1, U32 & String, Unit>):
   do IO<Result<&1, &1, U32 & String, Unit>>:
-    f : File <- IO.try(File, File.open(path, "w"))
-    fr : File & Result<&1, &1, U32 & String, Unit> <- Fs.write_bytes(f, bytes)
-    write_tail(fr, path)
+    opened : Result<&1, &1, U32 & String, File> <- File.open(path, "w")
+    write_manifest.bytes.opened(opened, path, bytes)
 
 def write_manifest.encoded(
   path: String,
@@ -107,20 +150,35 @@ def read_tail3(fr: (File & Result<&1, &1, U32 & String, String>)) -> IO(Result<&
 
 # Base File.read decodes each returned chunk independently. A chunk boundary can
 # split a multi-byte UTF-8 character, so table files are read in one bounded call
-# until a byte-oriented streaming effect with decoder carry is available.
+# Reads a bounded storage file and returns its bytes.
+def read_file.opened(
+  opened: Result<&1, &1, U32 & String, File>
+) -> IO(Result<&1, &1, U32 & String, String>):
+  match opened:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, U32 & String, String>, Fail{error})
+    case Done{file}:
+      do IO<Result<&1, &1, U32 & String, String>>:
+        result : File & Result<&1, &1, U32 & String, String> <- File.read(file, U32.from_nat(4294967295n))
+        read_tail3(result)
+
+# Reads a bounded storage file and returns its bytes.
 def read_file(+path: String) -> IO(Result<&1, &1, U32 & String, String>):
   do IO<Result<&1, &1, U32 & String, String>>:
-    f : File <- IO.try(File, File.open(path, "r"))
-    fr : (File & Result<&1, &1, U32 & String, String>) <- File.read(f, U32.from_nat(4294967295n))
-    read_tail3(fr)
+    opened : Result<&1, &1, U32 & String, File> <- File.open(path, "r")
+    read_file.opened(opened)
 
-# Handle mfst parsed in the memtable flush.
-def mfst_parsed(+opt: Maybe<&2, Manifest.Manifest>) -> Result<&1, &1, U32 & String, Manifest.Manifest>:
-  match opt:
-    case None{}:
-      Fail{(U32.from_nat(1n), "bad manifest")}
-    case Some{mm}:
-      Done{mm}
+# Classifies the Manifest parse result before recovery.
+def mfst_parsed(parsed: Manifest.ParseResult) -> Result<&1, &1, U32 & String, Manifest.Manifest>:
+  match parsed:
+    case Manifest.Parsed{manifest}:
+      Done{manifest}
+    case Manifest.UnsupportedVersion{_}:
+      Fail{(Manifest.unsupported_version_error_code(), "unsupported manifest version")}
+    case Manifest.Malformed{}:
+      Fail{(Manifest.malformed_error_code(), "malformed manifest")}
+    case Manifest.ParseLimitExceeded{}:
+      Fail{(Manifest.parse_limit_error_code(), "manifest size limit exceeded")}
 
 def manifest.read.result(
   pair: File & Result<&1, &1, U32 & String, Bytes.Bytes>
@@ -133,7 +191,7 @@ def manifest.read.result(
     case (file, Done{bytes}):
       do IO<Result<&1, &1, U32 & String, Manifest.Manifest>>:
         _closed : Unit <- File.close(file)
-        return mfst_parsed(Manifest.parse(bytes))
+        return mfst_parsed(Manifest.parse_result(bytes))
 
 def manifest.read.loop(fuel: Nat, state: ManifestReadState) -> IO(File & Result<&1, &1, U32 & String, Bytes.Bytes>):
   match fuel:
@@ -246,7 +304,84 @@ def ensure_dir(+path: String) -> IO(Result<&1, &1, U32 & String, Unit>):
 
 # --- Flush chain (defined bottom-up: tails first, entry last) ---
 
-# Flush goB for the memtable flush.
+def flush_goB.wal(
+  result: Result<&1, &1, U32 & String, Unit>,
+  +dir: String,
+  +m2: Manifest.Manifest,
+  +tbl: Sstable.Table,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +mem: MemTable.MemTable,
+  +batch_cap: Nat
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+  match result:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{error})
+    case Done{Unit{}}:
+      IO.pure(Result<&1, &1, U32 & String, Db.Db>,
+        Done{Db.Db{dir, mem, MemTable.MT{Nil{}}, batch_cap, Nil{},
+          l0_add(levels, tbl), Nat.add(flushed, 1n), Manifest.token(m2), 0n, 0n}})
+
+def flush_goB.synced(
+  result: Result<&1, &1, U32 & String, Unit>,
+  +dir: String,
+  +m2: Manifest.Manifest,
+  +tbl: Sstable.Table,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +mem: MemTable.MemTable,
+  +batch_cap: Nat
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+  match result:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{error})
+    case Done{Unit{}}:
+      do IO<Result<&1, &1, U32 & String, Db.Db>>:
+        _checkpoint : Unit <- IO.try(Unit, CrashPoint.hit("flush.manifest_published"))
+        _removed : Result<&1, &1, U32 & String, Unit> <- Fs.remove(Db.wal_path(dir))
+        initialized : Result<&1, &1, U32 & String, Unit> <- DbIo.wal_initialize(dir)
+        flush_goB.wal(initialized, dir, m2, tbl, levels, flushed, mem, batch_cap)
+
+def flush_goB.renamed(
+  result: Result<&1, &1, U32 & String, Unit>,
+  +dir: String,
+  +m2: Manifest.Manifest,
+  +tbl: Sstable.Table,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +mem: MemTable.MemTable,
+  +batch_cap: Nat
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+  match result:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{error})
+    case Done{Unit{}}:
+      do IO<Result<&1, &1, U32 & String, Db.Db>>:
+        synced : Result<&1, &1, U32 & String, Unit> <- Fs.fsync(dir)
+        flush_goB.synced(synced, dir, m2, tbl, levels, flushed, mem, batch_cap)
+
+def flush_goB.written(
+  result: Result<&1, &1, U32 & String, Unit>,
+  +dir: String,
+  +mpath: String,
+  +mtmp: String,
+  +m2: Manifest.Manifest,
+  +tbl: Sstable.Table,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +mem: MemTable.MemTable,
+  +batch_cap: Nat
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+  match result:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{error})
+    case Done{Unit{}}:
+      do IO<Result<&1, &1, U32 & String, Db.Db>>:
+        _checkpoint : Unit <- IO.try(Unit, CrashPoint.hit("flush.manifest_synced"))
+        renamed : Result<&1, &1, U32 & String, Unit> <- Fs.rename(mtmp, mpath)
+        flush_goB.renamed(renamed, dir, m2, tbl, levels, flushed, mem, batch_cap)
+
+# Publishes flushed SSTables and updates the Manifest.
 def flush_goB(
   +dir: String,
   +mpath: String,
@@ -259,14 +394,8 @@ def flush_goB(
   +batch_cap: Nat,
 ) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
-    _v1 : Unit <- IO.try(Unit, write_manifest(mtmp, m2))
-    _cp1 : Unit <- IO.try(Unit, CrashPoint.hit("flush.manifest_synced"))
-    _v2 : Unit <- IO.try(Unit, Fs.rename(mtmp, mpath))
-    _v3 : Unit <- IO.try(Unit, Fs.fsync(dir))
-    _cp2 : Unit <- IO.try(Unit, CrashPoint.hit("flush.manifest_published"))
-    _rm : Result<&1, &1, U32 & String, Unit> <- Fs.remove(Db.wal_path(dir))
-    _wal : Unit <- IO.try(Unit, DbIo.wal_initialize(dir))
-    return Done{Db.Db{dir, mem, MemTable.MT{Nil{}}, batch_cap, Nil{}, l0_add(levels, tbl), Nat.add(flushed, 1n), Manifest.token(m2), 0n, 0n}}
+    written : Result<&1, &1, U32 & String, Unit> <- write_manifest(mtmp, m2)
+    flush_goB.written(written, dir, mpath, mtmp, m2, tbl, levels, flushed, mem, batch_cap)
 
 # Flush drift for the memtable flush.
 def flush_drift(
@@ -288,7 +417,125 @@ def flush_drift(
     case True{}:
       flush_goB(dir, mpath, mtmp, mfst_add(mfst, name), tbl, levels, flushed, mem, batch_cap)
 
-# Flush goA for the memtable flush.
+def flush_goA.loaded(
+  result: Result<&1, &1, U32 & String, Manifest.Manifest>,
+  +dir: String,
+  +mpath: String,
+  +mtmp: String,
+  +tbl: Sstable.Table,
+  +name: String,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +manifest_token: String,
+  +mem: MemTable.MemTable,
+  +batch_cap: Nat
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+  match result:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{error})
+    case Done{+current}:
+      flush_drift(String.eq(Manifest.token(current), manifest_token), dir,
+        mpath, mtmp, current, tbl, name, levels, flushed, mem, batch_cap)
+
+def flush_goA.synced(
+  result: Result<&1, &1, U32 & String, Unit>,
+  +dir: String,
+  +mpath: String,
+  +mtmp: String,
+  +tbl: Sstable.Table,
+  +name: String,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +manifest_token: String,
+  +mem: MemTable.MemTable,
+  +batch_cap: Nat
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+  match result:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{error})
+    case Done{Unit{}}:
+      do IO<Result<&1, &1, U32 & String, Db.Db>>:
+        _checkpoint : Unit <- IO.try(Unit, CrashPoint.hit("flush.table_published"))
+        current : Result<&1, &1, U32 & String, Manifest.Manifest> <- load_mfst(mpath)
+        flush_goA.loaded(current, dir, mpath, mtmp, tbl, name, levels,
+          flushed, manifest_token, mem, batch_cap)
+
+def flush_goA.renamed(
+  result: Result<&1, &1, U32 & String, Unit>,
+  +dir: String,
+  +l0dir: String,
+  +mpath: String,
+  +mtmp: String,
+  +tbl: Sstable.Table,
+  +name: String,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +manifest_token: String,
+  +mem: MemTable.MemTable,
+  +batch_cap: Nat
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+  match result:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{error})
+    case Done{Unit{}}:
+      do IO<Result<&1, &1, U32 & String, Db.Db>>:
+        synced : Result<&1, &1, U32 & String, Unit> <- Fs.fsync(l0dir)
+        flush_goA.synced(synced, dir, mpath, mtmp, tbl, name, levels,
+          flushed, manifest_token, mem, batch_cap)
+
+# Writes the MemTable to an SSTable and completes the flush.
+def flush_goA.written(
+  result: Result<&1, &1, U32 & String, Unit>,
+  +dir: String,
+  +l0dir: String,
+  +tmp: String,
+  +final: String,
+  +mpath: String,
+  +mtmp: String,
+  +tbl: Sstable.Table,
+  +name: String,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +manifest_token: String,
+  +mem: MemTable.MemTable,
+  +batch_cap: Nat,
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+  match result:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{error})
+    case Done{Unit{}}:
+      do IO<Result<&1, &1, U32 & String, Db.Db>>:
+        _cp1 : Unit <- IO.try(Unit, CrashPoint.hit("flush.table_synced"))
+        renamed : Result<&1, &1, U32 & String, Unit> <- Fs.rename(tmp, final)
+        flush_goA.renamed(renamed, dir, l0dir, mpath, mtmp, tbl, name, levels, flushed, manifest_token, mem, batch_cap)
+
+def flush_goA.ensured(
+  result: Result<&1, &1, U32 & String, Unit>,
+  +dir: String,
+  +l0dir: String,
+  +tmp: String,
+  +final: String,
+  +mpath: String,
+  +mtmp: String,
+  +entries: List<&2, MemTable.Entry>,
+  +level: U32,
+  +tbl: Sstable.Table,
+  +name: String,
+  +levels: List<&2, List<&2, Sstable.Table>>,
+  +flushed: Nat,
+  +manifest_token: String,
+  +mem: MemTable.MemTable,
+  +batch_cap: Nat,
+) -> IO(Result<&1, &1, U32 & String, Db.Db>):
+  match result:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, U32 & String, Db.Db>, Fail{error})
+    case Done{Unit{}}:
+      do IO<Result<&1, &1, U32 & String, Db.Db>>:
+        written : Result<&1, &1, U32 & String, Unit> <- SstStreamIo.write_table(tmp, entries, level)
+        flush_goA.written(written, dir, l0dir, tmp, final, mpath, mtmp, tbl, name, levels, flushed, manifest_token, mem, batch_cap)
+
+# Writes the MemTable to an SSTable and completes the flush.
 def flush_goA(
   +dir: String,
   +l0dir: String,
@@ -307,14 +554,8 @@ def flush_goA(
   +batch_cap: Nat,
 ) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   do IO<Result<&1, &1, U32 & String, Db.Db>>:
-    _u1 : Unit <- IO.try(Unit, ensure_dir(l0dir))
-    _u2 : Unit <- IO.try(Unit, SstStreamIo.write_table(tmp, entries, level))
-    _cp1 : Unit <- IO.try(Unit, CrashPoint.hit("flush.table_synced"))
-    _u3 : Unit <- IO.try(Unit, Fs.rename(tmp, final))
-    _u4 : Unit <- IO.try(Unit, Fs.fsync(l0dir))
-    _cp2 : Unit <- IO.try(Unit, CrashPoint.hit("flush.table_published"))
-    +m : Manifest.Manifest <- IO.try(Manifest.Manifest, load_mfst(mpath))
-    flush_drift(String.eq(Manifest.token(m), manifest_token), dir, mpath, mtmp, m, tbl, name, levels, flushed, mem, batch_cap)
+    ensured : Result<&1, &1, U32 & String, Unit> <- ensure_dir(l0dir)
+    flush_goA.ensured(ensured, dir, l0dir, tmp, final, mpath, mtmp, entries, level, tbl, name, levels, flushed, manifest_token, mem, batch_cap)
 
 # Flush pre for the memtable flush.
 def flush_pre(

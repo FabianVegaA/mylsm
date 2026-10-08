@@ -263,6 +263,12 @@ def frame.payload.valid(
 
 
 
+# Checks an encoded WAL frame against its byte cap.
+def frame_length_allowed(+count: U32, +length: U32) -> Bool:
+  U32.is_le(length, StorageBytes.MAX_BLOCK_BYTES()) ||
+    U32.is_eq(count, 1) && U32.is_le(length,
+      (StorageBytes.MAX_RECORD_BYTES() + 36 : U32))
+
 def frame.payload.fin(
   +count: U32,
   payload: Bytes.Bytes,
@@ -273,10 +279,7 @@ def frame.payload.fin(
     case None{}:
       Fail{TooLarge{}}
     case Some{+length}:
-      frame.payload.valid(count, payload, length, hash_payload,
-        U32.is_le(length, StorageBytes.MAX_BLOCK_BYTES()) ||
-          U32.is_eq(count, 1) && U32.is_le(length,
-            (StorageBytes.MAX_RECORD_BYTES() + 36 : U32)))
+      frame.payload.valid(count, payload, length, hash_payload, frame_length_allowed(count, length))
 
 
 

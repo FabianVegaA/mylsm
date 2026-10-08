@@ -12,6 +12,13 @@ type Error is Data:
   TooLarge{}
   InvalidName{}
 
+# Represents parseresult data in manifest.
+type ParseResult is Data:
+  Parsed{manifest: Manifest}
+  UnsupportedVersion{version: U32}
+  Malformed{}
+  ParseLimitExceeded{}
+
 # Represent ParseState data used by the binary manifest codec.
 type ParseState is Data:
   ReadNamesCount{levels_left: Nat, levels_acc: List<&2, List<&2, String>>}
@@ -545,7 +552,7 @@ def parse.magic(pair: Bytes.Cursor & Maybe<&2, U32>, source: Bytes.Bytes) -> May
   match pair:
     case (_, None{}):
       None{}
-    case (cursor, Some{version}):
+    case (cursor, Some{+version}):
       parse.version(cursor, source, U32.is_eq(version, 3))
 
 def parse.input.second.valid(source: Bytes.Bytes, cursor: Bytes.Cursor, valid: Bool) -> Maybe<&2, Manifest>:
@@ -599,6 +606,109 @@ def parse.size(size_pair: Bytes.Bytes & U32) -> Maybe<&2, Manifest>:
 # Handle parse in the binary manifest codec.
 def parse(source: Bytes.Bytes) -> Maybe<&2, Manifest>:
   parse.size(Bytes.length(source))
+
+def parse.result.parsed(parsed: Maybe<&2, Manifest>) -> ParseResult:
+  match parsed:
+    case Some{manifest}:
+      Parsed{manifest}
+    case None{}:
+      Malformed{}
+
+def parse.result.version.checked(
+  source: Bytes.Bytes,
+  version: U32,
+  supported: Bool
+) -> ParseResult:
+  match supported:
+    case False{}:
+      UnsupportedVersion{version}
+    case True{}:
+      parse.result.parsed(parse(source))
+
+def parse.result.version.read(
+  source: Bytes.Bytes,
+  pair: Bytes.Cursor & Maybe<&2, U32>
+) -> ParseResult:
+  match pair:
+    case (_, None{}):
+      Malformed{}
+    case (cursor, Some{+version}):
+      parse.result.version.checked(source, version, U32.is_eq(version, 3))
+
+def parse.result.second.checked(
+  source: Bytes.Bytes,
+  pair: Bytes.Cursor & Maybe<&2, U32>,
+  valid: Bool
+) -> ParseResult:
+  match valid:
+    case False{}:
+      Malformed{}
+    case True{}:
+      parse.result.version.read(source, pair)
+
+def parse.result.second.read(
+  source: Bytes.Bytes,
+  pair: Bytes.Cursor & Maybe<&2, U32>
+) -> ParseResult:
+  match pair:
+    case (_, None{}):
+      Malformed{}
+    case (cursor, Some{word}):
+      parse.result.second.checked(source, Bytes.Cursor.u32be(cursor), U32.is_eq(word, 1295207680))
+
+def parse.result.first.checked(
+  source: Bytes.Bytes,
+  pair: Bytes.Cursor & Maybe<&2, U32>,
+  valid: Bool
+) -> ParseResult:
+  match valid:
+    case False{}:
+      Malformed{}
+    case True{}:
+      parse.result.second.read(source, pair)
+
+def parse.result.first.read(
+  source: Bytes.Bytes,
+  pair: Bytes.Cursor & Maybe<&2, U32>
+) -> ParseResult:
+  match pair:
+    case (_, None{}):
+      Malformed{}
+    case (cursor, Some{word}):
+      parse.result.first.checked(source, Bytes.Cursor.u32be(cursor), U32.is_eq(word, 1297697875))
+
+def parse.result.start(pair: Bytes.Bytes & Bytes.Bytes) -> ParseResult:
+  match pair:
+    case (source, cursor_source):
+      parse.result.first.read(source, Bytes.Cursor.u32be(Bytes.Cursor.new(cursor_source)))
+
+def parse.result.bounded(source: Bytes.Bytes, within: Bool) -> ParseResult:
+  match within:
+    case False{}:
+      ParseLimitExceeded{}
+    case True{}:
+      parse.result.start(bytes.clone.split(source))
+
+def parse.result.sized(pair: Bytes.Bytes & U32) -> ParseResult:
+  match pair:
+    case (source, +size):
+      parse.result.bounded(source, U32.is_le(size, StorageBytes.MAX_MANIFEST_BYTES()))
+
+# Separates a valid Manifest from unsupported and malformed input.
+def parse_result(source: Bytes.Bytes) -> ParseResult:
+  parse.result.sized(Bytes.length(source))
+
+# Returns the error code for an unsupported Manifest version.
+def unsupported_version_error_code() -> U32:
+  4294967295
+
+# Returns the error code for malformed Manifest data.
+def malformed_error_code() -> U32:
+  4294967294
+
+# Returns the error code for a Manifest size limit.
+def parse_limit_error_code() -> U32:
+  4294967293
 
 # Check whether decided holds for the binary manifest codec.
 def is_decided(_result: Maybe<&2, Manifest>) -> Bool:

@@ -1,5 +1,6 @@
 import Base
 import ./Keys.bend as Keys
+import ./StorageBytes.bend as StorageBytes
 
 # MemTable: newest-first prepend log (NOT sorted — sorting happens once at
 # flush). Rationale: put/del are O(1) with ZERO comparisons on the write
@@ -36,6 +37,29 @@ def count(tab: MemTable) -> Nat:
   match tab:
     case MT{entries}:
       List.length(&2, Entry, entries)
+
+# Counts UTF-8 payload bytes for a value or tombstone.
+def payload_value_bytes(value: Maybe<&2, String>) -> Nat:
+  match value:
+    case None{}:
+      0n
+    case Some{text}:
+      StorageBytes.string_size(text)
+
+# Sums payload bytes across MemTable entries.
+def payload_entries_bytes(+entries: List<&2, Entry>) -> Nat:
+  match entries:
+    case Nil{}:
+      0n
+    case Con{Entry{key, value}, tail}:
+      Nat.add(Nat.add(StorageBytes.string_size(key), payload_value_bytes(value)),
+        payload_entries_bytes(tail))
+
+# Counts active and frozen MemTable payload bytes.
+def payload_bytes(tab: MemTable) -> Nat:
+  match tab:
+    case MT{entries}:
+      payload_entries_bytes(entries)
 
 # Scan state machine (Base List.merge pattern): the driver matches fuel +
 # structural state only; the leaf folds one entry (done-flag freezes the

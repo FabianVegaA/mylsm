@@ -27,3 +27,12 @@ def Laws.wal_v3_frame_rejects_trailing_byte():
 
 def Laws.wal_v3_frame_rejects_bad_digest():
   {==}
+
+def Laws.multi_mutation_frame_limit_rejects_over_block():
+  {==}
+
+def Laws.delete_record_rejects_key_over_codec_cap():
+  {==}
+
+def Laws.put_record_rejects_value_over_combined_codec_cap():
+  {==}

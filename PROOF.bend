@@ -10,8 +10,14 @@ import ./proofs/CompactProof.bend as CompactProof
 import ./proofs/CrashPointProof.bend as CrashPointProof
 import ./proofs/DbProof.bend as DbProof
 import ./proofs/DecimalProof.bend as DecimalProof
+import ./proofs/DbLockProof.bend as DbLockProof
+import ./proofs/DurableErrorProof.bend as DurableErrorProof
+import ./proofs/DurableDbPolicyProof.bend as DurableDbPolicyProof
+import ./proofs/DurableDbProof.bend as DurableDbProof
+import ./proofs/DurableBatchPolicyProof.bend as DurableBatchPolicyProof
 import ./proofs/DemoProof.bend as DemoProof
 import ./proofs/FlushProof.bend as FlushProof
+import ./proofs/FsPolicyProof.bend as FsPolicyProof
 import ./proofs/KeysProof.bend as KeysProof
 import ./proofs/ManifestProof.bend as ManifestProof
 import ./proofs/MemTableProof.bend as MemTableProof

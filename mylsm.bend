@@ -9,6 +9,9 @@ import ./src/Manifest.bend as Manifest
 import ./src/MergeIter.bend as MergeIter
 import ./src/Db.bend as Db
 import ./src/Recover.bend as Recover
+import ./src/DurableDb.bend as DurableDb
+import ./src/DurableError.bend as DurableError
+import ./src/DurableDbPolicy.bend as DurableDbPolicy
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # --- Level 2: part control (1:1 delegates) ---
@@ -113,6 +116,235 @@ def open(+dir: String) -> Db.Db:
 # Recover a persisted database from its directory.
 def open_recovering(+dir: String) -> IO(Result<&1, &1, U32 & String, Db.Db>):
   Recover.open_db(dir)
+
+
+# Lists the error categories exposed by the durable API.
+type ErrorKind is Data:
+  NotFoundError{}
+  AlreadyExistsError{}
+  BusyError{}
+  InvalidArgumentError{}
+  UnsupportedFormatError{}
+  CorruptionError{}
+  ResourceLimitError{}
+  IoError{}
+  CommitUnknownError{}
+
+# Carries structured error details for API callers.
+type Error is Data:
+  Error{kind: ErrorKind, operation: String, path: String, host_code: U32, host_message: String}
+
+# Owns the database and its process lock.
+type Handle is Type:
+  Handle{inner: DurableDb.Handle}
+
+# Reports database size, cache use, errors, and maintenance state.
+type DurableStats is Data:
+  DurableStats{active_bytes: Nat, wal_bytes: Nat, memtable_entries: Nat, memtable_payload_bytes: Nat, cache_entries: Nat, operation_errors: Nat, maintenance_blocked: Bool}
+
+# Reports whether post-commit maintenance completed.
+type MaintenanceStatus is Data:
+  MaintenanceComplete{}
+  MaintenancePending{error: Error}
+
+# Reports maintenance status for a confirmed write.
+type WriteOutcome is Data:
+  WriteOutcome{maintenance: MaintenanceStatus}
+
+# Describes a public key/value update or deletion.
+type Mutation is Data:
+  SetValue{key: String, value: String}
+  DeleteKey{key: String}
+
+# Converts a public mutation to the WAL representation.
+def to_storage_mut(mutation: Mutation) -> Wal.Mut:
+  match mutation:
+    case SetValue{key, value}: Wal.Put{key, value}
+    case DeleteKey{key}: Wal.Del{key}
+
+# Converts each public mutation to its WAL representation.
+def to_storage_muts(+mutations: List<&2, Mutation>) -> List<&2, Wal.Mut>:
+  match mutations:
+    case Nil{}: Nil{}
+    case Con{mutation, tail}: Con{to_storage_mut(mutation), to_storage_muts(tail)}
+
+# Maps internal error categories to the public error kind.
+def public_error_kind(kind: DurableError.ErrorKind) -> ErrorKind:
+  match kind:
+    case DurableError.NotFound{}: NotFoundError{}
+    case DurableError.AlreadyExists{}: AlreadyExistsError{}
+    case DurableError.Busy{}: BusyError{}
+    case DurableError.InvalidArgument{}: InvalidArgumentError{}
+    case DurableError.UnsupportedFormat{}: UnsupportedFormatError{}
+    case DurableError.Corruption{}: CorruptionError{}
+    case DurableError.ResourceLimit{}: ResourceLimitError{}
+    case DurableError.Io{}: IoError{}
+    case DurableError.CommitUnknown{}: CommitUnknownError{}
+
+# Builds the public error while preserving its structured details.
+def public_error(error: DurableError.Error) -> Error:
+  match error:
+    case DurableError.Error{kind, operation, path, host_code, host_message}:
+      Error{public_error_kind(kind), operation, path, host_code, host_message}
+
+# Converts an internal result to the public error type.
+def public_error_result(result: Result<&1, &1, DurableError.Error, Unit>) -> Result<&1, &1, Error, Unit>:
+  match result:
+    case Fail{error}: Fail{public_error(error)}
+    case Done{value}: Done{value}
+
+# Converts a durable open result to the public handle.
+def public_open_result(result: Result<&1, &1, DurableError.Error, DurableDb.Handle>) -> Result<&1, &1, Error, Handle>:
+  match result:
+    case Fail{error}: Fail{public_error(error)}
+    case Done{handle}: Done{Handle{handle}}
+
+# Creates a database and returns its owned durable handle.
+def create(+dir: String) -> IO(Result<&1, &1, Error, Handle>):
+  do IO<Result<&1, &1, Error, Handle>>:
+    result : Result<&1, &1, DurableError.Error, DurableDb.Handle> <- DurableDb.create(dir)
+    return public_open_result(result)
+
+# Opens and recovers an existing database under its lock.
+def open_existing(+dir: String) -> IO(Result<&1, &1, Error, Handle>):
+  do IO<Result<&1, &1, Error, Handle>>:
+    result : Result<&1, &1, DurableError.Error, DurableDb.Handle> <- DurableDb.open_existing(dir)
+    return public_open_result(result)
+
+# Converts an optional stored value and its error.
+def public_maybe_result(
+  result: Result<&1, &1, DurableError.Error, Maybe<&2, String>>,
+) -> Result<&1, &1, Error, Maybe<&2, String>>:
+  match result:
+    case Fail{error}: Fail{public_error(error)}
+    case Done{value}: Done{value}
+
+# Converts a durable read result to the public value type.
+def durable_get_result(
+  pair: DurableDb.Handle & Result<&1, &1, DurableError.Error, Maybe<&2, String>>,
+) -> Handle & Result<&1, &1, Error, Maybe<&2, String>>:
+  match pair:
+    case (handle, result): (Handle{handle}, public_maybe_result(result))
+
+# Reads a key from the owned durable database handle.
+def get(handle: Handle, +key: String) -> IO(Handle & Result<&1, &1, Error, Maybe<&2, String>>):
+  match handle:
+    case Handle{inner}:
+      do IO<Handle & Result<&1, &1, Error, Maybe<&2, String>>>:
+        pair : DurableDb.Handle & Result<&1, &1, DurableError.Error, Maybe<&2, String>> <- DurableDb.get(inner, key)
+        return durable_get_result(pair)
+
+# Maps internal maintenance state to its public status.
+def public_maintenance(maintenance: DurableDb.Maintenance) -> MaintenanceStatus:
+  match maintenance:
+    case DurableDb.Maintained{}: MaintenanceComplete{}
+    case DurableDb.Pending{error}: MaintenancePending{public_error(error)}
+
+# Converts a confirmed write outcome to the public type.
+def public_write_result(
+  result: Result<&1, &1, DurableError.Error, DurableDb.WriteOutcome>,
+) -> Result<&1, &1, Error, WriteOutcome>:
+  match result:
+    case Fail{error}: Fail{public_error(error)}
+    case Done{DurableDb.WriteOutcome{maintenance}}: Done{WriteOutcome{public_maintenance(maintenance)}}
+
+# Preserves maintenance status while converting write errors.
+def durable_write_result(
+  pair: DurableDb.Handle & Result<&1, &1, DurableError.Error, Unit>,
+) -> Handle & Result<&1, &1, Error, Unit>:
+  match pair:
+    case (handle, result): (Handle{handle}, public_error_result(result))
+
+# Converts a batch outcome while preserving handle ownership.
+def durable_batch_result(
+  pair: DurableDb.Handle & Result<&1, &1, DurableError.Error, DurableDb.WriteOutcome>,
+) -> Handle & Result<&1, &1, Error, WriteOutcome>:
+  match pair:
+    case (handle, result): (Handle{handle}, public_write_result(result))
+
+# Validates and commits a public mutation batch atomically.
+def write_batch(handle: Handle, mutations: List<&2, Mutation>) -> IO(Handle & Result<&1, &1, Error, WriteOutcome>):
+  match handle:
+    case Handle{inner}:
+      do IO<Handle & Result<&1, &1, Error, WriteOutcome>>:
+        pair : DurableDb.Handle & Result<&1, &1, DurableError.Error, DurableDb.WriteOutcome> <- DurableDb.write_batch(inner, to_storage_muts(mutations))
+        return durable_batch_result(pair)
+
+# Writes one key and value through the durable handle.
+def put(handle: Handle, +key: String, +value: String) -> IO(Handle & Result<&1, &1, Error, WriteOutcome>):
+  match handle:
+    case Handle{inner}:
+      do IO<Handle & Result<&1, &1, Error, WriteOutcome>>:
+        pair : DurableDb.Handle & Result<&1, &1, DurableError.Error, DurableDb.WriteOutcome> <- DurableDb.put(inner, key, value)
+        return durable_batch_result(pair)
+
+# Deletes one key through the durable handle.
+def delete(handle: Handle, +key: String) -> IO(Handle & Result<&1, &1, Error, WriteOutcome>):
+  match handle:
+    case Handle{inner}:
+      do IO<Handle & Result<&1, &1, Error, WriteOutcome>>:
+        pair : DurableDb.Handle & Result<&1, &1, DurableError.Error, DurableDb.WriteOutcome> <- DurableDb.delete(inner, key)
+        return durable_batch_result(pair)
+
+# Flushes the durable handle and returns maintenance status.
+def flush(handle: Handle) -> IO(Handle & Result<&1, &1, Error, Unit>):
+  match handle:
+    case Handle{inner}:
+      do IO<Handle & Result<&1, &1, Error, Unit>>:
+        pair : DurableDb.Handle & Result<&1, &1, DurableError.Error, Unit> <- DurableDb.flush(inner)
+        return durable_write_result(pair)
+
+# Compacts the durable handle and returns maintenance status.
+def compact(handle: Handle) -> IO(Handle & Result<&1, &1, Error, Unit>):
+  match handle:
+    case Handle{inner}:
+      do IO<Handle & Result<&1, &1, Error, Unit>>:
+        pair : DurableDb.Handle & Result<&1, &1, DurableError.Error, Unit> <- DurableDb.compact(inner)
+        return durable_write_result(pair)
+
+# Maps internal counters to the public stats record.
+def public_stats(result: Result<&1, &1, DurableError.Error, DurableDb.Stats>) -> Result<&1, &1, Error, DurableStats>:
+  match result:
+    case Fail{error}: Fail{public_error(error)}
+    case Done{DurableDb.Stats{active_bytes, wal_bytes, memtable_entries, memtable_payload_bytes, cache_entries, operation_errors, state}}:
+      match state:
+        case DurableDbPolicy.MaintenanceBlocked{}: Done{DurableStats{active_bytes, wal_bytes, memtable_entries, memtable_payload_bytes, cache_entries, operation_errors, True{}}}
+        case _: Done{DurableStats{active_bytes, wal_bytes, memtable_entries, memtable_payload_bytes, cache_entries, operation_errors, False{}}}
+
+# Converts durable stats errors to the public error type.
+def durable_stats_result(
+  pair: DurableDb.Handle & Result<&1, &1, DurableError.Error, DurableDb.Stats>,
+) -> Handle & Result<&1, &1, Error, DurableStats>:
+  match pair:
+    case (handle, result): (Handle{handle}, public_stats(result))
+
+# Reads bounded operational stats from the durable handle.
+def stats(handle: Handle) -> IO(Handle & Result<&1, &1, Error, DurableStats>):
+  match handle:
+    case Handle{inner}:
+      do IO<Handle & Result<&1, &1, Error, DurableStats>>:
+        pair : DurableDb.Handle & Result<&1, &1, DurableError.Error, DurableDb.Stats> <- DurableDb.stats(inner)
+        return durable_stats_result(pair)
+
+# Closes the durable handle and releases its database lock.
+def close(handle: Handle) -> IO(Result<&1, &1, Error, Unit>):
+  match handle:
+    case Handle{inner}:
+      do IO<Result<&1, &1, Error, Unit>>:
+        result : Result<&1, &1, DurableError.Error, Unit> <- DurableDb.close(inner)
+        return public_error_result(result)
+
+# Checks whether the public error means the path exists.
+def error_is_already_exists(error: Error) -> Bool:
+  match error:
+    case Error{AlreadyExistsError{}, _, _, _, _}: True{}
+    case _: False{}
+
+# Checks whether the public error means the database is locked.
+def error_is_busy(error: Error) -> Bool:
+  match error:
+    case Error{BusyError{}, _, _, _, _}: True{}
+    case _: False{}
 
 # Pure put transition used by the session action.
 def put_go(+db: Db.Db, +key: String, +val: String) -> Db.Db:

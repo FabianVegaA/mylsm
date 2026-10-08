@@ -79,6 +79,30 @@ law checked_add_exact:
 law checked_add_overflow:
   {StorageBytes.checked_add(4294967295, 1) == None{} : Maybe<&2, U32>}
 
+# States the record bytes at limit property.
+law record_bytes_at_limit:
+  {StorageBytes.record_bytes_allowed(1073741824) == True{} : Bool}
+
+# States the record bytes over limit property.
+law record_bytes_over_limit:
+  {StorageBytes.record_bytes_allowed(1073741825) == False{} : Bool}
+
+# States the utf8 preflight ascii at record cap property.
+law utf8_preflight_ascii_at_record_cap:
+  {StorageBytes.from_string.size("ab", 1073741822, True{}) == Some{1073741824} : Maybe<&2, U32>}
+
+# States the utf8 preflight ascii over record cap property.
+law utf8_preflight_ascii_over_record_cap:
+  {StorageBytes.from_string.size("ab", 1073741823, True{}) == None{} : Maybe<&2, U32>}
+
+# States the utf8 preflight multibyte at record cap property.
+law utf8_preflight_multibyte_at_record_cap:
+  {StorageBytes.from_string.size("aé", 1073741821, True{}) == Some{1073741824} : Maybe<&2, U32>}
+
+# States the utf8 preflight multibyte over record cap property.
+law utf8_preflight_multibyte_over_record_cap:
+  {StorageBytes.from_string.size("aé", 1073741822, True{}) == None{} : Maybe<&2, U32>}
+
 # Cursor fields use network byte order and preserve a complete value.
 law cursor_u32be_roundtrip:
   {cursor_roundtrip(StorageBytes.write_u32be(Bytes.Cursor.new(Bytes.Bytes{4, Bytes.alloc(4)}), 3735928559)) == True{} : Bool}
