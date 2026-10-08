@@ -6,6 +6,7 @@ bench/results/
 !bench/results/
 bench/results/*
 !bench/results/*.md
+!bench/results/durable-api-0.5.0.0-performance-samples.tsv
 **/wal.log
 .mylsm/
 .mylsm-demo-data/

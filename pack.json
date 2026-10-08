@@ -1,6 +1,6 @@
 {
   "name": "mylsm",
   "description": "Bend LSM core with a session API, storage codecs, and effectful recovery of persisted databases.",
-  "import": "import mylsm-lsm-store@0.4.0.0/mylsm.bend as MyLSM",
+  "import": "import mylsm-lsm-store@0.5.0.0/mylsm.bend as MyLSM",
   "category": "packages"
 }

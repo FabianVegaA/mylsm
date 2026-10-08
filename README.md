@@ -9,8 +9,8 @@ recovery, and machine-checked laws for parts of the pure storage core.
 
 ## Quick start
 
-Requirements: Bend 2.0.35 or newer. The 0.4.0.0 source and proof gates are
-validated with Bend 2.0.35.
+Requirements: Bend 2.0.36 or newer. The durable filesystem adapter includes a
+small C registration shim for the cached `bend-kit-files` ABI.
 
 ```sh
 # Inspect available CPU/GPU/native capabilities
@@ -37,7 +37,7 @@ Paste the import; the compiler fetches the package from the hub into
 `~/.bend/lib`, verifies it against its hash, and runs offline afterwards:
 
 ```bend
-import mylsm-lsm-store@0.4.0.0/mylsm.bend as MyLSM
+import mylsm-lsm-store@0.5.0.0/mylsm.bend as MyLSM
 ```
 
 `MyLSM.open(dir)` creates an empty in-memory handle. To recover a persisted
@@ -45,13 +45,22 @@ database from that directory, call `MyLSM.open_recovering(dir)`; it returns an
 `IO(Result<&1, &1, U32 & String, Db.Db>)` and reads the Manifest, SSTables, and
 WAL through the filesystem effects.
 
+The durable API adds `create`, `open_existing`, `put`, `delete`, `write_batch`,
+`get`, `flush`, `compact`, `stats`, and `close`. It holds an exclusive
+`LOCK` file for the handle lifetime. `close` releases ownership; after a process
+crash, the operating system releases the lock and the lock file remains.
+`stats` reports active bytes from the Manifest and its SSTables, WAL bytes, memtable entry and UTF-8 payload-byte counts, resident read-cache entries (up to 256), and per-handle operation errors. A write or sync failure after append begins is reported as `CommitUnknown`; close
+and reopen before retrying. Successful writes report maintenance completion
+separately from the confirmed commit. See [docs/DURABLE_API.md](docs/DURABLE_API.md) for the
+current lifecycle and limits. Durable batches accept 1–256 mutations; empty batches are invalid.
+
 Level 1 is a session monad — no manual handle threading. Steps share one
 quantity (`&2`); `v : T <- …` binds a result, bare `sput(…)` is a Unit step,
 `return` wraps the answer:
 
 ```bend
 import Base
-import mylsm-lsm-store@0.4.0.0/mylsm.bend as MyLSM
+import mylsm-lsm-store@0.5.0.0/mylsm.bend as MyLSM
 
 def show(m: Maybe<&2, String>) -> U32:
   match m:
@@ -80,7 +89,7 @@ version — this snippet proves both in one run:
 
 ```bend
 import Base
-import mylsm-lsm-store@0.4.0.0/mylsm.bend as MyLSM
+import mylsm-lsm-store@0.5.0.0/mylsm.bend as MyLSM
 
 def bit(b: Bool) -> U32:
   match b:
