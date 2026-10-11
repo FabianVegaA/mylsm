@@ -1246,19 +1246,51 @@ def Bytes.scan_next(cursor: Bytes.Cursor) -> IO(Bytes.StreamStep):
 def Bytes.scan_next_io(cursor: Bytes.Cursor) -> IO(Bytes.StreamStep):
   Bytes.scan_next(cursor)
 
+def Bytes.scan_seek.remote(
+  +snapshot_id: U32,
+  +cursor_id: U32,
+  pair: OwnerClient.Session & Result<&1, &1, OwnerClient.Error, Unit>
+) -> Bytes.Cursor & Result<&1, &1, Bytes.Error, Unit>:
+  match pair:
+    case (session, Fail{error}):
+      (ByteOwnerCursor{session, snapshot_id, cursor_id},
+        Fail{Bytes.owner.error(error)})
+    case (session, Done{Unit{}}):
+      (ByteOwnerCursor{session, snapshot_id, cursor_id}, Done{Unit{}})
+
+def Bytes.scan_seek.ids(
+  session: OwnerClient.Session,
+  snapshot_id: U32,
+  ids: U32 & U32,
+  lower: Maybe<&1, PackedBytes.Bytes>
+) -> IO(Bytes.Cursor & Result<&1, &1, Bytes.Error, Unit>):
+  match ids:
+    case (request_id, cursor_id):
+      do IO<Bytes.Cursor & Result<&1, &1, Bytes.Error, Unit>>:
+        pair : OwnerClient.Session & Result<&1, &1, OwnerClient.Error, Unit> <-
+          OwnerByteClient.snapshot.cursor.seek(session, request_id, lower)
+        return Bytes.scan_seek.remote(snapshot_id, cursor_id, pair)
+
 def Bytes.scan_seek(
   cursor: Bytes.Cursor,
   lower: Maybe<&1, PackedBytes.Bytes>
-) -> Bytes.Cursor:
+) -> IO(Bytes.Cursor & Result<&1, &1, Bytes.Error, Unit>):
   match cursor:
     case ByteStreamCursor{inner}:
-      ByteStreamCursor{VisibleByteCursor.seek(inner, lower)}
-    case ByteOwnerCursor{_, _, _}:
-      ByteFailureCursor{UnsupportedOperation{}}
+      IO.pure(Bytes.Cursor & Result<&1, &1, Bytes.Error, Unit>,
+        (ByteStreamCursor{VisibleByteCursor.seek(inner, lower)}, Done{Unit{}}))
+    case ByteOwnerCursor{session, snapshot_id, cursor_id}:
+      Bytes.scan_seek.ids(session, snapshot_id,
+        OwnerCursorCodec.u32.duplicate(cursor_id), lower)
     case ByteCursor{_, _}:
-      Bytes.snapshot.scan_seek(cursor, lower)
-    case ByteClosedCursor{}: ByteClosedCursor{}
-    case ByteFailureCursor{_}: ByteClosedCursor{}
+      IO.pure(Bytes.Cursor & Result<&1, &1, Bytes.Error, Unit>,
+        (Bytes.snapshot.scan_seek(cursor, lower), Done{Unit{}}))
+    case ByteClosedCursor{}:
+      IO.pure(Bytes.Cursor & Result<&1, &1, Bytes.Error, Unit>,
+        (ByteClosedCursor{}, Done{Unit{}}))
+    case ByteFailureCursor{error}:
+      IO.pure(Bytes.Cursor & Result<&1, &1, Bytes.Error, Unit>,
+        (ByteClosedCursor{}, Fail{error}))
 
 
 def Bytes.close.result(result: Result<&1, &1, RawByteDb.Error, Unit>) -> Result<&1, &1, Bytes.Error, Unit>:
@@ -2014,16 +2046,27 @@ def Utf8.scan.bound(
     case Some{text}:
       Utf8.scan.bound.encoded(Utf8.encode(text))
 
+def Utf8.scan_seek.byte.result(
+  pair: Bytes.Cursor & Result<&1, &1, Bytes.Error, Unit>
+) -> Bytes.Cursor & Result<&1, &1, Utf8.Error, Unit>:
+  match pair:
+    case (cursor, Fail{error}): (cursor, Fail{Utf8Failure{error}})
+    case (cursor, Done{Unit{}}): (cursor, Done{Unit{}})
+
 # Applies an already validated text seek bound to an active byte cursor.
 def Utf8.scan_seek.active(
   inner: Bytes.Cursor,
   result: Result<&1, &1, Utf8.Error, Maybe<&1, PackedBytes.Bytes>>
-) -> Bytes.Cursor & Result<&1, &1, Utf8.Error, Unit>:
+) -> IO(Bytes.Cursor & Result<&1, &1, Utf8.Error, Unit>):
   match result:
     case Fail{error}:
-      (inner, Fail{error})
+      IO.pure(Bytes.Cursor & Result<&1, &1, Utf8.Error, Unit>,
+        (inner, Fail{error}))
     case Done{bound}:
-      (Bytes.scan_seek(inner, bound), Done{Unit{}})
+      do IO<Bytes.Cursor & Result<&1, &1, Utf8.Error, Unit>>:
+        pair : Bytes.Cursor & Result<&1, &1, Bytes.Error, Unit> <-
+          Bytes.scan_seek(inner, bound)
+        return Utf8.scan_seek.byte.result(pair)
 
 def Utf8.scan_seek.failed(
   byte_cursor: Bytes.Cursor,
@@ -2052,13 +2095,16 @@ def Utf8.scan_seek.result(
 def Utf8.scan_seek(
   cursor: Utf8.Cursor,
   lower: Maybe<&2, String>
-) -> Utf8.Cursor & Result<&1, &1, Utf8.Error, Unit>:
+) -> IO(Utf8.Cursor & Result<&1, &1, Utf8.Error, Unit>):
   match cursor:
     case Utf8Cursor{inner, Utf8CursorActive{}}:
-      Utf8.scan_seek.result(Utf8.scan_seek.active(inner,
-        Utf8.scan.bound(lower)))
+      do IO<Utf8.Cursor & Result<&1, &1, Utf8.Error, Unit>>:
+        pair : Bytes.Cursor & Result<&1, &1, Utf8.Error, Unit> <-
+          Utf8.scan_seek.active(inner, Utf8.scan.bound(lower))
+        return Utf8.scan_seek.result(pair)
     case Utf8Cursor{inner, state}:
-      (Utf8Cursor{inner, state}, Done{Unit{}})
+      IO.pure(Utf8.Cursor & Result<&1, &1, Utf8.Error, Unit>,
+        (Utf8Cursor{inner, state}, Done{Unit{}}))
 
 def Utf8.scan.opened(pair: Bytes.Handle & Bytes.Cursor) -> Utf8.Handle & Utf8.Cursor:
   match pair:

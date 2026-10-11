@@ -708,6 +708,54 @@ def dispatch.operation(
     case Operation.SnapshotCursorClose{_}:
       IO.pure(ByteDb.Handle & Protocol.Response,
         (handle, reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))))
+    case Operation.SnapshotCursorSeek{_, _}:
+      IO.pure(ByteDb.Handle & Protocol.Response,
+        (handle, reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))))
+
+def snapshot.cursor.seek.taken(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  context: ReplyContext,
+  ids: U32 & U32,
+  lower: Maybe<&1, Bytes.Bytes>,
+  result: CursorStore.TakeResult
+) -> DispatchResult:
+  match ids:
+    case (cursor_id, _):
+      match result:
+        case CursorStore.Taken{store, cursor}:
+          DispatchResult{handle, snapshots,
+            CursorStore.reinsert(store, cursor_id,
+              VisibleCursor.seek(cursor, lower)),
+            reply.response(context, Protocol.Success{}, Bytes.new(0))}
+        case CursorStore.NotFound{store}:
+          DispatchResult{handle, snapshots, store,
+            reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))}
+
+def snapshot.cursor.seek.ids(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  cursors: CursorStore.Store,
+  context: ReplyContext,
+  ids: U32 & U32 & U32,
+  lower: Maybe<&1, Bytes.Bytes>
+) -> IO(DispatchResult):
+  match ids:
+    case (cursor_id, (response_id, take_id)):
+      IO.pure(DispatchResult, snapshot.cursor.seek.taken(handle, snapshots,
+        context, (cursor_id, response_id), lower,
+        CursorStore.take(cursors, take_id)))
+
+def snapshot.cursor.seek(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  cursors: CursorStore.Store,
+  context: ReplyContext,
+  cursor_id: U32,
+  lower: Maybe<&1, Bytes.Bytes>
+) -> IO(DispatchResult):
+  snapshot.cursor.seek.ids(handle, snapshots, cursors, context,
+    Protocol.u32.duplicate.triple(cursor_id), lower)
 
 def dispatch.decoded.state(
   handle: ByteDb.Handle,
@@ -730,6 +778,9 @@ def dispatch.decoded.state(
       snapshot.cursor.next(handle, snapshots, cursors, context, cursor_id)
     case Operation.Decoded{Operation.SnapshotCursorClose{cursor_id}}:
       snapshot.cursor.close(handle, snapshots, cursors, context, cursor_id)
+    case Operation.Decoded{Operation.SnapshotCursorSeek{cursor_id, lower}}:
+      snapshot.cursor.seek(handle, snapshots, cursors, context, cursor_id,
+        lower)
     case Operation.Decoded{operation}:
       do IO<DispatchResult>:
         pair : ByteDb.Handle & Protocol.Response <-

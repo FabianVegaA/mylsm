@@ -199,6 +199,43 @@ def snapshot.cursor.first(
           value.valid(Bytes.eq(value, bytes.from_hex("80ff00"))))
     case _: fail("remote snapshot cursor returned no first item")
 
+def snapshot.cursor.seek.error(error: MyLSM.Bytes.Error) -> IO(Unit):
+  match error:
+    case MyLSM.InvalidArgument{}: fail("remote snapshot seek was rejected as invalid")
+    case MyLSM.UnsupportedOperation{}: fail("remote snapshot seek is unsupported")
+    case MyLSM.Busy{}: fail("remote snapshot seek was busy")
+    case MyLSM.Timeout{}: fail("remote snapshot seek timed out")
+    case MyLSM.ResourceLimit{}: fail("remote snapshot seek exceeded a limit")
+    case MyLSM.Corruption{message}: fail(message)
+    case MyLSM.Io{_, message}: fail(message)
+    case _: fail("remote snapshot seek failed with another error")
+
+def snapshot.cursor.seek.backward(
+  handle: MyLSM.Bytes.Handle,
+  snapshot: MyLSM.Bytes.Snapshot,
+  pair: MyLSM.Bytes.Cursor & Result<&1, &1, MyLSM.Bytes.Error, Unit>
+) -> IO(Unit):
+  match pair:
+    case (cursor, Done{Unit{}}):
+      do IO<Unit>:
+        first : MyLSM.Bytes.StreamStep <- MyLSM.Bytes.scan_next(cursor)
+        snapshot.cursor.first(handle, snapshot, scan.step(first))
+    case (_, Fail{error}): snapshot.cursor.seek.error(error)
+
+def snapshot.cursor.seek.forward(
+  handle: MyLSM.Bytes.Handle,
+  snapshot: MyLSM.Bytes.Snapshot,
+  pair: MyLSM.Bytes.Cursor & Result<&1, &1, MyLSM.Bytes.Error, Unit>
+) -> IO(Unit):
+  match pair:
+    case (cursor, Done{Unit{}}):
+      do IO<Unit>:
+        backward : MyLSM.Bytes.Cursor &
+          Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
+            MyLSM.Bytes.scan_seek(cursor, Some{bytes.from_hex("00ff")})
+        snapshot.cursor.seek.backward(handle, snapshot, backward)
+    case (_, Fail{error}): snapshot.cursor.seek.error(error)
+
 def snapshot.cursor.opened(
   handle: MyLSM.Bytes.Handle,
   pair: MyLSM.Bytes.Snapshot & Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Cursor>
@@ -206,8 +243,10 @@ def snapshot.cursor.opened(
   match pair:
     case (snapshot, Done{cursor}):
       do IO<Unit>:
-        first : MyLSM.Bytes.StreamStep <- MyLSM.Bytes.scan_next(cursor)
-        snapshot.cursor.first(handle, snapshot, scan.step(first))
+        forward : MyLSM.Bytes.Cursor &
+          Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
+            MyLSM.Bytes.scan_seek(cursor, Some{bytes.from_hex("0103")})
+        snapshot.cursor.seek.forward(handle, snapshot, forward)
     case _: fail("public owner snapshot cursor could not open")
 
 def snapshot.read.checked(

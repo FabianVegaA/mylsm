@@ -247,6 +247,23 @@ def scan.writing(
 ) -> IO(Unit):
   scan.written(cursor, pair)
 
+def scanned.seeked(
+  handle: MyLSM.Bytes.Handle,
+  pair: MyLSM.Bytes.Cursor & Result<&1, &1, MyLSM.Bytes.Error, Unit>
+) -> IO(Unit):
+  match pair:
+    case (sought, Done{Unit{}}):
+      do IO<Unit>:
+        written : MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
+          MyLSM.Bytes.write_batch(handle, Con{
+            MyLSM.BytesPut{bytes("62"), bytes("6e6577")},
+            Con{MyLSM.BytesDelete{bytes("63")}, Nil{}}})
+        scan.writing(sought, written)
+    case (_, Fail{_}):
+      do IO<Unit>:
+        _closed : Result<&1, &1, MyLSM.Bytes.Error, Unit> <- MyLSM.Bytes.close(handle)
+        fail("public SST cursor seek failed")
+
 # Starts the cursor after reopen and streams the recovered SST record.
 def scanned(
   pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Cursor>
@@ -254,12 +271,10 @@ def scanned(
   match pair:
     case (handle, Done{cursor}):
       do IO<Unit>:
-        sought : MyLSM.Bytes.Cursor = MyLSM.Bytes.scan_seek(cursor, Some{bytes("62")})
-        written : MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
-          MyLSM.Bytes.write_batch(handle, Con{
-            MyLSM.BytesPut{bytes("62"), bytes("6e6577")},
-            Con{MyLSM.BytesDelete{bytes("63")}, Nil{}}})
-        scan.writing(sought, written)
+        sought : MyLSM.Bytes.Cursor &
+          Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
+            MyLSM.Bytes.scan_seek(cursor, Some{bytes("62")})
+        scanned.seeked(handle, sought)
     case (handle, Fail{_}):
       do IO<Unit>:
         _closed : Result<&1, &1, MyLSM.Bytes.Error, Unit> <- MyLSM.Bytes.close(handle)

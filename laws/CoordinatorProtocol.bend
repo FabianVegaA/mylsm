@@ -103,16 +103,22 @@ law snapshot_close_tag_is_a_request_operation:
     Protocol.Accepted{19, 11, Bytes.new(4)} : Protocol.Decision}
 
 # Requires all cursor lifecycle request tags to pass protocol admission.
-def snapshot.cursor.tags.valid(pair: Bool & Bool & Bool) -> Bool:
+def snapshot.cursor.tags.valid(pair: Bool & Bool & Bool & Bool) -> Bool:
   match pair:
-    case (True{}, (True{}, True{})): True{}
+    case (True{}, (True{}, (True{}, True{}))): True{}
     case _: False{}
 
-# Admits snapshot cursor open, next, and close requests through validation.
+# Admits snapshot cursor open, next, close, and seek requests through validation.
 law snapshot_cursor_tags_are_request_operations:
   {snapshot.cursor.tags.valid((Protocol.operation.request.valid(12),
     (Protocol.operation.request.valid(13),
-      Protocol.operation.request.valid(14)))) == True{} : Bool}
+      (Protocol.operation.request.valid(14),
+        Protocol.operation.request.valid(15))))) == True{} : Bool}
+
+# Admits the seek tag at both protocol validation and request encoding.
+law snapshot_cursor_seek_tag_is_admitted:
+  {Bool.and(Protocol.operation.valid(15),
+    Protocol.operation.request.valid(15)) == True{} : Bool}
 
 # Encodes snapshot identifiers as fixed-width big-endian values.
 law snapshot_identifier_one_roundtrips:

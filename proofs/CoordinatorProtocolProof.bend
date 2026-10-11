@@ -40,6 +40,9 @@ def Laws.snapshot_close_tag_is_a_request_operation():
 def Laws.snapshot_cursor_tags_are_request_operations():
   {==}
 
+def Laws.snapshot_cursor_seek_tag_is_admitted():
+  {==}
+
 def Laws.snapshot_identifier_one_roundtrips():
   {==}
 

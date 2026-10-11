@@ -61,5 +61,14 @@ def Laws.snapshot_cursor_next_decodes_token():
 def Laws.snapshot_cursor_close_decodes_token():
   {==}
 
+def Laws.snapshot_cursor_seek_decodes_inclusive_lower():
+  {==}
+
+def Laws.snapshot_cursor_seek_rejects_upper_bound():
+  {==}
+
+def Laws.snapshot_cursor_seek_rejects_prefix():
+  {==}
+
 def Laws.snapshot_cursor_operations_reject_short_tokens():
   {==}

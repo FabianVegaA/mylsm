@@ -328,6 +328,47 @@ def snapshot.cursor.open(
 ) -> IO(Client.Session & Result<&1, &1, Client.Error, U32>):
   snapshot.cursor.open.range(session, snapshot_id, None{}, None{})
 
+def snapshot.cursor.seek.decision(
+  decision: OwnerCursorCodec.CloseDecision
+) -> Result<&1, &1, Client.Error, Unit>:
+  match decision:
+    case OwnerCursorCodec.CloseSucceeded{}: Done{Unit{}}
+    case OwnerCursorCodec.CloseRejected{status}:
+      Fail{Client.OwnerRejected{status}}
+    case OwnerCursorCodec.CloseMalformed{}:
+      Fail{Client.MalformedResponse{}}
+
+def snapshot.cursor.seek.status(
+  status: Protocol.ResponseStatus,
+  payload: Bytes.Bytes
+) -> Result<&1, &1, Client.Error, Unit>:
+  snapshot.cursor.seek.decision(OwnerCursorCodec.close(status, payload))
+
+def snapshot.cursor.seek.response(
+  result: Result<&1, &1, Client.Error, Protocol.Response>
+) -> Result<&1, &1, Client.Error, Unit>:
+  match result:
+    case Fail{error}: Fail{error}
+    case Done{Protocol.Response{_, _, _, status, payload}}:
+      snapshot.cursor.seek.status(status, payload)
+
+def snapshot.cursor.seek.result(
+  pair: Client.Session & Result<&1, &1, Client.Error, Protocol.Response>
+) -> Client.Session & Result<&1, &1, Client.Error, Unit>:
+  match pair:
+    case (session, result): (session, snapshot.cursor.seek.response(result))
+
+def snapshot.cursor.seek(
+  session: Client.Session,
+  cursor_id: U32,
+  lower: Maybe<&1, Bytes.Bytes>
+) -> IO(Client.Session & Result<&1, &1, Client.Error, Unit>):
+  do IO<Client.Session & Result<&1, &1, Client.Error, Unit>>:
+    pair : Client.Session & Result<&1, &1, Client.Error, Protocol.Response> <-
+      Client.session.call(session, 15,
+        CursorOpenCodec.encode.range(cursor_id, lower, None{}))
+    return snapshot.cursor.seek.result(pair)
+
 # Maps one pure next-response decision into a client result.
 def snapshot.cursor.next.decision(
   decision: OwnerCursorCodec.NextDecision

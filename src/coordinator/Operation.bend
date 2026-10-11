@@ -22,6 +22,7 @@ type Operation is Type:
   SnapshotCursorOpen{snapshot_id: U32, bounds: RangeCursor.Bounds}
   SnapshotCursorNext{cursor_id: U32}
   SnapshotCursorClose{cursor_id: U32}
+  SnapshotCursorSeek{cursor_id: U32, lower: Maybe<&1, Bytes.Bytes>}
 
 # Reports decoded arguments or a malformed/unsupported operation.
 type Decision is Type:
@@ -252,6 +253,26 @@ def snapshot.cursor.close.parsed(parsed: Maybe<&2, U32>) -> Decision:
 def snapshot.cursor.close.decode(payload: Bytes.Bytes) -> Decision:
   snapshot.cursor.close.parsed(Protocol.snapshot.id.read(payload))
 
+def snapshot.cursor.seek.range(
+  snapshot_id: U32,
+  bounds: RangeCursor.Bounds
+) -> Decision:
+  match bounds:
+    case RangeCursor.Bounds{lower, None{}, None{}}:
+      Decoded{SnapshotCursorSeek{snapshot_id, lower}}
+    case _: MalformedArguments{}
+
+def snapshot.cursor.seek.decision(
+  decision: CursorOpenCodec.Decision
+) -> Decision:
+  match decision:
+    case CursorOpenCodec.Decoded{CursorOpenCodec.Request{snapshot_id, bounds}}:
+      snapshot.cursor.seek.range(snapshot_id, bounds)
+    case CursorOpenCodec.Malformed{}: MalformedArguments{}
+
+def snapshot.cursor.seek.decode(payload: Bytes.Bytes) -> Decision:
+  snapshot.cursor.seek.decision(CursorOpenCodec.decode(payload))
+
 def decode.payload(
   operation_code: U32,
   payload: Bytes.Bytes
@@ -270,6 +291,7 @@ def decode.payload(
     case 12: snapshot.cursor.open.decode(payload)
     case 13: snapshot.cursor.next.decode(payload)
     case 14: snapshot.cursor.close.decode(payload)
+    case 15: snapshot.cursor.seek.decode(payload)
     case _: UnsupportedOperation{}
 
 # Decodes the tagged operation payload without interpreting keys as text.

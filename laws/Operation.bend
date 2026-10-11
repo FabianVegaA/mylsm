@@ -138,6 +138,25 @@ law snapshot_cursor_close_decodes_token:
   {Operation.decode.payload(14, Operation.u32.bytes(8)) ==
     Operation.Decoded{Operation.SnapshotCursorClose{8}} : Operation.Decision}
 
+# Decodes a seek request while preserving its inclusive raw-byte lower bound.
+law snapshot_cursor_seek_decodes_inclusive_lower:
+  {Operation.decode.payload(15,
+    CursorOpenCodec.encode.range(8, Some{bytes.fixture(Bytes.from_hex("00ff"))}, None{})) ==
+    Operation.Decoded{Operation.SnapshotCursorSeek{8,
+      Some{bytes.fixture(Bytes.from_hex("00ff"))}}} : Operation.Decision}
+
+# Rejects seek requests that attempt to replace the cursor's upper bound.
+law snapshot_cursor_seek_rejects_upper_bound:
+  {Operation.decode.payload(15,
+    CursorOpenCodec.encode.range(8, None{}, Some{bytes.fixture(Bytes.from_hex("ff"))})) ==
+    Operation.MalformedArguments{} : Operation.Decision}
+
+# Rejects prefix scans encoded as cursor repositioning requests.
+law snapshot_cursor_seek_rejects_prefix:
+  {Operation.decode.payload(15,
+    CursorOpenCodec.encode.prefix(8, bytes.fixture(Bytes.from_hex("61")))) ==
+    Operation.MalformedArguments{} : Operation.Decision}
+
 # Checks that each cursor operation classifies a short token as malformed.
 def cursor.short.tokens.malformed(
   open_decision: Operation.Decision,
