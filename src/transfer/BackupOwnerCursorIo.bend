@@ -188,10 +188,10 @@ def close.success.snapshot(
         Backup.SourceFailure{code, message})
     case (_, Fail{Client.ConnectFailure{ClientSocket.UnsupportedPlatform{}}}):
       BackupCursorIo.close.error(file, temporary, None{},
-        Backup.ResourceLimit{})
+        Backup.SourceFailure{95, "owner snapshot cursor transport is unsupported"})
     case (_, Fail{Client.RetryRead{ClientIo.UnsupportedPlatform{}}}):
       BackupCursorIo.close.error(file, temporary, None{},
-        Backup.ResourceLimit{})
+        Backup.SourceFailure{95, "owner snapshot cursor transport is unsupported"})
     case (_, Fail{_}):
       BackupCursorIo.close.error(file, temporary, None{},
         source.error.value(source.error(Client.MalformedResponse{})))
