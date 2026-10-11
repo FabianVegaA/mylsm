@@ -2,6 +2,7 @@ import Base
 import ../ByteMemTable.bend as ByteMemTable
 import ../MemTable.bend as MemTable
 import ../StorageBytes.bend as StorageBytes
+import ../Wal.bend as Wal
 import ../coordinator/QueuePolicy.bend as QueuePolicy
 import ./FormatInspect.bend as FormatInspect
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
@@ -164,6 +165,31 @@ def legacy.apply.chronological(
   table: ByteMemTable.Table
 ) -> Result<&1, &1, U32 & String, ByteMemTable.Table>:
   legacy.apply.measured(legacy.entries.measure(entries), table)
+
+def legacy.batch.entries(mutations: List<&2, Wal.Mut>) -> List<&2, MemTable.Entry>:
+  match mutations:
+    case Nil{}: Nil{}
+    case Con{mutation, tail}:
+      match mutation:
+        case Wal.Put{key, val}:
+          Con{MemTable.Entry{key, Some{val}}, legacy.batch.entries(tail)}
+        case Wal.Del{key}:
+          Con{MemTable.Entry{key, None{}}, legacy.batch.entries(tail)}
+
+def legacy.batches.entries(batches: List<&2, Wal.Batch>) -> List<&2, MemTable.Entry>:
+  match batches:
+    case Nil{}: Nil{}
+    case Con{Wal.Batch{muts}, tail}:
+      List.append(&2, MemTable.Entry, legacy.batch.entries(muts),
+        legacy.batches.entries(tail))
+
+def legacy.sources.chronological(
+  sst_newest_first: List<&2, MemTable.Entry>,
+  wal_batches: List<&2, Wal.Batch>
+) -> List<&2, MemTable.Entry>:
+  List.append(&2, MemTable.Entry,
+    List.reverse(&2, MemTable.Entry, sst_newest_first),
+    legacy.batches.entries(wal_batches))
 
 # Begins publication only for a source admitted by the migration plan.
 def begin(decision: Decision) -> PublicationDecision:

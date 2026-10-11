@@ -15,3 +15,6 @@ def Laws.migration_converts_legacy_unicode_to_exact_utf8_bytes():
 
 def Laws.migration_applies_legacy_mutations_chronologically():
   {==}
+
+def Laws.migration_wal_tombstone_shadows_legacy_sst():
+  {==}

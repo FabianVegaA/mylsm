@@ -3,6 +3,7 @@ import ../src/ByteMemTable.bend as ByteMemTable
 import ../src/Keys.bend as Keys
 import ../src/MemTable.bend as MemTable
 import ../src/transfer/Migrate.bend as Migrate
+import ../src/Wal.bend as Wal
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 def fixture.bytes(value: Maybe<&1, Bytes.Bytes>) -> Bytes.Bytes:
@@ -55,6 +56,25 @@ def fixture.chronological.result() -> Result<&1, &1, U32 & String, ByteMemTable.
     MemTable.Entry{"key", Some{"old"}},
     Con{MemTable.Entry{"key", Some{"new"}}, Nil{}}}, ByteMemTable.empty())
 
+def fixture.source.sst() -> List<&2, MemTable.Entry>:
+  Con{MemTable.Entry{"key", Some{"sst-value"}}, Nil{}}
+
+def fixture.source.wal() -> List<&2, Wal.Batch>:
+  Con{Wal.Batch{Con{Wal.Put{"key", "wal-value"},
+      Con{Wal.Del{"key"}, Nil{}}}}, Nil{}}
+
+def fixture.source.applied() -> Result<&1, &1, U32 & String, ByteMemTable.Table>:
+  Migrate.legacy.apply.chronological(
+    Migrate.legacy.sources.chronological(fixture.source.sst(),
+      fixture.source.wal()), ByteMemTable.empty())
+
+def fixture.source.no.visible(result: Result<&1, &1, U32 & String, ByteMemTable.Table>) -> Bool:
+  match result:
+    case Fail{_}: False{}
+    case Done{table}:
+      Nat.is_eq(List.length(&1, ByteMemTable.Entry,
+        Migrate.canonical.entries(table)), 0n)
+
 def fixture.chronological.visible(value: Maybe<&1, Bytes.Bytes>) -> Bool:
   match value:
     case None{}: False{}
@@ -92,3 +112,7 @@ law migration_converts_legacy_unicode_to_exact_utf8_bytes:
 # Later durable mutations replace earlier values for the same key.
 law migration_applies_legacy_mutations_chronologically:
   {fixture.chronological.newest(fixture.chronological.result()) == True{} : Bool}
+
+# Replayed WAL mutations are newer than SST records and retain tombstone precedence.
+law migration_wal_tombstone_shadows_legacy_sst:
+  {fixture.source.no.visible(fixture.source.applied()) == True{} : Bool}
