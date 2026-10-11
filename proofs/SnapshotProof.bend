@@ -183,3 +183,15 @@ def Laws.owner_cursor_open_limit_preserves_registry():
 
 def Laws.owner_cursor_open_exhausted_id_preserves_registry():
   {==}
+
+def Laws.owner_cursor_close_releases_child_reference():
+  {==}
+
+def Laws.owner_cursor_close_preserves_unrelated_cursor():
+  {==}
+
+def Laws.owner_cursor_close_missing_id_preserves_registry():
+  {==}
+
+def Laws.owner_cursor_close_underflow_preserves_registry():
+  {==}

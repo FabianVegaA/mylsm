@@ -116,21 +116,50 @@ type OwnerCursorOpenDecision is Data:
   OwnerCursorOpened{registry: OwnerRegistry, cursor_id: U32}
   OwnerCursorRejected{registry: OwnerRegistry}
 
+# Reports cursor removal with enough context to restore it after invalid release.
+type CursorListRemoveDecision is Data:
+  CursorListRemoved{prefix: List<&2, CursorResource>,
+    resource: CursorResource,
+    tail: List<&2, CursorResource>}
+  CursorListMissing{cursors: List<&2, CursorResource>}
+
+# Carries the recursive cursor-ID search with its untouched list prefix.
+type CursorListRemoveState is Type:
+  CursorSearch{cursors: List<&2, CursorResource>, cursor_id: U32,
+    prefix: List<&2, CursorResource>}
+  CursorCompareCopies{copies: CursorResource & CursorResource,
+    tail: List<&2, CursorResource>, cursor_ids: U32 & U32,
+    prefix: List<&2, CursorResource>}
+  CursorCompare{matches: Bool, resource: CursorResource,
+    tail: List<&2, CursorResource>, cursor_id: U32,
+    prefix: List<&2, CursorResource>}
+
+# Reports cursor closure or preserves owner accounting on invalid release.
+type OwnerCursorCloseDecision is Data:
+  OwnerCursorClosed{registry: OwnerRegistry, snapshot_id: U32}
+  OwnerCursorCloseRejected{registry: OwnerRegistry}
+
 # Reports replacement of one snapshot's cursor count in the owner registry.
 type SnapshotListCursorDecision is Data:
   SnapshotListUpdated{snapshots: List<&2, SnapshotResource>}
   SnapshotListRejected{snapshots: List<&2, SnapshotResource>}
 
+# Selects whether a snapshot child reference is acquired or released.
+type SnapshotCursorAction is Data:
+  SnapshotCursorAcquire{max_cursors: Nat}
+  SnapshotCursorRelease{}
+
 # Carries the recursive snapshot lookup without losing the original list prefix.
 type SnapshotListCursorState is Type:
   SnapshotCursorSearch{snapshots: List<&2, SnapshotResource>,
-    snapshot_id: U32, max_cursors: Nat,
+    snapshot_id: U32, action: SnapshotCursorAction,
     prefix: List<&2, SnapshotResource>}
   SnapshotCursorCompareCopies{copies: SnapshotResource & SnapshotResource,
     tail: List<&2, SnapshotResource>, snapshot_ids: U32 & U32,
-    max_cursors: Nat, prefix: List<&2, SnapshotResource>}
+    action: SnapshotCursorAction, prefix: List<&2, SnapshotResource>}
   SnapshotCursorCompare{matches: Bool, resource: SnapshotResource,
-    tail: List<&2, SnapshotResource>, snapshot_id: U32, max_cursors: Nat,
+    tail: List<&2, SnapshotResource>, snapshot_id: U32,
+    action: SnapshotCursorAction,
     prefix: List<&2, SnapshotResource>}
 
 # Reports a snapshot cursor-reference update or preserves its prior resource.
@@ -637,11 +666,25 @@ def snapshot.list.cursor.resolve(
       SnapshotListRejected{snapshot.list.cursor.restore(prefix,
         Con{resource, tail})}
     case SnapshotCursorReleased{resource}:
-      SnapshotListRejected{snapshot.list.cursor.restore(prefix,
+      SnapshotListUpdated{snapshot.list.cursor.restore(prefix,
         Con{resource, tail})}
     case SnapshotCursorUnderflow{resource}:
       SnapshotListRejected{snapshot.list.cursor.restore(prefix,
         Con{resource, tail})}
+
+def snapshot.list.cursor.action(
+  prefix: List<&2, SnapshotResource>,
+  tail: List<&2, SnapshotResource>,
+  resource: SnapshotResource,
+  action: SnapshotCursorAction
+) -> SnapshotListCursorDecision:
+  match action:
+    case SnapshotCursorAcquire{max_cursors}:
+      snapshot.list.cursor.resolve(prefix, tail,
+        snapshot.resource.cursor.acquire(resource, max_cursors))
+    case SnapshotCursorRelease{}:
+      snapshot.list.cursor.resolve(prefix, tail,
+        snapshot.resource.cursor.release(resource))
 
 def snapshot.list.cursor.exhausted(
   state: SnapshotListCursorState
@@ -668,7 +711,7 @@ def snapshot.list.cursor.acquire.loop(
       snapshot.list.cursor.exhausted(state)
     case 1n+rest:
       match state:
-        case SnapshotCursorSearch{snapshots, snapshot_id, max_cursors,
+        case SnapshotCursorSearch{snapshots, snapshot_id, action,
             prefix}:
           match snapshots:
             case Nil{}:
@@ -678,9 +721,9 @@ def snapshot.list.cursor.acquire.loop(
               snapshot.list.cursor.acquire.loop(rest,
                 SnapshotCursorCompareCopies{
                   snapshot.resource.duplicate(resource), tail,
-                  u32.duplicate(snapshot_id), max_cursors, prefix})
+                  u32.duplicate(snapshot_id), action, prefix})
         case SnapshotCursorCompareCopies{copies, tail, snapshot_ids,
-            max_cursors, prefix}:
+            action, prefix}:
           match copies:
             case (for_check, for_update):
               match for_check:
@@ -689,28 +732,27 @@ def snapshot.list.cursor.acquire.loop(
                     case (current_id, next_id):
                       snapshot.list.cursor.acquire.loop(rest,
                         SnapshotCursorCompare{U32.is_eq(id, current_id),
-                          for_update, tail, next_id, max_cursors, prefix})
+                          for_update, tail, next_id, action, prefix})
         case SnapshotCursorCompare{matches, resource, tail, snapshot_id,
-            max_cursors, prefix}:
+            action, prefix}:
           match matches:
             case True{}:
-              snapshot.list.cursor.resolve(prefix, tail,
-                snapshot.resource.cursor.acquire(resource, max_cursors))
+              snapshot.list.cursor.action(prefix, tail, resource, action)
             case False{}:
               snapshot.list.cursor.acquire.loop(rest,
-                SnapshotCursorSearch{tail, snapshot_id, max_cursors,
+                SnapshotCursorSearch{tail, snapshot_id, action,
                   Con{resource, prefix}})
 
 def snapshot.list.cursor.acquire.measured(
   measured: List<&2, SnapshotResource> & Nat,
   snapshot_id: U32,
-  max_cursors: Nat
+  action: SnapshotCursorAction
 ) -> SnapshotListCursorDecision:
   match measured:
     case (snapshots, length):
       snapshot.list.cursor.acquire.loop(
         Nat.add(Nat.mul(3n, length), 1n),
-        SnapshotCursorSearch{snapshots, snapshot_id, max_cursors, Nil{}})
+        SnapshotCursorSearch{snapshots, snapshot_id, action, Nil{}})
 
 # Adds one cursor reference to the owner record identified by its snapshot ID.
 def snapshot.list.cursor.acquire(
@@ -719,7 +761,17 @@ def snapshot.list.cursor.acquire(
   max_cursors: Nat
 ) -> SnapshotListCursorDecision:
   snapshot.list.cursor.acquire.measured(
-    snapshot.list.cursor.length.keep(snapshots), snapshot_id, max_cursors)
+    snapshot.list.cursor.length.keep(snapshots), snapshot_id,
+    SnapshotCursorAcquire{max_cursors})
+
+# Releases exactly one cursor reference from the matching snapshot resource.
+def snapshot.list.cursor.release(
+  snapshots: List<&2, SnapshotResource>,
+  snapshot_id: U32
+) -> SnapshotListCursorDecision:
+  snapshot.list.cursor.acquire.measured(
+    snapshot.list.cursor.length.keep(snapshots), snapshot_id,
+    SnapshotCursorRelease{})
 
 def owner.cursor.open.ready(
   cursor_ids: U32 & U32,
@@ -804,6 +856,183 @@ def owner.cursor.open(
   max_cursors: Nat
 ) -> OwnerCursorOpenDecision:
   owner.cursor.open.available(owner, snapshot_id, max_cursors)
+
+def cursor.resource.duplicate.parts(
+  ids: U32 & U32,
+  snapshots: U32 & U32
+) -> CursorResource & CursorResource:
+  match ids:
+    case (first_id, second_id):
+      match snapshots:
+        case (first_snapshot, second_snapshot):
+          (CursorResource{first_id, first_snapshot},
+            CursorResource{second_id, second_snapshot})
+
+def cursor.resource.duplicate(resource: CursorResource) -> CursorResource & CursorResource:
+  match resource:
+    case CursorResource{id, snapshot_id}:
+      cursor.resource.duplicate.parts(u32.duplicate(id),
+        u32.duplicate(snapshot_id))
+
+def cursor.list.restore(
+  prefix: List<&2, CursorResource>,
+  cursors: List<&2, CursorResource>
+) -> List<&2, CursorResource>:
+  match prefix:
+    case Nil{}: cursors
+    case Con{resource, tail}:
+      cursor.list.restore(tail, Con{resource, cursors})
+
+def cursor.list.length.keep.go(
+  cursors: List<&2, CursorResource>,
+  reversed: List<&2, CursorResource>,
+  length: Nat
+) -> List<&2, CursorResource> & Nat:
+  match cursors:
+    case Nil{}: (List.reverse(&2, CursorResource, reversed), length)
+    case Con{resource, tail}:
+      cursor.list.length.keep.go(tail, Con{resource, reversed},
+        Nat.add(length, 1n))
+
+def cursor.list.length.keep(
+  cursors: List<&2, CursorResource>
+) -> List<&2, CursorResource> & Nat:
+  cursor.list.length.keep.go(cursors, Nil{}, 0n)
+
+def cursor.list.remove.exhausted(
+  state: CursorListRemoveState
+) -> CursorListRemoveDecision:
+  match state:
+    case CursorSearch{cursors, _, prefix}:
+      CursorListMissing{cursor.list.restore(prefix, cursors)}
+    case CursorCompareCopies{copies, tail, _, prefix}:
+      match copies:
+        case (_, resource):
+          CursorListMissing{cursor.list.restore(prefix,
+            Con{resource, tail})}
+    case CursorCompare{_, resource, tail, _, prefix}:
+      CursorListMissing{cursor.list.restore(prefix, Con{resource, tail})}
+
+def cursor.list.remove.loop(
+  fuel: Nat,
+  state: CursorListRemoveState
+) -> CursorListRemoveDecision:
+  match fuel:
+    case 0n: cursor.list.remove.exhausted(state)
+    case 1n+rest:
+      match state:
+        case CursorSearch{cursors, cursor_id, prefix}:
+          match cursors:
+            case Nil{}:
+              CursorListMissing{cursor.list.restore(prefix, Nil{})}
+            case Con{resource, tail}:
+              cursor.list.remove.loop(rest, CursorCompareCopies{
+                cursor.resource.duplicate(resource), tail,
+                u32.duplicate(cursor_id), prefix})
+        case CursorCompareCopies{copies, tail, cursor_ids, prefix}:
+          match copies:
+            case (for_check, for_update):
+              match for_check:
+                case CursorResource{id, _}:
+                  match cursor_ids:
+                    case (current_id, next_id):
+                      cursor.list.remove.loop(rest,
+                        CursorCompare{U32.is_eq(id, current_id), for_update,
+                          tail, next_id, prefix})
+        case CursorCompare{matches, resource, tail, cursor_id, prefix}:
+          match matches:
+            case True{}:
+              CursorListRemoved{prefix, resource, tail}
+            case False{}:
+              cursor.list.remove.loop(rest, CursorSearch{tail, cursor_id,
+                Con{resource, prefix}})
+
+def cursor.list.remove.measured(
+  measured: List<&2, CursorResource> & Nat,
+  cursor_id: U32
+) -> CursorListRemoveDecision:
+  match measured:
+    case (cursors, length):
+      cursor.list.remove.loop(Nat.add(Nat.mul(3n, length), 1n),
+        CursorSearch{cursors, cursor_id, Nil{}})
+
+# Removes one owner cursor ID without changing its parent snapshot count.
+def cursor.list.remove(
+  cursors: List<&2, CursorResource>,
+  cursor_id: U32
+) -> CursorListRemoveDecision:
+  cursor.list.remove.measured(cursor.list.length.keep(cursors), cursor_id)
+
+def owner.cursor.close.released(
+  allocator: ResourceIdAllocator,
+  reservations: Registry,
+  prefix: List<&2, CursorResource>,
+  resource: CursorResource,
+  tail: List<&2, CursorResource>,
+  snapshot_id: U32,
+  released: SnapshotListCursorDecision
+) -> OwnerCursorCloseDecision:
+  match released:
+    case SnapshotListUpdated{snapshots}:
+      OwnerCursorClosed{OwnerRegistry{allocator, reservations, snapshots,
+        cursor.list.restore(prefix, tail)}, snapshot_id}
+    case SnapshotListRejected{snapshots}:
+      OwnerCursorCloseRejected{OwnerRegistry{allocator, reservations,
+        snapshots, cursor.list.restore(prefix, Con{resource, tail})}}
+
+def owner.cursor.close.release.id(
+  allocator: ResourceIdAllocator,
+  reservations: Registry,
+  snapshots: List<&2, SnapshotResource>,
+  prefix: List<&2, CursorResource>,
+  resource: CursorResource,
+  tail: List<&2, CursorResource>,
+  snapshot_ids: U32 & U32
+) -> OwnerCursorCloseDecision:
+  match snapshot_ids:
+    case (close_snapshot_id, lookup_snapshot_id):
+      owner.cursor.close.released(allocator, reservations, prefix, resource,
+        tail, close_snapshot_id,
+        snapshot.list.cursor.release(snapshots, lookup_snapshot_id))
+
+def owner.cursor.close.lookup(
+  allocator: ResourceIdAllocator,
+  reservations: Registry,
+  snapshots: List<&2, SnapshotResource>,
+  prefix: List<&2, CursorResource>,
+  tail: List<&2, CursorResource>,
+  copies: CursorResource & CursorResource
+) -> OwnerCursorCloseDecision:
+  match copies:
+    case (for_check, for_update):
+      match for_check:
+        case CursorResource{_, snapshot_id}:
+          owner.cursor.close.release.id(allocator, reservations, snapshots,
+            prefix, for_update, tail, u32.duplicate(snapshot_id))
+
+def owner.cursor.close.removed(
+  allocator: ResourceIdAllocator,
+  reservations: Registry,
+  snapshots: List<&2, SnapshotResource>,
+  removal: CursorListRemoveDecision
+) -> OwnerCursorCloseDecision:
+  match removal:
+    case CursorListMissing{cursors}:
+      OwnerCursorCloseRejected{OwnerRegistry{allocator, reservations,
+        snapshots, cursors}}
+    case CursorListRemoved{prefix, resource, tail}:
+      owner.cursor.close.lookup(allocator, reservations, snapshots,
+        prefix, tail, cursor.resource.duplicate(resource))
+
+# Releases one owner cursor and its parent snapshot reference atomically.
+def owner.cursor.close(
+  owner: OwnerRegistry,
+  cursor_id: U32
+) -> OwnerCursorCloseDecision:
+  match owner:
+    case OwnerRegistry{allocator, reservations, snapshots, cursors}:
+      owner.cursor.close.removed(allocator, reservations, snapshots,
+        cursor.list.remove(cursors, cursor_id))
 
 # Maps a valid registry release to successful snapshot closure.
 def snapshot.close.registry(decision: RegistryReleaseDecision) -> SnapshotCloseDecision:

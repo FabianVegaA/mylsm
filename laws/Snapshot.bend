@@ -373,3 +373,49 @@ law owner_cursor_open_exhausted_id_preserves_registry:
       Snapshot.Registry{1n, 64n},
       [Snapshot.SnapshotResource{1, 3n, 64n, 0n}], Nil{}}} :
     Snapshot.OwnerCursorOpenDecision}
+
+# Releases a cursor record and its snapshot child reference together.
+law owner_cursor_close_releases_child_reference:
+  {Snapshot.owner.cursor.close(Snapshot.OwnerRegistry{
+    Snapshot.ResourceIdAllocator{3, False{}}, Snapshot.Registry{1n, 64n},
+    [Snapshot.SnapshotResource{1, 3n, 64n, 1n}],
+    [Snapshot.CursorResource{2, 1}]}, 2) ==
+    Snapshot.OwnerCursorClosed{Snapshot.OwnerRegistry{
+      Snapshot.ResourceIdAllocator{3, False{}}, Snapshot.Registry{1n, 64n},
+      [Snapshot.SnapshotResource{1, 3n, 64n, 0n}], Nil{}}, 1} :
+    Snapshot.OwnerCursorCloseDecision}
+
+# Closes one cursor from the tail while retaining its unrelated sibling cursor.
+law owner_cursor_close_preserves_unrelated_cursor:
+  {Snapshot.owner.cursor.close(Snapshot.OwnerRegistry{
+    Snapshot.ResourceIdAllocator{20, False{}}, Snapshot.Registry{2n, 128n},
+    [Snapshot.SnapshotResource{1, 4n, 64n, 1n},
+     Snapshot.SnapshotResource{2, 5n, 64n, 1n}],
+    [Snapshot.CursorResource{10, 1}, Snapshot.CursorResource{11, 2}]}, 11) ==
+    Snapshot.OwnerCursorClosed{Snapshot.OwnerRegistry{
+      Snapshot.ResourceIdAllocator{20, False{}}, Snapshot.Registry{2n, 128n},
+      [Snapshot.SnapshotResource{1, 4n, 64n, 1n},
+       Snapshot.SnapshotResource{2, 5n, 64n, 0n}],
+      [Snapshot.CursorResource{10, 1}]}, 2} : Snapshot.OwnerCursorCloseDecision}
+
+# Rejects an unknown cursor while preserving every owner resource.
+law owner_cursor_close_missing_id_preserves_registry:
+  {Snapshot.owner.cursor.close(Snapshot.OwnerRegistry{
+    Snapshot.ResourceIdAllocator{3, False{}}, Snapshot.Registry{1n, 64n},
+    [Snapshot.SnapshotResource{1, 3n, 64n, 1n}],
+    [Snapshot.CursorResource{2, 1}]}, 8) ==
+    Snapshot.OwnerCursorCloseRejected{Snapshot.OwnerRegistry{
+      Snapshot.ResourceIdAllocator{3, False{}}, Snapshot.Registry{1n, 64n},
+      [Snapshot.SnapshotResource{1, 3n, 64n, 1n}],
+      [Snapshot.CursorResource{2, 1}]}} : Snapshot.OwnerCursorCloseDecision}
+
+# Preserves a cursor and snapshot record when their child count is inconsistent.
+law owner_cursor_close_underflow_preserves_registry:
+  {Snapshot.owner.cursor.close(Snapshot.OwnerRegistry{
+    Snapshot.ResourceIdAllocator{3, False{}}, Snapshot.Registry{1n, 64n},
+    [Snapshot.SnapshotResource{1, 3n, 64n, 0n}],
+    [Snapshot.CursorResource{2, 1}]}, 2) ==
+    Snapshot.OwnerCursorCloseRejected{Snapshot.OwnerRegistry{
+      Snapshot.ResourceIdAllocator{3, False{}}, Snapshot.Registry{1n, 64n},
+      [Snapshot.SnapshotResource{1, 3n, 64n, 0n}],
+      [Snapshot.CursorResource{2, 1}]}} : Snapshot.OwnerCursorCloseDecision}
