@@ -30,6 +30,8 @@ been run.
 | Coordinated backup/restore | `bash bench/smoke/coordinator_owner_socket.sh` outside the sandbox | Pass; owner snapshot is streamed into a checksummed bundle, restored, binary bytes verified, owner stopped, and lock reacquired |
 | Backup publication matrix | `bash bench/crash/backup_publish.sh` | Pass at pre-rename, post-rename, and post-parent-sync boundaries |
 | Migration publication matrix | `bash bench/crash/migration_publish.sh` | Pass at bundle and destination publication boundaries; source checksums remain stable |
+| Configured batch/resource limits | `bash bench/smoke/resource_limits.sh` | Pass; exact frame limits and unchanged persisted state on rejection |
+| Paged SST index and migration validation | `byte_index_budget.sh`, `legacy_sst_io.sh` | Both pass; index budget/seek checks pass, and migration corruption/collision/resource-limit cases preserve source and destination state |
 
 ## Cursor memory observation
 
