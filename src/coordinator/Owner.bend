@@ -75,6 +75,10 @@ def write.response(
   match pair:
     case (handle, Done{Unit{}}):
       do IO<ByteDb.Handle & Protocol.Response>:
+        _after_apply : Result<&1, &1, U32 & String, Unit> <-
+          CrashPoint.hit("owner.after_apply")
+        _before_response : Result<&1, &1, U32 & String, Unit> <-
+          CrashPoint.hit("owner.before_response")
         _checkpoint : Result<&1, &1, U32 & String, Unit> <-
           CrashPoint.hit("owner.after_mutation.before_response")
         return (handle, reply.response(context, Protocol.Success{}, Bytes.new(0)))

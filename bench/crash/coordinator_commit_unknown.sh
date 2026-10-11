@@ -95,5 +95,7 @@ run_case() {
 run_case wal.before_append absent
 run_case wal.during_append absent
 run_case wal.after_sync_before_apply present
+run_case owner.after_apply present
+run_case owner.before_response present
 run_case owner.after_mutation.before_response present
 echo 'OWNER_COMMIT_UNKNOWN_RECOVERY_PASSED'
