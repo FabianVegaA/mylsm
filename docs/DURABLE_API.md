@@ -105,10 +105,11 @@ when present, overlay the active delta, and retain a canonical visible-entry cop
 64 MiB. Owner-backed snapshots retain a block-backed root and owner-issued resource IDs;
 their cursors route reads to that owner and are bounded by its snapshot and cursor limits.
 Both facades expose IO-based `backup` plus `backup_next` for bounded encoded chunks and
-`backup_to(path, handle)` for durable publication on local handles. `backup_to` captures
-an immutable retained root and streams it through a bounded cursor, exporting the delta
-and SST from the same view without materializing all visible results. Remote `backup_to`
-is not yet supported. The method creates a directory at
+`backup_to(path, handle)` for durable publication. On a local handle, `backup_to` captures
+an immutable retained root and streams it through a bounded cursor. On an owner-backed
+handle, it opens an owner snapshot, counts it with an incremental cursor, then exports
+through a second cursor over the same retained snapshot. Both paths export one consistent
+view without materializing all visible results. The method creates a directory at
 `path` containing the exchange file `BACKUP`; it stages that directory beside the
 destination, syncs the file and directory, publishes it with no-replace rename, and
 syncs the parent. If the final sync fails after rename, it returns `CommitUnknown`.
@@ -118,6 +119,32 @@ already resident as `Bytes`; `Bytes.restore_from(destination, bundle)` reads
 `bundle/BACKUP` with a 64 MiB exchange-file limit, validates it, and publishes the
 database. File import still holds the complete bounded exchange and decoded records
 in memory during validation.
+
+### Paired text and byte APIs
+
+Use `Bytes` when keys or values are arbitrary octets. Ordering is unsigned
+lexicographic byte order; a shorter matching prefix sorts first. `Utf8` accepts
+`String` and strictly encodes it as UTF-8. Invalid stored bytes fail text reads and
+text cursors with `InvalidUtf8`; the `Bytes` API continues to expose those bytes.
+
+At a call site, `Bytes.put(handle, raw_key, raw_value)` accepts
+`bend-kit-bytes.Bytes` keys and values; `Utf8.put(handle, "key", "value")`
+accepts `String`. Each explicit-handle call returns the retained handle beside
+its typed result, which the caller passes to the next operation.
+
+`Utf8.put`, `Utf8.get`, `Utf8.scan_range`, and `Utf8.snapshot` provide the
+corresponding text operations. Both scan APIs return a cursor that is read with
+`scan_next` and must be released with `scan_close`; range lower bounds are
+inclusive and upper bounds exclusive. Snapshot scans read a stable captured view,
+and `snapshot.close` releases the snapshot token. Owner-backed snapshots and their
+cursors are routed to the process holding the database lock.
+
+Use `Bytes.backup_to(path, handle)` to publish a consistent backup from either a
+local handle or a coordinated owner client, and `Bytes.restore_from(destination,
+bundle)` to verify and publish it. `migrate_legacy(source, destination)` reads a
+verified 0.5.0.0 database without modifying it and writes a new destination.
+After `CommitUnknown`, reopen and inspect the database before deciding whether to
+retry a mutation; the client never retries a dispatched write automatically.
 
 This is implementation work toward 0.6.0.0, not a release claim. `Utf8` and `Bytes`
 share the byte durable engine and storage format. Durable byte scans merge the SST block
