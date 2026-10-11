@@ -161,7 +161,7 @@ def fixture.root(
         IO.die(Unit, 1, "snapshot root preflight failed")
     case (handle, Done{root}):
       match root:
-        case ByteDurableDb.SnapshotRoot{_, retained_bytes, _}:
+        case ByteDurableDb.SnapshotRoot{_, Some{_}, retained_bytes, _}:
           match retained_bytes:
             case 1n+rest:
               do IO<Unit>:
@@ -176,6 +176,11 @@ def fixture.root(
                 _handle_close : Result<&1, &1, ByteDurableDb.Error, Unit> <-
                   ByteDurableDb.close(handle)
                 IO.die(Unit, 1, "snapshot root did not track retained bytes")
+        case ByteDurableDb.SnapshotRoot{_, None{}, _, _}:
+          do IO<Unit>:
+            _handle_close : Result<&1, &1, ByteDurableDb.Error, Unit> <-
+              ByteDurableDb.close(handle)
+            IO.die(Unit, 1, "snapshot root omitted its published SST generation")
 
 # Flushes the seed entry before capturing an SST-backed root.
 def fixture.root.limited(
