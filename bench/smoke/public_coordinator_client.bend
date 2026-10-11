@@ -107,15 +107,38 @@ def put.result(
           MyLSM.Bytes.close(handle)
         fail("public coordinator client put failed")
 
+def put.start(handle: MyLSM.Bytes.Handle) -> IO(Unit):
+  do IO<Unit>:
+    written : MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error,
+      Unit> <- MyLSM.Bytes.put(handle, bytes.from_hex("02ff"),
+        bytes.from_hex("80ff"))
+    put.result(written)
+
+def scan.step(cursor: MyLSM.Bytes.Cursor) -> MyLSM.Bytes.ScanStep:
+  MyLSM.Bytes.snapshot.scan_next(cursor)
+
+def scan.failure.checked(
+  handle: MyLSM.Bytes.Handle,
+  step: MyLSM.Bytes.ScanStep
+) -> IO(Unit):
+  match step:
+    case MyLSM.ScanFailure{MyLSM.UnsupportedOperation{}, closed}:
+      put.start(handle)
+    case _: fail("remote scan did not report UnsupportedOperation")
+
+def scan.failure(pair: MyLSM.Bytes.Handle & MyLSM.Bytes.Cursor) -> IO(Unit):
+  match pair:
+    case (handle, cursor):
+      do IO<Unit>:
+        step : MyLSM.Bytes.ScanStep <- IO.pure(MyLSM.Bytes.ScanStep,
+          scan.step(cursor))
+        scan.failure.checked(handle, step)
+
 # Opens through the public facade while the owner holds the database lock.
 def opened(result: Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Handle>) -> IO(Unit):
   match result:
     case Done{handle}:
-      do IO<Unit>:
-        written : MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error,
-          Unit> <- MyLSM.Bytes.put(handle, bytes.from_hex("02ff"),
-            bytes.from_hex("80ff"))
-        put.result(written)
+      scan.failure(MyLSM.Bytes.snapshot.live_scan_range(handle, None{}, None{}))
     case Fail{_}: fail("public coordinator client could not open owner")
 
 def main() -> IO(Unit):

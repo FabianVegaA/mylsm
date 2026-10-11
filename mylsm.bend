@@ -186,12 +186,14 @@ type Bytes.ScanBounds is Type:
 type Bytes.Cursor is Type:
   ByteCursor{inner: ByteRangeCursor.Cursor, bounds: ByteRangeCursor.Bounds}
   ByteStreamCursor{inner: VisibleByteCursor.Cursor}
+  ByteFailureCursor{error: Bytes.Error}
   ByteClosedCursor{}
 
 type Bytes.ScanStep is Type:
   ScanItem{key: PackedBytes.Bytes, value: PackedBytes.Bytes, cursor: Bytes.Cursor}
   ScanSkip{cursor: Bytes.Cursor}
   ScanEnd{cursor: Bytes.Cursor}
+  ScanFailure{error: Bytes.Error, cursor: Bytes.Cursor}
 
 type Bytes.StreamStep is Type:
   StreamItem{key: PackedBytes.Bytes, value: PackedBytes.Bytes,
@@ -827,7 +829,7 @@ def Bytes.snapshot.live_scan(handle: Bytes.Handle, bounds: Bytes.ScanBounds) -> 
     case ByteHandle{raw}:
       Bytes.scan.raw(raw, bounds)
     case RemoteByteHandle{session}:
-      (RemoteByteHandle{session}, ByteClosedCursor{})
+      (RemoteByteHandle{session}, ByteFailureCursor{UnsupportedOperation{}})
 
 def Bytes.snapshot.live_scan_range(
   handle: Bytes.Handle,
@@ -906,6 +908,7 @@ def Bytes.snapshot.stream.step(step: Bytes.ScanStep) -> Bytes.StreamStep:
     case ScanItem{key, value, cursor}: StreamItem{key, value, cursor}
     case ScanSkip{cursor}: StreamSkip{cursor}
     case ScanEnd{cursor}: StreamEnd{cursor}
+    case ScanFailure{error, cursor}: StreamFailure{error, cursor}
 
 def Bytes.scan_next_io.stream(cursor: VisibleByteCursor.Cursor) -> IO(Bytes.StreamStep):
   do IO<Bytes.StreamStep>:
@@ -933,6 +936,8 @@ def Bytes.scan_close(cursor: Bytes.Cursor) -> IO(Result<&1, &1, Bytes.Error, Uni
     case ByteCursor{inner, _}:
       IO.pure(Result<&1, &1, Bytes.Error, Unit>, Done{Unit{}})
     case ByteClosedCursor{}:
+      IO.pure(Result<&1, &1, Bytes.Error, Unit>, Done{Unit{}})
+    case ByteFailureCursor{_}:
       IO.pure(Result<&1, &1, Bytes.Error, Unit>, Done{Unit{}})
 
 def Bytes.scan_close_io(cursor: Bytes.Cursor) -> IO(Result<&1, &1, Bytes.Error, Unit>):
@@ -962,6 +967,8 @@ def Bytes.snapshot.scan_next(cursor: Bytes.Cursor) -> Bytes.ScanStep:
   match cursor:
     case ByteCursor{inner, bounds}:
       Bytes.scan_next.cloned(inner, ByteRangeCursor.bounds.clone(bounds))
+    case ByteFailureCursor{error}:
+      ScanFailure{error, ByteClosedCursor{}}
     case _: ScanEnd{cursor}
 
 # Advances a live byte cursor to a later inclusive lower bound.
@@ -972,6 +979,7 @@ def Bytes.snapshot.scan_seek(
   match cursor:
     case ByteCursor{inner, bounds}:
       ByteCursor{ByteRangeCursor.seek.cursor(inner, lower), bounds}
+    case ByteFailureCursor{_}: ByteClosedCursor{}
     case _: cursor
 
 # Releases a scan cursor and its retained bounds explicitly.
@@ -979,6 +987,7 @@ def Bytes.snapshot.scan_close(cursor: Bytes.Cursor) -> Bytes.Cursor:
   match cursor:
     case ByteCursor{inner, bounds}:
       ByteCursor{ByteRangeCursor.close(inner), bounds}
+    case ByteFailureCursor{_}: ByteClosedCursor{}
     case _: cursor
 
 def Bytes.scan_next_io.snapshot(
@@ -996,6 +1005,8 @@ def Bytes.scan_next(cursor: Bytes.Cursor) -> IO(Bytes.StreamStep):
       Bytes.scan_next_io.snapshot(inner, bounds)
     case ByteClosedCursor{}:
       IO.pure(Bytes.StreamStep, StreamEnd{ByteClosedCursor{}})
+    case ByteFailureCursor{error}:
+      IO.pure(Bytes.StreamStep, StreamFailure{error, ByteClosedCursor{}})
 
 def Bytes.scan_next_io(cursor: Bytes.Cursor) -> IO(Bytes.StreamStep):
   Bytes.scan_next(cursor)
@@ -1010,6 +1021,7 @@ def Bytes.scan_seek(
     case ByteCursor{_, _}:
       Bytes.snapshot.scan_seek(cursor, lower)
     case ByteClosedCursor{}: ByteClosedCursor{}
+    case ByteFailureCursor{_}: ByteClosedCursor{}
 
 
 def Bytes.close.result(result: Result<&1, &1, RawByteDb.Error, Unit>) -> Result<&1, &1, Bytes.Error, Unit>:
