@@ -87,6 +87,23 @@ law batch_tag_is_a_request_operation:
   {Protocol.validate(Protocol.Request{1, 7, 19, 8, Bytes.new(0)}, 1, 7, 16n) ==
     Protocol.Accepted{19, 8, Bytes.new(0)} : Protocol.Decision}
 
+# Admits the snapshot-open tag through request validation.
+law snapshot_open_tag_is_a_request_operation:
+  {Protocol.validate(Protocol.Request{1, 7, 19, 9, Bytes.new(0)}, 1, 7, 16n) ==
+    Protocol.Accepted{19, 9, Bytes.new(0)} : Protocol.Decision}
+
+# Encodes snapshot identifiers as fixed-width big-endian values.
+law snapshot_identifier_one_roundtrips:
+  {Protocol.snapshot.id.read(Protocol.snapshot.id.bytes(1)) == Some{1} : Maybe<&2, U32>}
+
+# Preserves the largest non-wrapping snapshot token.
+law snapshot_identifier_maximum_roundtrips:
+  {Protocol.snapshot.id.read(Protocol.snapshot.id.bytes(4294967295)) == Some{4294967295} : Maybe<&2, U32>}
+
+# Rejects snapshot identifiers whose payload is not exactly four bytes.
+law malformed_snapshot_identifier_payload_is_rejected:
+  {Protocol.snapshot.id.read(Bytes.new(3)) == None{} : Maybe<&2, U32>}
+
 # Round-trips the operation tag and payload in an exact request frame.
 law encoded_request_decodes_exactly:
   {frame.roundtrips(Protocol.Request{1, 7, 19, 2, Bytes.new(0)},

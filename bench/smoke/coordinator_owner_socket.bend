@@ -41,7 +41,7 @@ def listening(
 ) -> IO(Unit):
   match pair:
     case (server, Done{Unit{}}):
-      Owner.serve.loop(26n,
+      Owner.serve.loop(30n,
         Owner.Serving{server, handle, endpoint, 1, OwnerSnapshots.empty()})
     case (server, Fail{_}): failed(server, handle, endpoint, "owner listen failed")
 

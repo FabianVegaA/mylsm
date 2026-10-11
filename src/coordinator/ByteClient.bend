@@ -189,3 +189,44 @@ def stats(
     pair : Client.Session & Result<&1, &1, Client.Error, Protocol.Response> <-
       Client.session.stats(session)
     return stats.result(pair)
+
+def snapshot.open.parsed(
+  parsed: Maybe<&2, U32>
+) -> Result<&1, &1, Client.Error, U32>:
+  match parsed:
+    case Some{snapshot_id}: Done{snapshot_id}
+    case None{}: Fail{Client.MalformedResponse{}}
+
+def snapshot.open.status(
+  status: Protocol.ResponseStatus,
+  payload: Bytes.Bytes
+) -> Result<&1, &1, Client.Error, U32>:
+  match status:
+    case Protocol.Success{}:
+      snapshot.open.parsed(Protocol.snapshot.id.read(payload))
+    case _: Fail{Client.OwnerRejected{status}}
+
+def snapshot.open.response(
+  result: Result<&1, &1, Client.Error, Protocol.Response>
+) -> Result<&1, &1, Client.Error, U32>:
+  match result:
+    case Fail{error}: Fail{error}
+    case Done{response}:
+      match response:
+        case Protocol.Response{_, _, _, status, payload}:
+          snapshot.open.status(status, payload)
+
+def snapshot.open.result(
+  pair: Client.Session & Result<&1, &1, Client.Error, Protocol.Response>
+) -> Client.Session & Result<&1, &1, Client.Error, U32>:
+  match pair:
+    case (session, result): (session, snapshot.open.response(result))
+
+# Requests a retained snapshot from the serialized owner and returns its ID.
+def snapshot.open(
+  session: Client.Session
+) -> IO(Client.Session & Result<&1, &1, Client.Error, U32>):
+  do IO<Client.Session & Result<&1, &1, Client.Error, U32>>:
+    pair : Client.Session & Result<&1, &1, Client.Error, Protocol.Response> <-
+      Client.session.call(session, 9, Bytes.new(0))
+    return snapshot.open.result(pair)

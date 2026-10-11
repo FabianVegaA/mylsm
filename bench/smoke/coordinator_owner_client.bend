@@ -84,9 +84,34 @@ def get.missing(session: Client.Session) -> IO(Unit):
       ByteClient.get(session, bytes.from_hex("0102"))
     get.missing.result(pair)
 
+# Continues only when the owner allocated a nonzero snapshot ID.
+def snapshot.open.checked.id(
+  session: Client.Session,
+  is_zero: Bool
+) -> IO(Unit):
+  match is_zero:
+    case True{}: fail("owner allocated snapshot identifier zero")
+    case False{}: get.missing(session)
+
+# Continues after an owner token was allocated with a nonzero ID.
+def snapshot.open.checked(
+  pair: Client.Session & Result<&1, &1, Client.Error, U32>
+) -> IO(Unit):
+  match pair:
+    case (session, Done{snapshot_id}):
+      snapshot.open.checked.id(session, U32.is_eq(snapshot_id, 0))
+    case (_, Fail{_}): fail("coordinator client snapshot open failed")
+
+# Opens and checks one owner-managed snapshot through the wire protocol.
+def snapshot.open(session: Client.Session) -> IO(Unit):
+  do IO<Unit>:
+    opened : Client.Session & Result<&1, &1, Client.Error, U32> <-
+      ByteClient.snapshot.open(session)
+    snapshot.open.checked(opened)
+
 def stats.checked(session: Client.Session, counters_match: Bool) -> IO(Unit):
   match counters_match:
-    case True{}: get.missing(session)
+    case True{}: snapshot.open(session)
     case False{}: fail("coordinator client stats returned wrong counters")
 
 def stats.result(

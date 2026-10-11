@@ -68,6 +68,26 @@ type ResponseStatusDecision is Data:
 def u32.bytes(value: U32) -> Bytes.Bytes:
   Bytes.set.u32be(Bytes.new(4), 0, value)
 
+def snapshot.id.bytes(snapshot_id: U32) -> Bytes.Bytes:
+  u32.bytes(snapshot_id)
+
+def snapshot.id.read.parsed(
+  pair: Bytes.Bytes & Maybe<&2, U32>
+) -> Maybe<&2, U32>:
+  match pair:
+    case (_, parsed): parsed
+
+def snapshot.id.read.measured(
+  measured: Bytes.Bytes & U32
+) -> Maybe<&2, U32>:
+  match measured:
+    case (payload, 4):
+      snapshot.id.read.parsed(Bytes.get.u32be(payload, 0))
+    case _: None{}
+
+def snapshot.id.read(payload: Bytes.Bytes) -> Maybe<&2, U32>:
+  snapshot.id.read.measured(Bytes.length(payload))
+
 def magic.from_hex(value: Maybe<&1, Bytes.Bytes>) -> Bytes.Bytes:
   match value:
     case Some{bytes}: bytes
@@ -315,6 +335,7 @@ def operation.valid(code: U32) -> Bool:
     case 6: True{}
     case 7: True{}
     case 8: True{}
+    case 9: True{}
     case _: False{}
 
 def operation.request.valid(code: U32) -> Bool:
@@ -326,6 +347,7 @@ def operation.request.valid(code: U32) -> Bool:
     case 5: True{}
     case 6: True{}
     case 8: True{}
+    case 9: True{}
     case _: False{}
 
 def decode.words.operation.validated(

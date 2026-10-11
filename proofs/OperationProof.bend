@@ -4,6 +4,12 @@ import ../laws/Operation.bend as Laws
 def Laws.empty_flush_is_decoded():
   {==}
 
+def Laws.empty_snapshot_open_is_decoded():
+  {==}
+
+def Laws.nonempty_snapshot_open_is_rejected():
+  {==}
+
 def Laws.nonempty_flush_is_rejected():
   {==}
 

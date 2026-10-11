@@ -14,6 +14,7 @@ type Operation is Type:
   Flush{}
   Compact{}
   Stats{}
+  SnapshotOpen{}
 
 # Reports decoded arguments or a malformed/unsupported operation.
 type Decision is Type:
@@ -160,6 +161,7 @@ def decode.payload(
     case 4: empty.operation(Bytes.length(payload), Flush{})
     case 5: empty.operation(Bytes.length(payload), Compact{})
     case 6: empty.operation(Bytes.length(payload), Stats{})
+    case 9: empty.operation(Bytes.length(payload), SnapshotOpen{})
     case 8: batch.result(ByteWal.decode(payload))
     case _: UnsupportedOperation{}
 

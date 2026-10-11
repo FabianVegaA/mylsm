@@ -28,6 +28,18 @@ def Laws.response_tag_is_not_a_request_operation():
 def Laws.batch_tag_is_a_request_operation():
   {==}
 
+def Laws.snapshot_open_tag_is_a_request_operation():
+  {==}
+
+def Laws.snapshot_identifier_one_roundtrips():
+  {==}
+
+def Laws.snapshot_identifier_maximum_roundtrips():
+  {==}
+
+def Laws.malformed_snapshot_identifier_payload_is_rejected():
+  {==}
+
 def Laws.encoded_request_decodes_exactly():
   {==}
 

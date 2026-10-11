@@ -17,6 +17,11 @@ type ReplyContext is Type:
   ReplyContext{version: U32 & U32,
     generation: U32 & U32, request_id: U32 & U32}
 
+# Carries the durable handle and owner resources through one completed request.
+type DispatchResult is Type:
+  DispatchResult{handle: ByteDb.Handle, snapshots: SnapshotStore.Store,
+    response: Protocol.Response}
+
 # Owns the listening socket, durable handle, endpoint, and lifecycle state.
 type ServiceState is Type:
   Serving{server: File, handle: ByteDb.Handle, endpoint: String,
@@ -132,6 +137,70 @@ def dispatch.stats(
       IO.pure(ByteDb.Handle & Protocol.Response,
         stats.response(handle, snapshot, context))
 
+def dispatch.result(
+  pair: ByteDb.Handle & Protocol.Response,
+  snapshots: SnapshotStore.Store
+) -> DispatchResult:
+  match pair:
+    case (handle, response): DispatchResult{handle, snapshots, response}
+
+def snapshot.generation(value: Maybe<&1, U32>) -> Nat:
+  match value:
+    case None{}: 0n
+    case Some{generation}: U32.to_nat(generation)
+
+def snapshot.open.result(
+  handle: ByteDb.Handle,
+  context: ReplyContext,
+  result: SnapshotStore.OpenResult
+) -> DispatchResult:
+  match result:
+    case SnapshotStore.RootStored{store, snapshot_id}:
+      DispatchResult{handle, store,
+        reply.response(context, Protocol.Success{},
+          Protocol.snapshot.id.bytes(snapshot_id))}
+    case SnapshotStore.RootRejected{store}:
+      DispatchResult{handle, store,
+        reply.response(context, Protocol.ResponseResourceLimit{}, Bytes.new(0))}
+
+def snapshot.open.root.copies(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  context: ReplyContext,
+  roots: ByteDb.SnapshotRoot & ByteDb.SnapshotRoot
+) -> DispatchResult:
+  match roots:
+    case (generation_root, retained_root):
+      match generation_root:
+        case ByteDb.SnapshotRoot{_, sst_generation, _, _}:
+          snapshot.open.result(handle, context,
+            SnapshotStore.open.root(snapshots, retained_root,
+              snapshot.generation(sst_generation), (64n, 67108864n)))
+
+def snapshot.open.captured(
+  pair: ByteDb.Handle & Result<&1, &1, ByteDb.Error, ByteDb.SnapshotRoot>,
+  snapshots: SnapshotStore.Store,
+  context: ReplyContext
+) -> DispatchResult:
+  match pair:
+    case (handle, Fail{error}):
+      dispatch.result((handle, reply.response(context, error.status(error),
+        Bytes.new(0))), snapshots)
+    case (handle, Done{root}):
+      snapshot.open.root.copies(handle, snapshots, context,
+        ByteDb.snapshot.root.clone(root))
+
+def snapshot.open(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  context: ReplyContext
+) -> IO(DispatchResult):
+  do IO<DispatchResult>:
+    captured : ByteDb.Handle &
+      Result<&1, &1, ByteDb.Error, ByteDb.SnapshotRoot> <-
+        ByteDb.snapshot_root_limited(67108864n, handle)
+    return snapshot.open.captured(captured, snapshots, context)
+
 def dispatch.operation(
   handle: ByteDb.Handle,
   context: ReplyContext,
@@ -170,6 +239,30 @@ def dispatch.operation(
         write.response(pair, context)
     case Operation.Stats{}:
       dispatch.stats(ByteDb.stats(handle), context)
+    case Operation.SnapshotOpen{}:
+      IO.pure(ByteDb.Handle & Protocol.Response,
+        (handle, reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))))
+
+def dispatch.decoded.state(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  context: ReplyContext,
+  decision: Operation.Decision
+) -> IO(DispatchResult):
+  match decision:
+    case Operation.Decoded{Operation.SnapshotOpen{}}:
+      snapshot.open(handle, snapshots, context)
+    case Operation.Decoded{operation}:
+      do IO<DispatchResult>:
+        pair : ByteDb.Handle & Protocol.Response <-
+          dispatch.operation(handle, context, operation)
+        return dispatch.result(pair, snapshots)
+    case Operation.MalformedArguments{}:
+      IO.pure(DispatchResult, DispatchResult{handle, snapshots,
+        reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))})
+    case Operation.UnsupportedOperation{}:
+      IO.pure(DispatchResult, DispatchResult{handle, snapshots,
+        reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))})
 
 def dispatch.decoded(
   handle: ByteDb.Handle,
@@ -210,6 +303,29 @@ def dispatch.validated(
       IO.pure(ByteDb.Handle & Protocol.Response,
         (handle, reply.response(context, Protocol.ResponseResourceLimit{}, Bytes.new(0))))
 
+def dispatch.validated.state(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  context: ReplyContext,
+  decision: Protocol.Decision
+) -> IO(DispatchResult):
+  match decision:
+    case Protocol.Accepted{_, operation_code, payload}:
+      dispatch.decoded.state(handle, snapshots, context,
+        Operation.decode.payload(operation_code, payload))
+    case Protocol.VersionMismatch{}:
+      IO.pure(DispatchResult, DispatchResult{handle, snapshots,
+        reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))})
+    case Protocol.StaleGeneration{}:
+      IO.pure(DispatchResult, DispatchResult{handle, snapshots,
+        reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))})
+    case Protocol.UnsupportedRequestOperation{}:
+      IO.pure(DispatchResult, DispatchResult{handle, snapshots,
+        reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))})
+    case Protocol.ResourceLimit{}:
+      IO.pure(DispatchResult, DispatchResult{handle, snapshots,
+        reply.response(context, Protocol.ResponseResourceLimit{}, Bytes.new(0))})
+
 def dispatch.request.copies(
   handle: ByteDb.Handle,
   versions: U32 & U32 & U32,
@@ -228,6 +344,34 @@ def dispatch.request.copies(
               match active_generations:
                 case (response_generation, active_generation):
                   dispatch.validated(handle,
+                    ReplyContext{(response_version, response_version_hold),
+                      (Generation.response.generation(response_generation),
+                        response_generation_hold),
+                      (response_id, response_id_hold)},
+                    Protocol.validate(
+                      Protocol.Request{version, generation, request_id,
+                        operation_code, payload},
+                      1, active_generation, Protocol.max_payload_bytes()))
+
+def dispatch.request.copies.state(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  versions: U32 & U32 & U32,
+  generations: U32 & U32 & U32,
+  request_ids: U32 & U32 & U32,
+  operation_code: U32,
+  payload: Bytes.Bytes,
+  active_generations: U32 & U32
+) -> IO(DispatchResult):
+  match versions:
+    case (version, (response_version, response_version_hold)):
+      match generations:
+        case (generation, (_, response_generation_hold)):
+          match request_ids:
+            case (request_id, (response_id, response_id_hold)):
+              match active_generations:
+                case (response_generation, active_generation):
+                  dispatch.validated.state(handle, snapshots,
                     ReplyContext{(response_version, response_version_hold),
                       (Generation.response.generation(response_generation),
                         response_generation_hold),
@@ -257,52 +401,79 @@ def dispatch.request(
         Protocol.u32.duplicate.triple(request_id), operation_code, payload,
         u32.duplicate.pair(active_generation))
 
+def dispatch.request.state(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  request: Protocol.Request,
+  active_generation: U32
+) -> IO(DispatchResult):
+  match request:
+    case Protocol.Request{version, generation, request_id, operation_code, payload}:
+      dispatch.request.copies.state(handle, snapshots,
+        Protocol.u32.duplicate.triple(version),
+        Protocol.u32.duplicate.triple(generation),
+        Protocol.u32.duplicate.triple(request_id), operation_code, payload,
+        u32.duplicate.pair(active_generation))
+
 def serve.closed(
   pair: File & Result<&1, &1, U32 & String, Unit>,
-  handle: ByteDb.Handle
-) -> IO(ByteDb.Handle):
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store
+) -> IO(ByteDb.Handle & SnapshotStore.Store):
   match pair:
     case (connection, _):
-      do IO<ByteDb.Handle>:
+      do IO<ByteDb.Handle & SnapshotStore.Store>:
         _closed : Unit <- File.close(connection)
-        return handle
+        return (handle, snapshots)
 
 def serve.response(
   connection: File,
-  pair: ByteDb.Handle & Protocol.Response
-) -> IO(ByteDb.Handle):
-  match pair:
-    case (handle, response):
-      do IO<ByteDb.Handle>:
+  result: DispatchResult
+) -> IO(ByteDb.Handle & SnapshotStore.Store):
+  match result:
+    case DispatchResult{handle, snapshots, response}:
+      do IO<ByteDb.Handle & SnapshotStore.Store>:
         written : File & Result<&1, &1, U32 & String, Unit> <-
           Io.write_all(connection, Protocol.encode_response(response))
-        serve.closed(written, handle)
+        serve.closed(written, handle, snapshots)
 
 def serve.request.result(
   pair: File & Result<&1, &1, Io.Error, Protocol.Request>,
   handle: ByteDb.Handle,
-  active_generation: U32
-) -> IO(ByteDb.Handle):
+  active_generation: U32,
+  snapshots: SnapshotStore.Store
+) -> IO(ByteDb.Handle & SnapshotStore.Store):
   match pair:
     case (connection, Fail{_}):
-      do IO<ByteDb.Handle>:
+      do IO<ByteDb.Handle & SnapshotStore.Store>:
         _closed : Unit <- File.close(connection)
-        return handle
+        return (handle, snapshots)
     case (connection, Done{request}):
-      do IO<ByteDb.Handle>:
-        dispatched : ByteDb.Handle & Protocol.Response <-
-          dispatch.request(handle, request, active_generation)
+      do IO<ByteDb.Handle & SnapshotStore.Store>:
+        dispatched : DispatchResult <-
+          dispatch.request.state(handle, snapshots, request, active_generation)
         serve.response(connection, dispatched)
 
 def serve.once(
   handle: ByteDb.Handle,
   connection: File,
-  active_generation: U32
-) -> IO(ByteDb.Handle):
-  do IO<ByteDb.Handle>:
+  active_generation: U32,
+  snapshots: SnapshotStore.Store
+) -> IO(ByteDb.Handle & SnapshotStore.Store):
+  do IO<ByteDb.Handle & SnapshotStore.Store>:
     request : File & Result<&1, &1, Io.Error, Protocol.Request> <-
       Io.read_request(connection)
-    serve.request.result(request, handle, active_generation)
+    serve.request.result(request, handle, active_generation, snapshots)
+
+def serve.accepted.updated(
+  server: File,
+  endpoint: String,
+  generation: U32,
+  updated: ByteDb.Handle & SnapshotStore.Store
+) -> ServiceState:
+  match updated:
+    case (handle, snapshots):
+      Serving{server, handle, endpoint, generation, snapshots}
 
 def serve.accepted.connection(
   server: File,
@@ -315,9 +486,10 @@ def serve.accepted.connection(
   match generations:
     case (request_generation, (state_generation, _)):
       do IO<ServiceState>:
-        updated : ByteDb.Handle <- serve.once(handle, connection,
-          request_generation)
-        return Serving{server, updated, endpoint, state_generation, snapshots}
+        updated : ByteDb.Handle & SnapshotStore.Store <-
+          serve.once(handle, connection, request_generation, snapshots)
+        return serve.accepted.updated(server, endpoint, state_generation,
+          updated)
 
 def serve.accepted(
   pair: File & Result<&1, &1, UnixSocket.Error, File>,

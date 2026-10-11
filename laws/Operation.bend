@@ -39,6 +39,16 @@ def delete.roundtrips(key: Bytes.Bytes, decision: Operation.Decision) -> Bool:
 law empty_flush_is_decoded:
   {Operation.decode.payload(4, Bytes.new(0)) == Operation.Decoded{Operation.Flush{}} : Operation.Decision}
 
+# Decodes snapshot creation as an argument-free owner operation.
+law empty_snapshot_open_is_decoded:
+  {Operation.decode.payload(9, Bytes.new(0)) ==
+    Operation.Decoded{Operation.SnapshotOpen{}} : Operation.Decision}
+
+# Rejects unexpected snapshot-open arguments.
+law nonempty_snapshot_open_is_rejected:
+  {Operation.decode.payload(9, Bytes.new(1)) ==
+    Operation.MalformedArguments{} : Operation.Decision}
+
 # Rejects flush arguments instead of silently ignoring trailing bytes.
 law nonempty_flush_is_rejected:
   {Operation.decode.payload(4, Bytes.new(1)) == Operation.MalformedArguments{} : Operation.Decision}
