@@ -3,6 +3,7 @@ import ../../src/Console.bend as Console
 import ../../src/coordinator/Client.bend as Client
 import ../../src/coordinator/ByteClient.bend as ByteClient
 import ../../src/coordinator/StatsCodec.bend as StatsCodec
+import ../../src/coordinator/CursorCodec.bend as CursorCodec
 import ../../src/coordinator/Io.bend as ClientIo
 import ../../src/coordinator/Protocol.bend as Protocol
 import ../../src/coordinator/UnixSocketIo.bend as UnixSocket
@@ -18,6 +19,19 @@ def bytes.from_hex.result(value: Maybe<&1, Bytes.Bytes>) -> Bytes.Bytes:
 # Decodes a hexadecimal fixture into the exact request bytes.
 def bytes.from_hex(value: String) -> Bytes.Bytes:
   bytes.from_hex.result(Bytes.from_hex(value))
+
+# Duplicates one numeric token for a wire request and its later assertion.
+def token.duplicate.pair(ids: U32 & U32 & U32) -> U32 & U32:
+  match ids:
+    case (wire_id, (retained_id, _)): (wire_id, retained_id)
+
+def token.duplicate(value: U32) -> U32 & U32:
+  token.duplicate.pair(Protocol.u32.duplicate.triple(value))
+
+# Extracts the equality result while preserving both compared byte buffers.
+def bytes.equal(comparison: Bytes.Bytes & Bytes.Bytes & Bool) -> Bool:
+  match comparison:
+    case (_, (_, equal)): equal
 
 # Stops the client after a transport or response assertion fails.
 def fail(message: String) -> IO(Unit):
@@ -84,24 +98,244 @@ def get.missing(session: Client.Session) -> IO(Unit):
       ByteClient.get(session, bytes.from_hex("0102"))
     get.missing.result(pair)
 
-def snapshot.get.value.checked(
-  pair: Client.Session & (Bytes.Bytes & Bytes.Bytes & Bool)
+# Confirms snapshot closure and continues with an unrelated missing-key read.
+def snapshot.close.result(
+  session: Client.Session,
+  result: Result<&1, &1, Client.Error, Unit>
+) -> IO(Unit):
+  match result:
+    case Done{Unit{}}: get.missing(session)
+    case Fail{_}: fail("owner failed to close snapshot after cursor close")
+
+# Preserves the client session while validating snapshot closure.
+def snapshot.close.result.pair(
+  pair: Client.Session & Result<&1, &1, Client.Error, Unit>
 ) -> IO(Unit):
   match pair:
-    case (session, (_, (_, equal))):
+    case (session, result): snapshot.close.result(session, result)
+
+def snapshot.cursor.close.checked(
+  session: Client.Session,
+  snapshot_id: U32,
+  result: Result<&1, &1, Client.Error, Unit>
+) -> IO(Unit):
+  match result:
+    case Done{Unit{}}:
+      do IO<Unit>:
+        snapshot_result : Client.Session &
+          Result<&1, &1, Client.Error, Unit> <-
+            ByteClient.snapshot.close(session, snapshot_id)
+        snapshot.close.result.pair(snapshot_result)
+    case Fail{_}: fail("owner rejected explicit cursor close")
+
+# Continues close assertions with the session returned by the owner.
+def snapshot.cursor.close.pair(
+  pair: Client.Session & Result<&1, &1, Client.Error, Unit>,
+  snapshot_id: U32
+) -> IO(Unit):
+  match pair:
+    case (session, result):
+      snapshot.cursor.close.checked(session, snapshot_id, result)
+
+def snapshot.cursor.close(
+  session: Client.Session,
+  snapshot_id: U32,
+  cursor_id: U32
+) -> IO(Unit):
+  do IO<Unit>:
+    closed : Client.Session & Result<&1, &1, Client.Error, Unit> <-
+      ByteClient.snapshot.cursor.close(session, cursor_id)
+    snapshot.cursor.close.pair(closed, snapshot_id)
+
+def snapshot.close.busy.result(
+  session: Client.Session,
+  snapshot_id: U32,
+  cursor_id: U32,
+  result: Result<&1, &1, Client.Error, Unit>
+) -> IO(Unit):
+  match result:
+    case Fail{Client.OwnerRejected{Protocol.Busy{}}}:
+      snapshot.cursor.close(session, snapshot_id, cursor_id)
+    case _: fail("owner did not keep a snapshot busy while its cursor lived")
+
+# Continues the Busy assertion with the live owner session.
+def snapshot.close.busy.pair(
+  pair: Client.Session & Result<&1, &1, Client.Error, Unit>,
+  snapshot_id: U32,
+  cursor_id: U32
+) -> IO(Unit):
+  match pair:
+    case (session, outcome):
+      snapshot.close.busy.result(session, snapshot_id, cursor_id, outcome)
+
+def snapshot.close.busy.copied(
+  session: Client.Session,
+  snapshot_ids: U32 & U32,
+  cursor_id: U32
+) -> IO(Unit):
+  match snapshot_ids:
+    case (wire_snapshot, retained_snapshot):
+      do IO<Unit>:
+        result : Client.Session &
+          Result<&1, &1, Client.Error, Unit> <-
+            ByteClient.snapshot.close(session, wire_snapshot)
+        snapshot.close.busy.pair(result, retained_snapshot, cursor_id)
+
+def snapshot.close.busy(
+  session: Client.Session,
+  snapshot_id: U32,
+  cursor_id: U32
+) -> IO(Unit):
+  snapshot.close.busy.copied(session, token.duplicate(snapshot_id), cursor_id)
+
+# Requires both cursor key and value to match the raw binary fixture.
+def snapshot.cursor.item.key.checked(
+  comparison: Bytes.Bytes & Bytes.Bytes & Bool,
+  value: Bytes.Bytes
+) -> Bool:
+  Bool.and(bytes.equal(comparison),
+    bytes.equal(Bytes.eq(value, bytes.from_hex("80ff00"))))
+
+# Compares one cursor item against the exact binary fixture.
+def snapshot.cursor.item.matches(
+  key: Bytes.Bytes,
+  value: Bytes.Bytes
+) -> Bool:
+  snapshot.cursor.item.key.checked(Bytes.eq(key, bytes.from_hex("00ff")),
+    value)
+
+def snapshot.cursor.item.checked(
+  session: Client.Session,
+  snapshot_id: U32,
+  cursor_id: U32,
+  matches: Bool
+) -> IO(Unit):
+  match matches:
+    case True{}: snapshot.close.busy(session, snapshot_id, cursor_id)
+    case False{}: fail("owner cursor changed the first raw-byte item")
+
+def snapshot.cursor.next.result(
+  session: Client.Session,
+  snapshot_id: U32,
+  cursor_id: U32,
+  result: Result<&1, &1, Client.Error, CursorCodec.Frame>
+) -> IO(Unit):
+  match result:
+    case Fail{_}: fail("owner cursor next request failed")
+    case Done{CursorCodec.CursorItem{key, value}}:
+      snapshot.cursor.item.checked(session, snapshot_id, cursor_id,
+        snapshot.cursor.item.matches(key, value))
+    case Done{CursorCodec.CursorEnd{}}:
+      fail("owner cursor ended before returning its first item")
+
+# Continues frame assertions with the session returned by the owner.
+def snapshot.cursor.next.pair(
+  pair: Client.Session & Result<&1, &1, Client.Error, CursorCodec.Frame>,
+  snapshot_id: U32,
+  cursor_id: U32
+) -> IO(Unit):
+  match pair:
+    case (session, result):
+      snapshot.cursor.next.result(session, snapshot_id, cursor_id, result)
+
+# Keeps the owner cursor ID for the wire request and subsequent assertion.
+def snapshot.cursor.next.copied(
+  session: Client.Session,
+  snapshot_id: U32,
+  cursor_ids: U32 & U32
+) -> IO(Unit):
+  match cursor_ids:
+    case (wire_id, retained_id):
+      do IO<Unit>:
+        next : Client.Session & Result<&1, &1, Client.Error,
+          CursorCodec.Frame> <- ByteClient.snapshot.cursor.next(session,
+            wire_id)
+        snapshot.cursor.next.pair(next, snapshot_id, retained_id)
+
+def snapshot.cursor.open.result(
+  session: Client.Session,
+  snapshot_id: U32,
+  result: Result<&1, &1, Client.Error, U32>
+) -> IO(Unit):
+  match result:
+    case Fail{_}: fail("owner cursor open request failed")
+    case Done{cursor_id}:
+      snapshot.cursor.next.copied(session, snapshot_id,
+        token.duplicate(cursor_id))
+
+# Continues cursor checks with the session returned by the owner.
+def snapshot.cursor.open.pair(
+  pair: Client.Session & Result<&1, &1, Client.Error, U32>,
+  snapshot_id: U32
+) -> IO(Unit):
+  match pair:
+    case (session, result):
+      snapshot.cursor.open.result(session, snapshot_id, result)
+
+# Keeps the snapshot ID for validating the response after the wire call.
+def snapshot.cursor.open.copied(
+  session: Client.Session,
+  snapshot_ids: U32 & U32
+) -> IO(Unit):
+  match snapshot_ids:
+    case (wire_id, retained_id):
+      do IO<Unit>:
+        opened : Client.Session & Result<&1, &1, Client.Error, U32> <-
+          ByteClient.snapshot.cursor.open(session, wire_id)
+        snapshot.cursor.open.pair(opened, retained_id)
+
+def snapshot.cursor.open(
+  session: Client.Session,
+  snapshot_id: U32
+) -> IO(Unit):
+  snapshot.cursor.open.copied(session, token.duplicate(snapshot_id))
+
+# Compares a snapshot value before exercising the owner's cursor lifecycle.
+def snapshot.get.value.checked(
+  session: Client.Session,
+  snapshot_id: U32,
+  comparison: Bytes.Bytes & Bytes.Bytes & Bool
+) -> IO(Unit):
+  match comparison:
+    case (_, (_, equal)):
       match equal:
-        case True{}: get.missing(session)
+        case True{}: snapshot.cursor.open(session, snapshot_id)
         case False{}: fail("snapshot read changed the raw binary value")
 
+# Confirms an owner snapshot read before checking its cursor lifecycle.
 def snapshot.get.result(
-  pair: Client.Session & Result<&1, &1, Client.Error, Maybe<&1, Bytes.Bytes>>
+  session: Client.Session,
+  snapshot_id: U32,
+  result: Result<&1, &1, Client.Error, Maybe<&1, Bytes.Bytes>>
+) -> IO(Unit):
+  match result:
+    case Fail{_}: fail("coordinator snapshot read failed")
+    case Done{None{}}: fail("snapshot did not contain its key")
+    case Done{Some{value}}:
+      snapshot.get.value.checked(session, snapshot_id,
+        Bytes.eq(value, bytes.from_hex("80ff00")))
+
+# Continues a snapshot value assertion with its owner-issued token.
+def snapshot.get.pair(
+  pair: Client.Session & Result<&1, &1, Client.Error, Maybe<&1, Bytes.Bytes>>,
+  snapshot_id: U32
 ) -> IO(Unit):
   match pair:
-    case (_, Fail{_}): fail("coordinator snapshot read failed")
-    case (session, Done{None{}}): fail("snapshot did not contain its key")
-    case (session, Done{Some{value}}):
-      snapshot.get.value.checked((session,
-        Bytes.eq(value, bytes.from_hex("80ff00"))))
+    case (session, result):
+      snapshot.get.result(session, snapshot_id, result)
+
+# Reads one owner snapshot while preserving its ID for cursor creation.
+def snapshot.open.checked.id.copied(
+  session: Client.Session,
+  snapshot_ids: U32 & U32
+) -> IO(Unit):
+  match snapshot_ids:
+    case (wire_id, retained_id):
+      do IO<Unit>:
+        result : Client.Session & Result<&1, &1, Client.Error,
+          Maybe<&1, Bytes.Bytes>> <- ByteClient.snapshot.get(session,
+            wire_id, bytes.from_hex("00ff"))
+        snapshot.get.pair(result, retained_id)
 
 # Rejects zero IDs and reads the owner-held snapshot for a valid token.
 def snapshot.open.checked.id.value(
@@ -112,11 +346,8 @@ def snapshot.open.checked.id.value(
   match is_zero:
     case True{}: fail("owner allocated snapshot identifier zero")
     case False{}:
-      do IO<Unit>:
-        result : Client.Session & Result<&1, &1, Client.Error,
-          Maybe<&1, Bytes.Bytes>> <- ByteClient.snapshot.get(session,
-            snapshot_id, bytes.from_hex("00ff"))
-        snapshot.get.result(result)
+      snapshot.open.checked.id.copied(session,
+        token.duplicate(snapshot_id))
 
 # Reads the fixture key after the owner allocated a nonzero snapshot ID.
 def snapshot.open.checked.id(

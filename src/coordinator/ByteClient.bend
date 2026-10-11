@@ -2,6 +2,8 @@ import Base
 import ./Client.bend as Client
 import ./ClientPolicy.bend as Policy
 import ./Protocol.bend as Protocol
+import ./CursorCodec.bend as CursorCodec
+import ./OwnerCursorCodec.bend as OwnerCursorCodec
 import ./StatsCodec.bend as StatsCodec
 import ../ByteWal.bend as ByteWal
 import ../Wal.bend as Wal
@@ -256,3 +258,135 @@ def snapshot.close(
     pair : Client.Session & Result<&1, &1, Client.Error, Protocol.Response> <-
       Client.session.call(session, 11, Protocol.snapshot.id.bytes(snapshot_id))
     return write.result(pair)
+
+# Maps one pure open-response decision into a client result.
+def snapshot.cursor.open.decision(
+  decision: OwnerCursorCodec.OpenDecision
+) -> Result<&1, &1, Client.Error, U32>:
+  match decision:
+    case OwnerCursorCodec.Opened{cursor_id}: Done{cursor_id}
+    case OwnerCursorCodec.OpenRejected{status}:
+      Fail{Client.OwnerRejected{status}}
+    case OwnerCursorCodec.OpenMalformed{}:
+      Fail{Client.MalformedResponse{}}
+
+def snapshot.cursor.open.status(
+  status: Protocol.ResponseStatus,
+  payload: Bytes.Bytes
+) -> Result<&1, &1, Client.Error, U32>:
+  snapshot.cursor.open.decision(OwnerCursorCodec.open(status, payload))
+
+def snapshot.cursor.open.response(
+  result: Result<&1, &1, Client.Error, Protocol.Response>
+) -> Result<&1, &1, Client.Error, U32>:
+  match result:
+    case Fail{error}: Fail{error}
+    case Done{response}:
+      match response:
+        case Protocol.Response{_, _, _, status, payload}:
+          snapshot.cursor.open.status(status, payload)
+
+def snapshot.cursor.open.result(
+  pair: Client.Session & Result<&1, &1, Client.Error, Protocol.Response>
+) -> Client.Session & Result<&1, &1, Client.Error, U32>:
+  match pair:
+    case (session, result): (session, snapshot.cursor.open.response(result))
+
+# Opens a full-range cursor over an owner-retained snapshot.
+def snapshot.cursor.open(
+  session: Client.Session,
+  snapshot_id: U32
+) -> IO(Client.Session & Result<&1, &1, Client.Error, U32>):
+  do IO<Client.Session & Result<&1, &1, Client.Error, U32>>:
+    pair : Client.Session & Result<&1, &1, Client.Error, Protocol.Response> <-
+      Client.session.call(session, 12, Protocol.snapshot.id.bytes(snapshot_id))
+    return snapshot.cursor.open.result(pair)
+
+# Maps one pure next-response decision into a client result.
+def snapshot.cursor.next.decision(
+  decision: OwnerCursorCodec.NextDecision
+) -> Result<&1, &1, Client.Error, CursorCodec.Frame>:
+  match decision:
+    case OwnerCursorCodec.NextFrame{frame}: Done{frame}
+    case OwnerCursorCodec.NextRejected{status}:
+      Fail{Client.OwnerRejected{status}}
+    case OwnerCursorCodec.NextMalformed{}:
+      Fail{Client.MalformedResponse{}}
+
+def snapshot.cursor.next.status(
+  status: Protocol.ResponseStatus,
+  payload: Bytes.Bytes
+) -> Result<&1, &1, Client.Error, CursorCodec.Frame>:
+  snapshot.cursor.next.decision(OwnerCursorCodec.next(status, payload))
+
+def snapshot.cursor.next.response(
+  result: Result<&1, &1, Client.Error, Protocol.Response>
+) -> Result<&1, &1, Client.Error, CursorCodec.Frame>:
+  match result:
+    case Fail{error}: Fail{error}
+    case Done{response}:
+      match response:
+        case Protocol.Response{_, _, _, status, payload}:
+          snapshot.cursor.next.status(status, payload)
+
+def snapshot.cursor.next.result(
+  pair: Client.Session & Result<&1, &1, Client.Error, Protocol.Response>
+) -> Client.Session & Result<&1, &1, Client.Error, CursorCodec.Frame>:
+  match pair:
+    case (session, result): (session, snapshot.cursor.next.response(result))
+
+# Reads one raw-byte item or the terminal marker from an owner cursor.
+def snapshot.cursor.next(
+  session: Client.Session,
+  cursor_id: U32
+) -> IO(Client.Session & Result<&1, &1, Client.Error, CursorCodec.Frame>):
+  do IO<Client.Session & Result<&1, &1, Client.Error, CursorCodec.Frame>>:
+    pair : Client.Session & Result<&1, &1, Client.Error, Protocol.Response> <-
+      Client.session.call(session, 13, Protocol.snapshot.id.bytes(cursor_id))
+    return snapshot.cursor.next.result(pair)
+
+# Releases one owner cursor token through the serialized session.
+# Maps one pure close-response decision into a client result.
+def snapshot.cursor.close.decision(
+  decision: OwnerCursorCodec.CloseDecision
+) -> Result<&1, &1, Client.Error, Unit>:
+  match decision:
+    case OwnerCursorCodec.CloseSucceeded{}: Done{Unit{}}
+    case OwnerCursorCodec.CloseRejected{status}:
+      Fail{Client.OwnerRejected{status}}
+    case OwnerCursorCodec.CloseMalformed{}:
+      Fail{Client.MalformedResponse{}}
+
+# Decodes the owner close status and requires its exact empty success body.
+def snapshot.cursor.close.status(
+  status: Protocol.ResponseStatus,
+  payload: Bytes.Bytes
+) -> Result<&1, &1, Client.Error, Unit>:
+  snapshot.cursor.close.decision(OwnerCursorCodec.close(status, payload))
+
+# Maps transport or owner response errors into one close result.
+def snapshot.cursor.close.response(
+  result: Result<&1, &1, Client.Error, Protocol.Response>
+) -> Result<&1, &1, Client.Error, Unit>:
+  match result:
+    case Fail{error}: Fail{error}
+    case Done{response}:
+      match response:
+        case Protocol.Response{_, _, _, status, payload}:
+          snapshot.cursor.close.status(status, payload)
+
+# Preserves the live client session after one close request.
+def snapshot.cursor.close.result(
+  pair: Client.Session & Result<&1, &1, Client.Error, Protocol.Response>
+) -> Client.Session & Result<&1, &1, Client.Error, Unit>:
+  match pair:
+    case (session, result): (session, snapshot.cursor.close.response(result))
+
+def snapshot.cursor.close(
+  session: Client.Session,
+  cursor_id: U32
+) -> IO(Client.Session & Result<&1, &1, Client.Error, Unit>):
+  do IO<Client.Session & Result<&1, &1, Client.Error, Unit>>:
+    pair : Client.Session & Result<&1, &1, Client.Error, Protocol.Response> <-
+      Client.session.call(session, 14, Protocol.snapshot.id.bytes(cursor_id))
+    return snapshot.cursor.close.result(pair)
