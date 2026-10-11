@@ -12,3 +12,15 @@ law owner_restart_advances_generation:
 # An exhausted owner generation is rejected without wrapping to zero.
 law owner_generation_exhaustion_is_reported:
   {Generation.next(Some{4294967295}) == Generation.GenerationExhausted{} : Generation.Decision}
+
+# The fixed-width sidecar codec preserves the initial generation.
+law owner_generation_codec_roundtrips_one:
+  {Generation.u32.read(Generation.u32.bytes(1)) == 1 : U32}
+
+# The fixed-width sidecar codec preserves the terminal generation.
+law owner_generation_codec_roundtrips_maximum:
+  {Generation.u32.read(Generation.u32.bytes(4294967295)) == 4294967295 : U32}
+
+# An owner response carries its active generation even for an older request.
+law stale_request_response_uses_active_generation:
+  {Generation.response.generation(2) == 2 : U32}

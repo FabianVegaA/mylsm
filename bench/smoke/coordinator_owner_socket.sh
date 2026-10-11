@@ -32,6 +32,8 @@ if [[ ! -S "$DB/MYLSM.sock" ]]; then
   exit 1
 fi
 
+printf '\000\000\000\001' > "$DB/OWNER.GEN"
+
 MYLSM_OWNER_ENDPOINT="$DB/MYLSM.sock" "$WORK/owner-client" &
 CLIENT_ONE_PID=$!
 MYLSM_OWNER_ENDPOINT="$DB/MYLSM.sock" "$WORK/owner-client" &

@@ -30,6 +30,7 @@ import ./src/transfer/MigrateRunIo.bend as MigrateRunIo
 import ./src/StorageBytes.bend as Utf8Codec
 import ./src/Fs.bend as Fs
 import ./src/coordinator/EndpointPath.bend as EndpointPath
+import ./src/coordinator/OwnerGenerationIo.bend as OwnerGenerationIo
 import ./src/coordinator/Client.bend as OwnerClient
 import ./src/coordinator/ByteClient.bend as OwnerByteClient
 import ./src/coordinator/Protocol.bend as CoordinatorProtocol
@@ -222,28 +223,49 @@ def Bytes.handle(
 
 def Bytes.remote.role(
   endpoint: String,
+  generation: U32,
   role: OwnerPolicy.OpenRole
 ) -> Result<&1, &1, Bytes.Error, Bytes.Handle>:
   match role:
     case OwnerPolicy.ExistingOwnerClient{}:
-      Done{RemoteByteHandle{OwnerClient.session.open(endpoint, 1)}}
+      Done{RemoteByteHandle{OwnerClient.session.open(endpoint, generation)}}
     case OwnerPolicy.ReturnBusy{}: Fail{Busy{}}
     case OwnerPolicy.PropagateOpenFailure{}:
       Fail{Io{0, "owner role could not be established"}}
     case OwnerPolicy.LocalOwner{}: Fail{Busy{}}
 
+def Bytes.endpoint.generation(
+  endpoint: String,
+  result: Result<&1, &1, OwnerGenerationIo.Error, U32>
+) -> Result<&1, &1, Bytes.Error, Bytes.Handle>:
+  match result:
+    case Fail{OwnerGenerationIo.Host{code, message}}: Fail{Io{code, message}}
+    case Fail{OwnerGenerationIo.Invalid{}}:
+      Fail{Corruption{"owner generation is invalid"}}
+    case Fail{OwnerGenerationIo.Exhausted{}}:
+      Fail{Corruption{"owner generation is exhausted"}}
+    case Done{generation}:
+      Bytes.remote.role(endpoint, generation, OwnerPolicy.open.role(
+        OwnerPolicy.LockBusy{}, OwnerPolicy.EndpointPresent{}))
+
 def Bytes.endpoint.checked(
+  canonical: String,
   endpoint: String,
   exists: Result<&1, &1, U32 & String, Bool>
-) -> Result<&1, &1, Bytes.Error, Bytes.Handle>:
+) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
   match exists:
-    case Fail{(code, message)}: Fail{Io{code, message}}
+    case Fail{(code, message)}:
+      IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
+        Fail{Io{code, message}})
     case Done{True{}}:
-      Bytes.remote.role(endpoint, OwnerPolicy.open.role(
-        OwnerPolicy.LockBusy{}, OwnerPolicy.EndpointPresent{}))
+      do IO<Result<&1, &1, Bytes.Error, Bytes.Handle>>:
+        generation : Result<&1, &1, OwnerGenerationIo.Error, U32> <-
+          OwnerGenerationIo.read(canonical ++ "/OWNER.GEN")
+        return Bytes.endpoint.generation(endpoint, generation)
     case Done{False{}}:
-      Bytes.remote.role(endpoint, OwnerPolicy.open.role(
-        OwnerPolicy.LockBusy{}, OwnerPolicy.EndpointMissing{}))
+      IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
+        Bytes.remote.role(endpoint, 0, OwnerPolicy.open.role(
+          OwnerPolicy.LockBusy{}, OwnerPolicy.EndpointMissing{})))
 
 def Bytes.endpoint.path.pair.go(
   path: String,
@@ -260,23 +282,31 @@ def Bytes.endpoint.path.pair(path: String) -> String & String:
   Bytes.endpoint.path.pair.go(path, SNil{}, SNil{})
 
 def Bytes.endpoint.exists(
-  paths: String & String
+  paths: String & String & String
 ) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
   match paths:
-    case (exists_path, retained_path):
+    case (canonical, (exists_path, retained_path)):
       do IO<Result<&1, &1, Bytes.Error, Bytes.Handle>>:
         exists : Result<&1, &1, U32 & String, Bool> <- Fs.exists(exists_path)
-        return Bytes.endpoint.checked(retained_path, exists)
+        Bytes.endpoint.checked(canonical, retained_path, exists)
 
 def Bytes.endpoint.result(
+  canonical: String,
   decision: EndpointPath.Decision
 ) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
   match decision:
     case EndpointPath.Endpoint{path}:
-      Bytes.endpoint.exists(Bytes.endpoint.path.pair(path))
+      Bytes.endpoint.exists((canonical, Bytes.endpoint.path.pair(path)))
     case EndpointPath.PathTooLong{}:
       IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
         Fail{UnsupportedPlatform{}})
+
+def Bytes.canonical.endpoint.paths(paths: String & String) ->
+  IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
+  match paths:
+    case (endpoint_path, retained_path):
+      Bytes.endpoint.result(retained_path,
+        EndpointPath.for_canonical_path(endpoint_path))
 
 def Bytes.canonical.endpoint(
   result: Result<&1, &1, U32 & String, String>
@@ -286,7 +316,7 @@ def Bytes.canonical.endpoint(
       IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
         Fail{Io{code, message}})
     case Done{canonical}:
-      Bytes.endpoint.result(EndpointPath.for_canonical_path(canonical))
+      Bytes.canonical.endpoint.paths(Bytes.endpoint.path.pair(canonical))
 
 def Bytes.owner.candidate(
   path: String,
@@ -316,7 +346,7 @@ def Bytes.owner.wait.endpoint(
       IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
         Fail{Io{code, message}})
     case Done{True{}}:
-      Bytes.endpoint.result(EndpointPath.for_canonical_path(canonical))
+      Bytes.canonical.endpoint.paths(Bytes.endpoint.path.pair(canonical))
     case Done{False{}}:
       do IO<Result<&1, &1, Bytes.Error, Bytes.Handle>>:
         opened : Result<&1, &1, RawByteDb.Error, RawByteDb.Handle> <-

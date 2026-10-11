@@ -58,3 +58,6 @@ def next(current: Maybe<&2, U32>) -> Decision:
     case None{}: GenerationReady{1}
     case Some{generation}:
       next.copies(u32.clone.pair(generation))
+
+def response.generation(active: U32) -> U32:
+  active

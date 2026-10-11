@@ -4,6 +4,7 @@ import ../StorageBytes.bend as StorageBytes
 import ./Operation.bend as Operation
 import ./Protocol.bend as Protocol
 import ./CoordinatorPolicy.bend as Policy
+import ./OwnerGeneration.bend as Generation
 import ./Io.bend as Io
 import ./UnixSocketIo.bend as UnixSocket
 import ../Fs.bend as Fs
@@ -215,22 +216,32 @@ def dispatch.request.copies(
   request_ids: U32 & U32 & U32,
   operation_code: U32,
   payload: Bytes.Bytes,
-  active_generation: U32
+  active_generations: U32 & U32
 ) -> IO(ByteDb.Handle & Protocol.Response):
   match versions:
     case (version, (response_version, response_version_hold)):
       match generations:
-        case (generation, (response_generation, response_generation_hold)):
+        case (generation, (_, response_generation_hold)):
           match request_ids:
             case (request_id, (response_id, response_id_hold)):
-              dispatch.validated(handle,
-                ReplyContext{(response_version, response_version_hold),
-                  (response_generation, response_generation_hold),
-                  (response_id, response_id_hold)},
-                Protocol.validate(
-                  Protocol.Request{version, generation, request_id,
-                    operation_code, payload},
-                  1, active_generation, Protocol.max_payload_bytes()))
+              match active_generations:
+                case (response_generation, active_generation):
+                  dispatch.validated(handle,
+                    ReplyContext{(response_version, response_version_hold),
+                      (Generation.response.generation(response_generation),
+                        response_generation_hold),
+                      (response_id, response_id_hold)},
+                    Protocol.validate(
+                      Protocol.Request{version, generation, request_id,
+                        operation_code, payload},
+                      1, active_generation, Protocol.max_payload_bytes()))
+
+def u32.duplicate.pair.from(triple: U32 & U32 & U32) -> U32 & U32:
+  match triple:
+    case (first, (second, _)): (first, second)
+
+def u32.duplicate.pair(value: U32) -> U32 & U32:
+  u32.duplicate.pair.from(Protocol.u32.duplicate.triple(value))
 
 def dispatch.request(
   handle: ByteDb.Handle,
@@ -243,7 +254,7 @@ def dispatch.request(
         Protocol.u32.duplicate.triple(version),
         Protocol.u32.duplicate.triple(generation),
         Protocol.u32.duplicate.triple(request_id), operation_code, payload,
-        active_generation)
+        u32.duplicate.pair(active_generation))
 
 def serve.closed(
   pair: File & Result<&1, &1, U32 & String, Unit>,

@@ -6,6 +6,7 @@ import ../src/DbLock.bend as DbLock
 import ../src/Fs.bend as Fs
 import ../src/coordinator/EndpointPath.bend as EndpointPath
 import ../src/coordinator/Owner.bend as Owner
+import ../src/coordinator/OwnerGenerationIo.bend as OwnerGenerationIo
 import ../src/coordinator/UnixSocketIo.bend as UnixSocket
 import ../src/scan/VisibleStats.bend as VisibleStats
 
@@ -27,12 +28,13 @@ def path.clone.pair(path: String) -> String & String:
 def start.listening(
   handle: ByteDb.Handle,
   endpoint: String,
+  generation: U32,
   result: File & Result<&1, &1, UnixSocket.Error, Unit>
 ) -> IO(Unit):
   match result:
     case (server, Done{Unit{}}):
       Owner.serve.loop(4294967295n,
-        Owner.Serving{server, handle, endpoint, 1})
+        Owner.Serving{server, handle, endpoint, generation})
     case (server, Fail{_}):
       do IO<Unit>:
         _closed : Unit <- File.close(server)
@@ -42,6 +44,7 @@ def start.listening(
 def start.permissions(
   handle: ByteDb.Handle,
   endpoint: String,
+  generation: U32,
   server: File,
   result: Result<&1, &1, U32 & String, Unit>
 ) -> IO(Unit):
@@ -50,7 +53,7 @@ def start.permissions(
       do IO<Unit>:
         listened : File & Result<&1, &1, UnixSocket.Error, Unit> <-
           UnixSocket.listen(server, 64)
-        start.listening(handle, endpoint, listened)
+        start.listening(handle, endpoint, generation, listened)
     case Fail{_}:
       do IO<Unit>:
         _closed : Unit <- File.close(server)
@@ -59,6 +62,7 @@ def start.permissions(
 
 def start.bound.paths(
   handle: ByteDb.Handle,
+  generation: U32,
   server: File,
   paths: String & String
 ) -> IO(Unit):
@@ -66,16 +70,17 @@ def start.bound.paths(
     case (chmod_path, listener_path):
       do IO<Unit>:
         permissions : Result<&1, &1, U32 & String, Unit> <- Fs.chmod(chmod_path, 384)
-        start.permissions(handle, listener_path, server, permissions)
+        start.permissions(handle, listener_path, generation, server, permissions)
 
 def start.bound(
   handle: ByteDb.Handle,
   endpoint: String,
+  generation: U32,
   result: File & Result<&1, &1, UnixSocket.Error, Unit>
 ) -> IO(Unit):
   match result:
     case (server, Done{Unit{}}):
-      start.bound.paths(handle, server, path.clone.pair(endpoint))
+      start.bound.paths(handle, generation, server, path.clone.pair(endpoint))
     case (server, Fail{_}):
       do IO<Unit>:
         _closed : Unit <- File.close(server)
@@ -84,6 +89,7 @@ def start.bound(
 
 def start.socket.bind(
   handle: ByteDb.Handle,
+  generation: U32,
   server: File,
   paths: String & String
 ) -> IO(Unit):
@@ -92,33 +98,36 @@ def start.socket.bind(
       do IO<Unit>:
         bound : File & Result<&1, &1, UnixSocket.Error, Unit> <-
           UnixSocket.bind(server, bind_path)
-        start.bound(handle, retained_path, bound)
+        start.bound(handle, retained_path, generation, bound)
 
 def start.socket(
   handle: ByteDb.Handle,
   endpoint: String,
+  generation: U32,
   result: Result<&1, &1, UnixSocket.Error, File>
 ) -> IO(Unit):
   match result:
     case Done{server}:
-      start.socket.bind(handle, server, path.clone.pair(endpoint))
+      start.socket.bind(handle, generation, server, path.clone.pair(endpoint))
     case Fail{_}: stop(handle, "owner socket creation failed")
 
 def endpoint.ready(
   handle: ByteDb.Handle,
+  generation: U32,
   result: EndpointPath.Decision
 ) -> IO(Unit):
   match result:
     case EndpointPath.Endpoint{path}:
       do IO<Unit>:
         created : Result<&1, &1, UnixSocket.Error, File> <- UnixSocket.create()
-        start.socket(handle, path, created)
+        start.socket(handle, path, generation, created)
     case EndpointPath.PathTooLong{}:
       stop(handle, "owner socket path exceeds the platform limit")
 
 def stale.removal.result(
   handle: ByteDb.Handle,
   endpoint: String,
+  generation: U32,
   removed: Result<&1, &1, U32 & String, Unit>
 ) -> IO(Unit):
   match removed:
@@ -126,18 +135,23 @@ def stale.removal.result(
     case Done{Unit{}}:
       do IO<Unit>:
         created : Result<&1, &1, UnixSocket.Error, File> <- UnixSocket.create()
-        start.socket(handle, endpoint, created)
+        start.socket(handle, endpoint, generation, created)
 
-def stale.removing(handle: ByteDb.Handle, paths: String & String) -> IO(Unit):
+def stale.removing(
+  handle: ByteDb.Handle,
+  generation: U32,
+  paths: String & String
+) -> IO(Unit):
   match paths:
     case (remove_path, retained_path):
       do IO<Unit>:
         removed : Result<&1, &1, U32 & String, Unit> <- Fs.remove(remove_path)
-        stale.removal.result(handle, retained_path, removed)
+        stale.removal.result(handle, retained_path, generation, removed)
 
 def stale.removed(
   handle: ByteDb.Handle,
   endpoint: String,
+  generation: U32,
   exists: Result<&1, &1, U32 & String, Bool>
 ) -> IO(Unit):
   match exists:
@@ -145,35 +159,67 @@ def stale.removed(
     case Done{False{}}:
       do IO<Unit>:
         created : Result<&1, &1, UnixSocket.Error, File> <- UnixSocket.create()
-        start.socket(handle, endpoint, created)
+        start.socket(handle, endpoint, generation, created)
     case Done{True{}}:
-      stale.removing(handle, path.clone.pair(endpoint))
+      stale.removing(handle, generation, path.clone.pair(endpoint))
 
 def owner.endpoint.exists(
   handle: ByteDb.Handle,
+  generation: U32,
   paths: String & String
 ) -> IO(Unit):
   match paths:
     case (endpoint, inspect_path):
       do IO<Unit>:
         exists : Result<&1, &1, U32 & String, Bool> <- Fs.exists(inspect_path)
-        stale.removed(handle, endpoint, exists)
+        stale.removed(handle, endpoint, generation, exists)
 
 def owner.endpoint(
   handle: ByteDb.Handle,
+  generation: U32,
   result: EndpointPath.Decision
 ) -> IO(Unit):
   match result:
     case EndpointPath.Endpoint{path}:
-      owner.endpoint.exists(handle, path.clone.pair(path))
+      owner.endpoint.exists(handle, generation, path.clone.pair(path))
     case EndpointPath.PathTooLong{}:
       stop(handle, "owner socket path exceeds the platform limit")
 
 def owner.handle(
   handle: ByteDb.Handle,
+  generation: U32,
   endpoint_path: String
 ) -> IO(Unit):
-  owner.endpoint(handle, EndpointPath.for_canonical_path(endpoint_path))
+  owner.endpoint(handle, generation,
+    EndpointPath.for_canonical_path(endpoint_path))
+
+def opened.generation.result(
+  handle: ByteDb.Handle,
+  endpoint_path: String,
+  result: Result<&1, &1, OwnerGenerationIo.Error, U32>
+) -> IO(Unit):
+  match result:
+    case Done{generation}: owner.handle(handle, generation, endpoint_path)
+    case Fail{_}:
+      do IO<Unit>:
+        _closed : Result<&1, &1, ByteDb.Error, Unit> <- ByteDb.close(handle)
+        IO.die(Unit, 1, "owner generation could not be persisted")
+
+def opened.generation.paths(
+  paths: String & String,
+  endpoint_path: String,
+  lock: DbLock.Lock,
+  table: ByteMemTable.Table,
+  state: ByteDb.HandleState,
+  stats: VisibleStats.Stats
+) -> IO(Unit):
+  match paths:
+    case (generation_path, handle_path):
+      do IO<Unit>:
+        generation : Result<&1, &1, OwnerGenerationIo.Error, U32> <-
+          OwnerGenerationIo.initialize(generation_path)
+        opened.generation.result(ByteDb.Handle{handle_path, lock, table,
+          state, stats}, endpoint_path, generation)
 
 def opened.canonical(
   paths: String & String,
@@ -184,8 +230,8 @@ def opened.canonical(
 ) -> IO(Unit):
   match paths:
     case (endpoint_path, handle_path):
-      owner.handle(ByteDb.Handle{handle_path, lock, table, state, stats},
-        endpoint_path)
+      opened.generation.paths(path.clone.pair(handle_path), endpoint_path,
+        lock, table, state, stats)
 
 # Publishes the canonical endpoint only after recovery has opened the database.
 def opened(result: Result<&1, &1, ByteDb.Error, ByteDb.Handle>) -> IO(Unit):
