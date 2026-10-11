@@ -5,6 +5,7 @@ import ./ByteRange.bend as ByteRange
 import ./RangeCursor.bend as RangeCursor
 import ./ScanMerge.bend as ScanMerge
 import ./SstCursor.bend as SstCursor
+import ./VisibleSeekPolicy.bend as VisibleSeekPolicy
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # Retains one SST head and one ordered delta source between reads.
@@ -93,23 +94,19 @@ def lower.triple(
 def seek.ready(
   base: Maybe<&1, SstCursor.Cursor>,
   delta: List<&1, ByteMemTable.Entry>,
-  upper: Maybe<&1, Bytes.Bytes>,
-  prefix: Maybe<&1, Bytes.Bytes>,
+  bounds: RangeCursor.Bounds,
   lowers: Maybe<&1, Bytes.Bytes> & Maybe<&1, Bytes.Bytes> & Maybe<&1, Bytes.Bytes>
 ) -> Cursor:
   match lowers:
     case (base_lower, (delta_lower, bounds_lower)):
       Active{base.seek(base, base_lower), None{}, RangeCursor.seek(delta, delta_lower),
-        RangeCursor.Bounds{bounds_lower, upper, prefix}}
+        VisibleSeekPolicy.seek.bounds(bounds, bounds_lower)}
 
 # Advances every retained source to the same inclusive lower key.
 def seek(cursor: Cursor, lower: Maybe<&1, Bytes.Bytes>) -> Cursor:
   match cursor:
     case Active{base, _, delta, bounds}:
-      match bounds:
-        case RangeCursor.Bounds{_, upper, prefix}:
-          seek.ready(base, delta, upper, prefix,
-            lower.triple(lower))
+      seek.ready(base, delta, bounds, lower.triple(lower))
     case Ended{}: Ended{}
     case Closed{}: Closed{}
     case Failed{error}: Failed{error}
