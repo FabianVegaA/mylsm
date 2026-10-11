@@ -1,6 +1,7 @@
 # A mutation can enter the dispatched state exactly once.
 import Base
 import ../src/coordinator/ClientPolicy.bend as ClientPolicy
+import ../src/coordinator/Protocol.bend as Protocol
 
 # Accepts one first dispatch.
 law ready_mutation_is_dispatched_once:
@@ -99,3 +100,23 @@ law final_request_id_is_not_reused_after_wraparound:
 law exhausted_request_sequence_rejects_every_call:
   {ClientPolicy.request_id.take(ClientPolicy.RequestExhausted{}) ==
     ClientPolicy.RequestIdsExhausted{} : ClientPolicy.RequestDecision}
+
+# Confirms only responses whose operation completed successfully.
+law successful_owner_status_is_accepted:
+  {ClientPolicy.response.accepted(Protocol.Success{}) == True{} : Bool}
+
+# Preserves every owner failure status as a rejected operation result.
+law owner_failure_statuses_are_rejected:
+  {(Bool.not(ClientPolicy.response.accepted(Protocol.InvalidArgument{})) &&
+    Bool.not(ClientPolicy.response.accepted(Protocol.NotFound{})) &&
+    Bool.not(ClientPolicy.response.accepted(Protocol.Busy{})) &&
+    Bool.not(ClientPolicy.response.accepted(Protocol.Timeout{})) &&
+    Bool.not(ClientPolicy.response.accepted(Protocol.ResponseResourceLimit{})) &&
+    Bool.not(ClientPolicy.response.accepted(Protocol.Corruption{})) &&
+    Bool.not(ClientPolicy.response.accepted(Protocol.IoFailure{})) &&
+    Bool.not(ClientPolicy.response.accepted(Protocol.CommitUnknown{})) &&
+    Bool.not(ClientPolicy.response.accepted(Protocol.AlreadyExists{})) &&
+    Bool.not(ClientPolicy.response.accepted(Protocol.UnsupportedPlatform{})) &&
+    Bool.not(ClientPolicy.response.accepted(Protocol.InvalidUtf8{})) &&
+    Bool.not(ClientPolicy.response.accepted(Protocol.UnsupportedFormat{}))) ==
+    True{} : Bool}

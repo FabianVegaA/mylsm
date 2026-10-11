@@ -83,6 +83,12 @@ def operation.is_mutation(operation: U32) -> Bool:
 def request.within_payload_limit(payload_bytes: U32) -> Bool:
   Protocol.payload.admitted(payload_bytes)
 
+# Accepts only owner responses that confirm successful operation completion.
+def response.accepted(status: Protocol.ResponseStatus) -> Bool:
+  match status:
+    case Protocol.Success{}: True{}
+    case _: False{}
+
 def request_id.take.available(
   ids: U32 & U32,
   is_final: Bool

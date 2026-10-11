@@ -43,12 +43,17 @@ def get.response(
                 bytes.from_hex("80ff00")))
             case _: fail("coordinator owner did not find the byte key")
 
-# Sends one read request through the public coordinator client transport.
-def get.request.result(
+def get.request.confirmed(
   pair: Client.Session & Result<&1, &1, Client.Error, Protocol.Response>
 ) -> IO(Unit):
   match pair:
     case (_, result): get.response(result)
+
+# Sends one read request through the public coordinator client transport.
+def get.request.result(
+  pair: Client.Session & Result<&1, &1, Client.Error, Protocol.Response>
+) -> IO(Unit):
+  get.request.confirmed(Client.session.checked(pair))
 
 def get.request(session: Client.Session) -> IO(Unit):
   do IO<Unit>:
@@ -86,12 +91,17 @@ def put.response(
               put.response.session.length(session, Bytes.length(payload))
             case _: fail("coordinator owner rejected the byte put")
 
-# Sends a binary mutation through the public coordinator client transport.
-def put.request.result(
+def put.request.confirmed(
   pair: Client.Session & Result<&1, &1, Client.Error, Protocol.Response>
 ) -> IO(Unit):
   match pair:
     case (session, result): put.response(session, result)
+
+# Sends a binary mutation through the public coordinator client transport.
+def put.request.result(
+  pair: Client.Session & Result<&1, &1, Client.Error, Protocol.Response>
+) -> IO(Unit):
+  put.request.confirmed(Client.session.checked(pair))
 
 def put.request(endpoint: String) -> IO(Unit):
   do IO<Unit>:

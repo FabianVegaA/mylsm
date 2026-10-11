@@ -61,3 +61,9 @@ def Laws.final_request_id_is_not_reused_after_wraparound():
 
 def Laws.exhausted_request_sequence_rejects_every_call():
   {==}
+
+def Laws.successful_owner_status_is_accepted():
+  {==}
+
+def Laws.owner_failure_statuses_are_rejected():
+  {==}
