@@ -2,6 +2,7 @@ import Base
 import ../../src/ByteDurableDb.bend as ByteDb
 import ../../src/Console.bend as Console
 import ../../src/coordinator/Owner.bend as Owner
+import ../../src/coordinator/OwnerCursorStore.bend as CursorStore
 import ../../src/coordinator/OwnerSnapshotStore.bend as SnapshotStore
 import ../../src/coordinator/Protocol.bend as Protocol
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
@@ -38,9 +39,9 @@ def closed(handle: ByteDb.Handle) -> IO(Unit):
 
 def close.response(result: Owner.DispatchResult) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, _, Protocol.Response{_, _, _,
+    case Owner.DispatchResult{handle, _, _, Protocol.Response{_, _, _,
         Protocol.Success{}, _}}: closed(handle)
-    case Owner.DispatchResult{handle, _, _}:
+    case Owner.DispatchResult{handle, _, _, _}:
       fail.close(handle, "owner rejected snapshot close")
 
 def close.snapshot(
@@ -50,7 +51,7 @@ def close.snapshot(
 ) -> IO(Unit):
   do IO<Unit>:
     result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
-      snapshots, Protocol.Request{1, 1, 4, 11,
+      snapshots, CursorStore.empty(), Protocol.Request{1, 1, 4, 11,
         Protocol.snapshot.id.bytes(snapshot_id)}, 1)
     close.response(result)
 
@@ -69,11 +70,11 @@ def get.response(
   snapshot_id: U32
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots,
+    case Owner.DispatchResult{handle, snapshots, _,
         Protocol.Response{_, _, _, Protocol.Success{}, payload}}:
       get.value.checked(handle, snapshots, snapshot_id,
         bytes.equal(Bytes.eq(payload, bytes("80ff00"))))
-    case Owner.DispatchResult{handle, _, _}:
+    case Owner.DispatchResult{handle, _, _, _}:
       fail.close(handle, "owner snapshot get failed")
 
 def get.snapshot.copies(
@@ -85,7 +86,7 @@ def get.snapshot.copies(
     case (wire_id, (snapshot_id, _)):
       do IO<Unit>:
         result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
-          snapshots, Protocol.Request{1, 1, 3, 10,
+          snapshots, CursorStore.empty(), Protocol.Request{1, 1, 3, 10,
             Bytes.concat([Protocol.snapshot.id.bytes(wire_id), bytes("00ff")])},
           1)
         get.response(result, snapshot_id)
@@ -109,16 +110,17 @@ def open.token(
 
 def open.result(result: Owner.DispatchResult) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots,
+    case Owner.DispatchResult{handle, snapshots, _,
         Protocol.Response{_, _, _, Protocol.Success{}, payload}}:
       open.token(handle, snapshots, Protocol.snapshot.id.read(payload))
-    case Owner.DispatchResult{handle, _, _}:
+    case Owner.DispatchResult{handle, _, _, _}:
       fail.close(handle, "owner snapshot open failed")
 
 def open.snapshot(handle: ByteDb.Handle) -> IO(Unit):
   do IO<Unit>:
     result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
-      SnapshotStore.empty(), Protocol.Request{1, 1, 2, 9, Bytes.new(0)}, 1)
+      SnapshotStore.empty(), CursorStore.empty(),
+      Protocol.Request{1, 1, 2, 9, Bytes.new(0)}, 1)
     open.result(result)
 
 # Opens the owner snapshot after its binary fixture value is persisted.

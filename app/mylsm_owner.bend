@@ -6,6 +6,7 @@ import ../src/DbLock.bend as DbLock
 import ../src/Fs.bend as Fs
 import ../src/coordinator/EndpointPath.bend as EndpointPath
 import ../src/coordinator/Owner.bend as Owner
+import ../src/coordinator/OwnerCursorStore.bend as OwnerCursorStore
 import ../src/coordinator/OwnerSnapshotStore.bend as OwnerSnapshots
 import ../src/coordinator/OwnerGenerationIo.bend as OwnerGenerationIo
 import ../src/coordinator/UnixSocketIo.bend as UnixSocket
@@ -36,7 +37,7 @@ def start.listening(
     case (server, Done{Unit{}}):
       Owner.serve.loop(4294967295n,
         Owner.Serving{server, handle, endpoint, generation,
-          OwnerSnapshots.empty()})
+          OwnerSnapshots.empty(), OwnerCursorStore.empty()})
     case (server, Fail{_}):
       do IO<Unit>:
         _closed : Unit <- File.close(server)

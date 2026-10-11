@@ -23,6 +23,16 @@ type CloseResult is Type:
   RootCloseBusy{store: Store}
   RootCloseMissing{store: Store}
 
+# Returns the updated snapshot registry and an admitted owner cursor identifier.
+type CursorOpenResult is Type:
+  CursorStored{store: Store, cursor_id: U32}
+  CursorRejected{store: Store}
+
+# Reports cursor release while preserving owner-held snapshot roots.
+type CursorCloseResult is Type:
+  CursorReleased{store: Store, snapshot_id: U32}
+  CursorReleaseRejected{store: Store}
+
 # Carries aligned owner identifiers and roots through a removal search.
 type RootRemoveResult is Type:
   RootRemoved{prefix_ids: List<&2, U32>,
@@ -575,3 +585,41 @@ def close.inputs(store: Store, snapshot_ids: U32 & U32) -> CloseResult:
 # Closes a childless owner snapshot and releases its root from the store.
 def close(store: Store, snapshot_id: U32) -> CloseResult:
   close.inputs(store, Snapshot.u32.duplicate(snapshot_id))
+
+def cursor.open.result(
+  ids: List<&2, U32>,
+  roots: List<&1, ByteDb.SnapshotRoot>,
+  decision: Snapshot.OwnerCursorOpenDecision
+) -> CursorOpenResult:
+  match decision:
+    case Snapshot.OwnerCursorOpened{registry, cursor_id}:
+      CursorStored{Store{registry, ids, roots}, cursor_id}
+    case Snapshot.OwnerCursorRejected{registry}:
+      CursorRejected{Store{registry, ids, roots}}
+
+def cursor.open(
+  store: Store,
+  snapshot_id: U32,
+  max_cursors: Nat
+) -> CursorOpenResult:
+  match store:
+    case Store{registry, ids, roots}:
+      cursor.open.result(ids, roots,
+        Snapshot.owner.cursor.open(registry, snapshot_id, max_cursors))
+
+def cursor.close.result(
+  ids: List<&2, U32>,
+  roots: List<&1, ByteDb.SnapshotRoot>,
+  decision: Snapshot.OwnerCursorCloseDecision
+) -> CursorCloseResult:
+  match decision:
+    case Snapshot.OwnerCursorClosed{registry, snapshot_id}:
+      CursorReleased{Store{registry, ids, roots}, snapshot_id}
+    case Snapshot.OwnerCursorCloseRejected{registry}:
+      CursorReleaseRejected{Store{registry, ids, roots}}
+
+def cursor.close(store: Store, cursor_id: U32) -> CursorCloseResult:
+  match store:
+    case Store{registry, ids, roots}:
+      cursor.close.result(ids, roots,
+        Snapshot.owner.cursor.close(registry, cursor_id))

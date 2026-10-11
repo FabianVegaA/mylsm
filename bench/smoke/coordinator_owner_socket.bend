@@ -5,6 +5,7 @@ import ../../src/Console.bend as Console
 import ../../src/DbLock.bend as DbLock
 import ../../src/Fs.bend as Fs
 import ../../src/coordinator/Owner.bend as Owner
+import ../../src/coordinator/OwnerCursorStore.bend as OwnerCursorStore
 import ../../src/coordinator/OwnerSnapshotStore.bend as OwnerSnapshots
 import ../../src/coordinator/UnixSocketIo.bend as UnixSocket
 import ../../src/scan/VisibleStats.bend as VisibleStats
@@ -42,7 +43,8 @@ def listening(
   match pair:
     case (server, Done{Unit{}}):
       Owner.serve.loop(30n,
-        Owner.Serving{server, handle, endpoint, 1, OwnerSnapshots.empty()})
+        Owner.Serving{server, handle, endpoint, 1, OwnerSnapshots.empty(),
+          OwnerCursorStore.empty()})
     case (server, Fail{_}): failed(server, handle, endpoint, "owner listen failed")
 
 # Restricts endpoint access before accepting client connections.
