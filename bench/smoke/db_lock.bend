@@ -27,6 +27,18 @@ def check_busy_kind(is_busy: Bool) -> IO(Unit):
     case False{}:
       IO.die(Unit, U32.from_nat(1n), "lock returned the wrong error")
 
+# Requires a timed acquisition to fail with its distinct timeout category.
+def check_timeout_result(result: Result<&1, &1, DurableError.Error, DbLock.Lock>) -> IO(Unit):
+  match result:
+    case Fail{DurableError.Error{DurableError.Timeout{}, _, _, _, _}}:
+      IO.print("LOCK_TIMEOUT")
+    case Fail{_}:
+      IO.die(Unit, U32.from_nat(1n), "timed acquisition returned the wrong error")
+    case Done{lock}:
+      do IO<Unit>:
+        _released : Result<&1, &1, DurableError.Error, Unit> <- DbLock.release(lock, "close", "")
+        IO.die(Unit, U32.from_nat(1n), "timed acquisition ignored a held lock")
+
 # Checks the check busy result condition in this fixture.
 def check_busy_result(result: Result<&1, &1, DurableError.Error, DbLock.Lock>) -> IO(Unit):
   match result:
@@ -60,13 +72,26 @@ def acquired(hold: Bool, result: Result<&1, &1, DurableError.Error, DbLock.Lock>
     case Done{lock}:
       released_after(hold, lock)
 
+# Confirms a timed acquisition succeeds once the previous owner releases.
+def wait_after_release(path: String) -> IO(Unit):
+  do IO<Unit>:
+    result : Result<&1, &1, DurableError.Error, DbLock.Lock> <- DbLock.acquire_wait(path, "open_existing", 20, 2)
+    acquired(False{}, result)
+
 # Continues the same process result fixture step.
-def same_process_result(lock: DbLock.Lock, result: Result<&1, &1, DurableError.Error, DbLock.Lock>) -> IO(Unit):
+def same_process_result(
+  lock: DbLock.Lock,
+  result: Result<&1, &1, DurableError.Error, DbLock.Lock>,
+  +path: String
+) -> IO(Unit):
   match result:
     case Fail{DurableError.Error{kind, _, _, _, _}}:
       do IO<Unit>:
+        waited : Result<&1, &1, DurableError.Error, DbLock.Lock> <- DbLock.acquire_wait(path, "open_existing", 20, 2)
+        check_timeout_result(waited)
         _released : Result<&1, &1, DurableError.Error, Unit> <- DbLock.release(lock, "close", "")
-        check_busy_kind(is_busy_kind(kind))
+        _checked : Unit <- check_busy_kind(is_busy_kind(kind))
+        wait_after_release(path)
     case Done{second}:
       do IO<Unit>:
         _released_second : Result<&1, &1, DurableError.Error, Unit> <- DbLock.release(second, "close", "")
@@ -74,14 +99,14 @@ def same_process_result(lock: DbLock.Lock, result: Result<&1, &1, DurableError.E
         IO.die(Unit, U32.from_nat(1n), "same-process duplicate lock acquisition succeeded")
 
 # Continues the same process acquired fixture step.
-def same_process_acquired(result: Result<&1, &1, DurableError.Error, DbLock.Lock>, path: String) -> IO(Unit):
+def same_process_acquired(result: Result<&1, &1, DurableError.Error, DbLock.Lock>, +path: String) -> IO(Unit):
   match result:
     case Fail{_}:
       IO.die(Unit, U32.from_nat(1n), "same-process initial lock acquisition failed")
     case Done{lock}:
       do IO<Unit>:
         second : Result<&1, &1, DurableError.Error, DbLock.Lock> <- DbLock.acquire(path, "open_existing")
-        same_process_result(lock, second)
+        same_process_result(lock, second, path)
 
 # Continues the same process open fixture step.
 def same_process_open() -> IO(Unit):

@@ -878,6 +878,16 @@ type StreamState is Type:
     previous: Maybe<&2, String>, entries: List<&2, MemTable.Entry>,
     hashes: List<&1, Bytes.Bytes>}
 
+# Holds bounded SST validation state without retaining prior table entries.
+type BlockStreamState is Type:
+  BlockStreamState{level: U32, total: U32, block_count: U32,
+    remaining: U32, entries_left: U32,
+    previous: Maybe<&2, String>, hashes: List<&1, Bytes.Bytes>}
+
+# Returns one validated block and the state for the next block.
+type BlockStreamOutput is Type:
+  BlockStreamOutput{state: BlockStreamState, entries: List<&2, MemTable.Entry>}
+
 def parse.hash.wrap(pair: Bytes.Cursor & Maybe<&2, U32>) -> HashRead:
   match pair:
     case (cursor, value):
@@ -1143,6 +1153,148 @@ def parse.blocks.count.valid(
   +count: U32
 ) -> Bool:
   parse.blocks.count.valid.last(Nat.is_eq(remaining, 1n), entries_left, count)
+
+# Accepts a block only when it fits the file's remaining block and entry counts.
+def stream.blocks.count.valid(
+  exact: Bool,
+  +remaining: U32,
+  +entries_left: U32,
+  +count: U32
+) -> Bool:
+  exact && U32.is_lt(0, remaining) && U32.is_le(count, entries_left) &&
+    parse.blocks.count.valid(U32.to_nat(remaining), entries_left, count)
+
+# Updates constant-size file state and returns this block's ordered entries.
+def stream.blocks.updated(
+  state: BlockStreamState,
+  records: ParsedEntries,
+  +count: U32,
+  digest: Bytes.Bytes
+) -> BlockStreamOutput:
+  match state:
+    case BlockStreamState{+level, +total, +block_count, +remaining,
+        +entries_left, _, hashes}:
+      match records:
+        case Entries{reversed, previous}:
+          BlockStreamOutput{
+            BlockStreamState{level, total, block_count,
+              (remaining - 1 : U32), (entries_left - count : U32),
+              previous, Con{digest, hashes}},
+            List.reverse(&2, MemTable.Entry, reversed)}
+
+# Converts the bounded count decision into a validated block output.
+def stream.blocks.decide(
+  state: BlockStreamState,
+  records: ParsedEntries,
+  +count: U32,
+  digest: Bytes.Bytes,
+  valid: Bool
+) -> Result<&1, &1, Error, BlockStreamOutput>:
+  match valid:
+    case False{}:
+      Fail{Malformed{}}
+    case True{}:
+      Done{stream.blocks.updated(state, records, count, digest)}
+
+# Applies count, order, and exact-block-consumption rules to one parsed block.
+def stream.blocks.valid(
+  state: BlockStreamState,
+  records: ParsedEntries,
+  +count: U32,
+  digest: Bytes.Bytes,
+  exact: Bool
+) -> Result<&1, &1, Error, BlockStreamOutput>:
+  match state:
+    case BlockStreamState{_, _, _, +remaining, +entries_left, _, _}:
+      stream.blocks.decide(state, records, count, digest,
+        stream.blocks.count.valid(exact, remaining, entries_left, count))
+
+# Validates one block's checksum and returns its bounded entry list.
+def stream.blocks.complete(
+  state: BlockStreamState,
+  block: ParsedBlock,
+  exact: Bool
+) -> Result<&1, &1, Error, BlockStreamOutput>:
+  match block:
+    case ParsedBlock{records, +count, digest}:
+      stream.blocks.valid(state, records, count, digest, exact)
+
+# Requires the block parser to consume its complete input slice.
+def stream.blocks.consumed(
+  pair: Bytes.Cursor & U32,
+  state: BlockStreamState,
+  block: ParsedBlock
+) -> Result<&1, &1, Error, BlockStreamOutput>:
+  match pair:
+    case (_, remaining):
+      stream.blocks.complete(state, block, U32.is_eq(remaining, 0))
+
+# Propagates parse failures without returning a partial block.
+def stream.blocks.result(
+  state: BlockStreamState,
+  pair: Bytes.Cursor & Result<&1, &1, Error, ParsedBlock>
+) -> Result<&1, &1, Error, BlockStreamOutput>:
+  match pair:
+    case (_, Fail{error}):
+      Fail{error}
+    case (cursor, Done{block}):
+      stream.blocks.consumed(Bytes.Cursor.remaining(cursor), state, block)
+
+# Parses and authenticates exactly one SST block at a time.
+def stream.blocks.next(
+  state: BlockStreamState,
+  bytes: Bytes.Bytes
+) -> Result<&1, &1, Error, BlockStreamOutput>:
+  match state:
+    case BlockStreamState{_, _, _, _, _, +previous, _}:
+      stream.blocks.result(state, parse.block(Bytes.Cursor.new(bytes), previous))
+
+# Projects successful footer validation to a unit result.
+def stream.blocks.footer.result(
+  result: Result<&1, &1, Error, Sstable.Table>
+) -> Result<&1, &1, Error, Unit>:
+  match result:
+    case Fail{error}:
+      Fail{error}
+    case Done{_}:
+      Done{Unit{}}
+
+# Parses a footer only after the block and entry counts reach zero.
+def stream.blocks.footer.parse(
+  +level: U32,
+  +total: U32,
+  +block_count: U32,
+  hashes: List<&1, Bytes.Bytes>,
+  bytes: Bytes.Bytes,
+  valid: Bool
+) -> Result<&1, &1, Error, Unit>:
+  match valid:
+    case False{}:
+      Fail{Malformed{}}
+    case True{}:
+      stream.blocks.footer.result(parse.footer.magic(
+        Bytes.Cursor.u32be(Bytes.Cursor.new(bytes)), level, total,
+        block_count, Nil{}, hashes))
+
+# Validates the exact footer after every block has been consumed.
+def stream.blocks.footer.valid(
+  state: BlockStreamState,
+  bytes: Bytes.Bytes,
+  valid: Bool
+) -> Result<&1, &1, Error, Unit>:
+  match state:
+    case BlockStreamState{+level, +total, +block_count, _, _, _, hashes}:
+      stream.blocks.footer.parse(level, total, block_count, hashes, bytes, valid)
+
+# Checks block and entry exhaustion before validating the SST footer.
+def stream.blocks.footer(
+  state: BlockStreamState,
+  bytes: Bytes.Bytes
+) -> Result<&1, &1, Error, Unit>:
+  match state:
+    case BlockStreamState{_, _, _, +remaining, +entries_left, _, _}:
+      stream.blocks.footer.valid(state, bytes,
+        U32.is_eq(remaining, 0) && U32.is_eq(entries_left, 0))
 
 def parse.blocks.accumulate.records.last(
   cursor: Bytes.Cursor,
@@ -1509,6 +1661,22 @@ def stream.header.done(
 def stream.header(bytes: Bytes.Bytes) -> Result<&1, &1, Error, StreamState>:
   stream.header.done(parse.header.magic.one(
     Bytes.Cursor.u32be(Bytes.Cursor.new(bytes))))
+
+# Drops the legacy materialized-entry field when opening a block reader.
+def stream.blocks.header.result(
+  result: Result<&1, &1, Error, StreamState>
+) -> Result<&1, &1, Error, BlockStreamState>:
+  match result:
+    case Fail{error}:
+      Fail{error}
+    case Done{StreamState{level, total, block_count, remaining,
+        entries_left, previous, _, hashes}}:
+      Done{BlockStreamState{level, total, block_count, remaining,
+        entries_left, previous, hashes}}
+
+# Opens a block stream from the fixed SST header without allocating entries.
+def stream.blocks.header(bytes: Bytes.Bytes) -> Result<&1, &1, Error, BlockStreamState>:
+  stream.blocks.header.result(stream.header(bytes))
 
 # Retain bounded file chunks until the strict parser is applied.
 def new_decoder() -> Decoder:

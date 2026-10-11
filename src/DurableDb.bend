@@ -83,6 +83,20 @@ def locked_result(
         opened : Result<&1, &1, U32 & String, Db.Db> <- Recover.open_existing_locked(path)
         open_result(opened, lock, operation, path)
 
+def preflight.manifest.canonical(
+  +original_path: String,
+  result: Result<&1, &1, U32 & String, String>
+) -> IO(Result<&1, &1, DurableError.Error, Handle>):
+  match result:
+    case Fail{(code, message)}:
+      IO.pure(Result<&1, &1, DurableError.Error, Handle>,
+        Fail{open_error(code, message, "open_existing", original_path)})
+    case Done{+path}:
+      do IO<Result<&1, &1, DurableError.Error, Handle>>:
+        acquired : Result<&1, &1, DurableError.Error, DbLock.Lock> <-
+          DbLock.acquire(path, "open_existing")
+        locked_result(acquired, "open_existing", path)
+
 # Acquires ownership only after validating the existing Manifest.
 def preflight_manifest(
   manifest: Result<&1, &1, U32 & String, Manifest.Manifest>,
@@ -94,8 +108,41 @@ def preflight_manifest(
         Fail{DurableError.classify_recovery(code, message, "open_existing", path)})
     case Done{_}:
       do IO<Result<&1, &1, DurableError.Error, Handle>>:
-        acquired : Result<&1, &1, DurableError.Error, DbLock.Lock> <- DbLock.acquire(path, "open_existing")
+        canonical : Result<&1, &1, U32 & String, String> <- Fs.canonical_path(path)
+        preflight.manifest.canonical(path, canonical)
+
+# Acquires the lock after the Manifest has been validated and the path resolved.
+def preflight.manifest.wait.canonical(
+  +original_path: String,
+  result: Result<&1, &1, U32 & String, String>,
+  +timeout_ms: U32,
+  +backoff_ms: U32
+) -> IO(Result<&1, &1, DurableError.Error, Handle>):
+  match result:
+    case Fail{(code, message)}:
+      IO.pure(Result<&1, &1, DurableError.Error, Handle>,
+        Fail{open_error(code, message, "open_existing", original_path)})
+    case Done{+path}:
+      do IO<Result<&1, &1, DurableError.Error, Handle>>:
+        acquired : Result<&1, &1, DurableError.Error, DbLock.Lock> <-
+          DbLock.acquire_wait(path, "open_existing", timeout_ms, backoff_ms)
         locked_result(acquired, "open_existing", path)
+
+# Validates the existing Manifest before waiting for exclusive ownership.
+def preflight_manifest_wait(
+  manifest: Result<&1, &1, U32 & String, Manifest.Manifest>,
+  +path: String,
+  timeout_ms: U32,
+  backoff_ms: U32
+) -> IO(Result<&1, &1, DurableError.Error, Handle>):
+  match manifest:
+    case Fail{(code, message)}:
+      IO.pure(Result<&1, &1, DurableError.Error, Handle>,
+        Fail{DurableError.classify_recovery(code, message, "open_existing", path)})
+    case Done{_}:
+      do IO<Result<&1, &1, DurableError.Error, Handle>>:
+        canonical : Result<&1, &1, U32 & String, String> <- Fs.canonical_path(path)
+        preflight.manifest.wait.canonical(path, canonical, timeout_ms, backoff_ms)
 
 # Rejects a missing Manifest or begins validating the existing one.
 def preflight_result(
@@ -114,11 +161,40 @@ def preflight_result(
         manifest : Result<&1, &1, U32 & String, Manifest.Manifest> <- Flush.load_mfst(path ++ "/MANIFEST")
         preflight_manifest(manifest, path)
 
+# Continues timed-open validation after checking the Manifest path.
+def preflight_result_wait(
+  result: Result<&1, &1, U32 & String, Bool>,
+  +path: String,
+  timeout_ms: U32,
+  backoff_ms: U32
+) -> IO(Result<&1, &1, DurableError.Error, Handle>):
+  match result:
+    case Fail{(code, message)}:
+      IO.pure(Result<&1, &1, DurableError.Error, Handle>,
+        Fail{open_error(code, message, "open_existing", path)})
+    case Done{False{}}:
+      IO.pure(Result<&1, &1, DurableError.Error, Handle>,
+        Fail{DurableError.Error{DurableError.NotFound{}, "open_existing", path, 2, "manifest missing"}})
+    case Done{True{}}:
+      do IO<Result<&1, &1, DurableError.Error, Handle>>:
+        manifest : Result<&1, &1, U32 & String, Manifest.Manifest> <- Flush.load_mfst(path ++ "/MANIFEST")
+        preflight_manifest_wait(manifest, path, timeout_ms, backoff_ms)
+
 # Opens and recovers an existing database under its lock.
 def open_existing(+path: String) -> IO(Result<&1, &1, DurableError.Error, Handle>):
   do IO<Result<&1, &1, DurableError.Error, Handle>>:
     present : Result<&1, &1, U32 & String, Bool> <- Fs.exists(path ++ "/MANIFEST")
     preflight_result(present, path)
+
+# Opens and recovers an existing database with a bounded lock wait.
+def open_existing_wait(
+  +path: String,
+  timeout_ms: U32,
+  backoff_ms: U32
+) -> IO(Result<&1, &1, DurableError.Error, Handle>):
+  do IO<Result<&1, &1, DurableError.Error, Handle>>:
+    present : Result<&1, &1, U32 & String, Bool> <- Fs.exists(path ++ "/MANIFEST")
+    preflight_result_wait(present, path, timeout_ms, backoff_ms)
 
 # Performs the create locked operation and returns its result.
 def create_locked(
@@ -133,6 +209,20 @@ def create_locked(
         initialized : Result<&1, &1, U32 & String, Db.Db> <- Recover.create_locked(path)
         open_result(initialized, lock, "create", path)
 
+def created_dir.canonical(
+  +original_path: String,
+  result: Result<&1, &1, U32 & String, String>
+) -> IO(Result<&1, &1, DurableError.Error, Handle>):
+  match result:
+    case Fail{(code, message)}:
+      IO.pure(Result<&1, &1, DurableError.Error, Handle>,
+        Fail{create_error.code(code, message, original_path)})
+    case Done{+path}:
+      do IO<Result<&1, &1, DurableError.Error, Handle>>:
+        acquired : Result<&1, &1, DurableError.Error, DbLock.Lock> <-
+          DbLock.acquire(path, "create")
+        create_locked(acquired, path)
+
 # Acquires ownership after reserving the new database directory.
 def created_dir(
   result: Result<&1, &1, U32 & String, Unit>,
@@ -144,8 +234,8 @@ def created_dir(
         Fail{create_error.code(code, message, path)})
     case Done{Unit{}}:
       do IO<Result<&1, &1, DurableError.Error, Handle>>:
-        acquired : Result<&1, &1, DurableError.Error, DbLock.Lock> <- DbLock.acquire(path, "create")
-        create_locked(acquired, path)
+        canonical : Result<&1, &1, U32 & String, String> <- Fs.canonical_path(path)
+        created_dir.canonical(path, canonical)
 
 # Creates a database and returns its owned durable handle.
 def create(+path: String) -> IO(Result<&1, &1, DurableError.Error, Handle>):

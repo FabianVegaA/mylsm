@@ -4,8 +4,8 @@
 **Status:** A+B accepted for MyLSM 0.5.0.0; C–E remain separate increments.
 **Target release:** `0.5.0.0` for deliveries A–B; C–E remain separate increments.
 **Scope:** Core deliveries A–E. Binary values and conditional batches (F–G)
-are later proposals; general transactions and specialized libraries require
-separate designs.
+are later proposals; general transactions, coordinated writers, and specialized
+libraries require separate designs.
 **Decision:** Adopt a single-owner embedded database with durable atomic
 batches, bounded scans, retained-version snapshots, and logical backup and
 restore. Keep the public key/value API String-based through A–E.
@@ -63,6 +63,7 @@ La primera entrega A+B está fijada por el usuario como versión 0.5.0.0; su pub
   universal de preparación para producción.
 - Transacciones generales de lectura-modificación-escritura; requieren un
   diseño separado.
+- Escritores coordinados desde varios procesos; requieren un diseño separado.
 - Bindings de lenguajes y distribución de binarios.
 - Modelos de documentos, búsqueda o memoria dentro del motor.
 
@@ -402,6 +403,32 @@ propias, límites de duración/memoria, abortos, reintentos y recuperación. Deb
 historias concurrentes y una justificación del costo frente al batch condicional.
 No se promete serializabilidad ni se agrega MVCC por registro anticipadamente.
 
+### I. Escritores coordinados desde varios procesos, sujetos a un caso concreto
+
+Esta capacidad es distinta de esperar para adquirir el lock exclusivo. La espera
+solo permite que distintos procesos sean propietarios de la base por turnos;
+la coordinación permitiría que varios clientes envíen operaciones mientras un
+único propietario canónico las serializa. La primera propuesta debe conservar un
+solo estado en memoria y un único punto de escritura, por ejemplo mediante un
+servicio propietario con una cola acotada de solicitudes. No basta con quitar el
+lock de apertura ni con poner un lock alrededor de cada escritura: cada handle
+mantendría una vista en memoria potencialmente obsoleta y podría perder cambios.
+
+Un diseño separado debe definir transporte y ciclo de vida del propietario,
+orden y equidad de la cola, visibilidad de escrituras confirmadas, consistencia
+de lecturas entre clientes, límites y backpressure, duplicados/reintentos,
+resultado de solicitudes durante una caída y recuperación. Los `write_batch`
+aceptados conservan atomicidad y las garantías de durabilidad de A; no se promete
+exactly-once. Esta capacidad no implica transacciones generales, aislamiento
+serializable ni escrituras físicas paralelas.
+
+Aceptación: clientes en procesos independientes pueden enviar escrituras sin
+perder batches confirmados ni exponer batches parciales; el orden observable y
+la respuesta ante caída del propietario están especificados; cola y memoria
+permanecen acotadas; tras reinicio no se aceptan operaciones desde una vista
+obsoleta. La necesidad debe justificarse con una carga real antes de elegir el
+transporte o incluir la entrega en la secuencia del núcleo.
+
 ### Capas de documentos, búsqueda y memoria
 
 Estas capacidades viven en librerías separadas que consumen exclusivamente la API
@@ -417,5 +444,5 @@ Cada librería define sus formatos, migraciones, pruebas y benchmarks por separa
 no accede al WAL ni a tablas internas. Una limitación repetida entre consumidores
 puede motivar una nueva primitiva general mediante otro spec.
 
-La secuencia propuesta es A–E → F → G. H y las librerías se eligen por necesidades
-comprobadas, no como requisito para declarar útil la base key-value.
+La secuencia propuesta es A–E → F → G. H, I y las librerías se eligen por
+necesidades comprobadas, no como requisito para declarar útil la base key-value.

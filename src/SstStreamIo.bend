@@ -1,5 +1,6 @@
 import Base
 import ./Fs.bend as Fs
+import ./SstReadPolicy.bend as SstReadPolicy
 import ./MemTable.bend as MemTable
 import ./Sstable.bend as Sstable
 import ./SstFile.bend as SstFile
@@ -8,6 +9,10 @@ import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 # Returns the typed corruption code for SST codec failures.
 def corruption_error_code() -> U32:
   4294967292
+
+# Returns the typed resource-limit code for bounded SST reads.
+def resource_limit_error_code() -> U32:
+  4294967291
 
 # Map pure format errors to the storage IO error domain.
 def codec_error(error: SstFile.Error) -> U32 & String:
@@ -389,6 +394,49 @@ def read.table.size.checked(
 def read.table.size(+path: String, +size: Nat) -> IO(Result<&1, &1, U32 & String, Sstable.Table>):
   read.table.size.checked(path, size,
     Nat.is_le(60n, size) && Nat.is_le(size, 4294967295n))
+
+def read.table.size.limited.decision(
+  +path: String,
+  +size: Nat,
+  decision: SstReadPolicy.Decision
+) -> IO(Result<&1, &1, U32 & String, Sstable.Table>):
+  match decision:
+    case SstReadPolicy.TooSmall{}:
+      IO.pure(Result<&1, &1, U32 & String, Sstable.Table>,
+        Fail{(corruption_error_code(), "malformed SST size")})
+    case SstReadPolicy.OverBudget{}:
+      IO.pure(Result<&1, &1, U32 & String, Sstable.Table>,
+        Fail{(resource_limit_error_code(), "SST exceeds configured byte budget")})
+    case SstReadPolicy.WithinBudget{}:
+      read.table.size.checked(path, size, True{})
+
+def read.table.size.limited(
+  +path: String,
+  +size: Nat,
+  max_bytes: Nat
+) -> IO(Result<&1, &1, U32 & String, Sstable.Table>):
+  read.table.size.limited.decision(path, size,
+    SstReadPolicy.classify(size, max_bytes))
+
+def read.table.limited.file_size(
+  +path: String,
+  max_bytes: Nat,
+  result: Result<&1, &1, U32 & String, Nat>
+) -> IO(Result<&1, &1, U32 & String, Sstable.Table>):
+  match result:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, U32 & String, Sstable.Table>, Fail{error})
+    case Done{size}:
+      read.table.size.limited(path, size, max_bytes)
+
+# Reads one SST only when its complete on-disk size fits the caller's budget.
+def read_table_limited(
+  +path: String,
+  max_bytes: Nat
+) -> IO(Result<&1, &1, U32 & String, Sstable.Table>):
+  do IO<Result<&1, &1, U32 & String, Sstable.Table>>:
+    size : Result<&1, &1, U32 & String, Nat> <- Fs.file_size(path)
+    read.table.limited.file_size(path, max_bytes, size)
 
 # Read table for the streaming SSTable filesystem effects.
 def read.table.file_size(

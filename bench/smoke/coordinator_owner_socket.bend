@@ -40,7 +40,7 @@ def listening(
 ) -> IO(Unit):
   match pair:
     case (server, Done{Unit{}}):
-      Owner.serve.loop(22n, Owner.Serving{server, handle, endpoint, 1})
+      Owner.serve.loop(26n, Owner.Serving{server, handle, endpoint, 1})
     case (server, Fail{_}): failed(server, handle, endpoint, "owner listen failed")
 
 # Restricts endpoint access before accepting client connections.
@@ -118,7 +118,7 @@ def opened.handle.paths(
   match paths:
     case (endpoint_base, handle_path):
       opened.endpoint(ByteDb.Handle{handle_path, lock, table, state, stats},
-        endpoint_base ++ "/OWNER.sock")
+        endpoint_base ++ "/MYLSM.sock")
 
 # Derives and publishes one endpoint while the handle still owns the lock.
 def opened.handle(handle: ByteDb.Handle) -> IO(Unit):

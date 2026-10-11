@@ -1,6 +1,24 @@
 import Base
 import bend-mathlib@0.7.0.0/string.bend as MString
 import bend-mathlib@0.7.0.0/bool.bend as MBool
+import bend-kit-bytes@0.3.2.0/bytes.bend as PackedBytes
+
+def Bytes.cmp.order(pair: PackedBytes.Bytes & PackedBytes.Bytes & Cmp) -> Cmp:
+  match pair:
+    case (_, _, order):
+      order
+
+def Bytes.cmp.with_inputs(
+  left: PackedBytes.Bytes,
+  right: PackedBytes.Bytes
+) -> PackedBytes.Bytes & PackedBytes.Bytes & Cmp:
+  PackedBytes.cmp(left, right)
+
+def Bytes.cmp(left: PackedBytes.Bytes, right: PackedBytes.Bytes) -> Cmp:
+  Bytes.cmp.order(Bytes.cmp.with_inputs(left, right))
+
+def Bytes.eq(left: PackedBytes.Bytes, right: PackedBytes.Bytes) -> Bool:
+  Cmp.is_eq(Bytes.cmp(left, right))
 
 # Total-order comparison for keys. Base's String.cmp hands the strings back
 # beside the verdict ((s1, s2), c); we take reusable copies and unpack via a

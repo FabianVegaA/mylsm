@@ -21,6 +21,7 @@ ln -s "$WORK/db" "$WORK/alias"
 
 MYLSM_LOCK_PATH="$WORK/db" MYLSM_LOCK_MODE=same-process "$BINARY" > "$BUILD_DIR/same-process.log"
 grep -q '^LOCK_BUSY$' "$BUILD_DIR/same-process.log"
+grep -q '^LOCK_TIMEOUT$' "$BUILD_DIR/same-process.log"
 
 MYLSM_LOCK_PATH="$WORK/db" MYLSM_LOCK_MODE=hold "$BINARY" > "$BUILD_DIR/owner.log" 2>&1 &
 OWNER=$!

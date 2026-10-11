@@ -6,7 +6,9 @@ type ErrorKind is Data:
   NotFound{}
   AlreadyExists{}
   Busy{}
+  Timeout{}
   InvalidArgument{}
+  UnsupportedPlatform{}
   UnsupportedFormat{}
   Corruption{}
   ResourceLimit{}
