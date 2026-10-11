@@ -82,6 +82,11 @@ law request_over_limit_is_rejected:
 law response_tag_is_not_a_request_operation:
   {Protocol.validate(Protocol.Request{1, 7, 19, 7, Bytes.new(0)}, 1, 7, 16n) == Protocol.UnsupportedRequestOperation{} : Protocol.Decision}
 
+# Admits the atomic batch operation while reserving tag seven for responses.
+law batch_tag_is_a_request_operation:
+  {Protocol.validate(Protocol.Request{1, 7, 19, 8, Bytes.new(0)}, 1, 7, 16n) ==
+    Protocol.Accepted{19, 8, Bytes.new(0)} : Protocol.Decision}
+
 # Round-trips the operation tag and payload in an exact request frame.
 law encoded_request_decodes_exactly:
   {frame.roundtrips(Protocol.Request{1, 7, 19, 2, Bytes.new(0)},

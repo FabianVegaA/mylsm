@@ -83,6 +83,7 @@ def operation.is_mutation(operation: U32) -> Bool:
     case 3: True{}
     case 4: True{}
     case 5: True{}
+    case 8: True{}
     case _: False{}
 
 # Enforces the encoded IPC payload ceiling before client socket allocation.

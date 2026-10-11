@@ -54,12 +54,14 @@ law write_operation_tags_are_mutations:
   {(ClientPolicy.operation.is_mutation(2) &&
     ClientPolicy.operation.is_mutation(3) &&
     ClientPolicy.operation.is_mutation(4) &&
-    ClientPolicy.operation.is_mutation(5)) == True{} : Bool}
+    ClientPolicy.operation.is_mutation(5) &&
+    ClientPolicy.operation.is_mutation(8)) == True{} : Bool}
 
 # Classifies reads, stats, and unknown tags as non-mutations.
 law non_mutation_operation_tags_stay_reads:
   {(Bool.not(ClientPolicy.operation.is_mutation(1)) &&
     Bool.not(ClientPolicy.operation.is_mutation(6)) &&
+    Bool.not(ClientPolicy.operation.is_mutation(7)) &&
     Bool.not(ClientPolicy.operation.is_mutation(4294967295))) == True{} : Bool}
 
 # Rejects replies whose request identifier or protocol version does not match.

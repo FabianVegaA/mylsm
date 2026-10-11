@@ -25,6 +25,9 @@ def Laws.request_over_limit_is_rejected():
 def Laws.response_tag_is_not_a_request_operation():
   {==}
 
+def Laws.batch_tag_is_a_request_operation():
+  {==}
+
 def Laws.encoded_request_decodes_exactly():
   {==}
 

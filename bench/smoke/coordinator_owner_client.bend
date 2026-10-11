@@ -5,6 +5,7 @@ import ../../src/coordinator/ByteClient.bend as ByteClient
 import ../../src/coordinator/Io.bend as ClientIo
 import ../../src/coordinator/Protocol.bend as Protocol
 import ../../src/coordinator/UnixSocketIo.bend as UnixSocket
+import ../../src/ByteWal.bend as ByteWal
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # Converts a parsed hexadecimal fixture into its exact request bytes.
@@ -82,13 +83,78 @@ def get.missing(session: Client.Session) -> IO(Unit):
       ByteClient.get(session, bytes.from_hex("0102"))
     get.missing.result(pair)
 
-def get.response.value.equal(
+def batch.second.value.equal(
   pair: Client.Session & (Bytes.Bytes & Bytes.Bytes & Bool)
 ) -> IO(Unit):
   match pair:
     case (session, (_, (_, equal))):
       match equal:
         case True{}: get.missing(session)
+        case False{}: fail("coordinator batch omitted its second mutation")
+
+def batch.second.result(
+  pair: Client.Session & Result<&1, &1, Client.Error, Maybe<&1, Bytes.Bytes>>
+) -> IO(Unit):
+  match pair:
+    case (_, Fail{_}): fail("coordinator second batch read failed")
+    case (session, Done{Some{value}}):
+      batch.second.value.equal((session,
+        Bytes.eq(value, bytes.from_hex("ccdd"))))
+    case (_, Done{None{}}): fail("coordinator batch omitted its second key")
+
+def batch.second.get(session: Client.Session) -> IO(Unit):
+  do IO<Unit>:
+    pair : Client.Session & Result<&1, &1, Client.Error, Maybe<&1, Bytes.Bytes>> <-
+      ByteClient.get(session, bytes.from_hex("0104"))
+    batch.second.result(pair)
+
+def batch.first.value.equal(
+  pair: Client.Session & (Bytes.Bytes & Bytes.Bytes & Bool)
+) -> IO(Unit):
+  match pair:
+    case (session, (_, (_, equal))):
+      match equal:
+        case True{}: batch.second.get(session)
+        case False{}: fail("coordinator batch changed its first mutation")
+
+def batch.first.result(
+  pair: Client.Session & Result<&1, &1, Client.Error, Maybe<&1, Bytes.Bytes>>
+) -> IO(Unit):
+  match pair:
+    case (_, Fail{_}): fail("coordinator first batch read failed")
+    case (session, Done{Some{value}}):
+      batch.first.value.equal((session,
+        Bytes.eq(value, bytes.from_hex("aabb"))))
+    case (_, Done{None{}}): fail("coordinator batch omitted its first key")
+
+def batch.read(session: Client.Session) -> IO(Unit):
+  do IO<Unit>:
+    pair : Client.Session & Result<&1, &1, Client.Error, Maybe<&1, Bytes.Bytes>> <-
+      ByteClient.get(session, bytes.from_hex("0103"))
+    batch.first.result(pair)
+
+def batch.written(
+  pair: Client.Session & Result<&1, &1, Client.Error, Unit>
+) -> IO(Unit):
+  match pair:
+    case (_, Fail{_}): fail("coordinator byte batch failed")
+    case (session, Done{Unit{}}): batch.read(session)
+
+def batch.write(session: Client.Session) -> IO(Unit):
+  do IO<Unit>:
+    pair : Client.Session & Result<&1, &1, Client.Error, Unit> <-
+      ByteClient.write_batch(session,
+        Con{ByteWal.Put{bytes.from_hex("0103"), bytes.from_hex("aabb")},
+          Con{ByteWal.Put{bytes.from_hex("0104"), bytes.from_hex("ccdd")}, Nil{}}})
+    batch.written(pair)
+
+def get.response.value.equal(
+  pair: Client.Session & (Bytes.Bytes & Bytes.Bytes & Bool)
+) -> IO(Unit):
+  match pair:
+    case (session, (_, (_, equal))):
+      match equal:
+        case True{}: batch.write(session)
         case False{}: fail("coordinator client read changed bytes")
 
 # Confirms that a byte get returns the exact non-UTF-8 value through IPC.
@@ -121,13 +187,39 @@ def get.request(session: Client.Session) -> IO(Unit):
       ByteClient.get(session, bytes.from_hex("00ff"))
     get.request.result(pair)
 
+def put.compacted(
+  pair: Client.Session & Result<&1, &1, Client.Error, Unit>
+) -> IO(Unit):
+  match pair:
+    case (_, Fail{_}): fail("coordinator client compaction failed")
+    case (session, Done{Unit{}}): get.request(session)
+
+def put.compact(session: Client.Session) -> IO(Unit):
+  do IO<Unit>:
+    pair : Client.Session & Result<&1, &1, Client.Error, Unit> <-
+      ByteClient.compact(session)
+    put.compacted(pair)
+
+def put.flushed(
+  pair: Client.Session & Result<&1, &1, Client.Error, Unit>
+) -> IO(Unit):
+  match pair:
+    case (_, Fail{_}): fail("coordinator client flush failed")
+    case (session, Done{Unit{}}): put.compact(session)
+
+def put.flush(session: Client.Session) -> IO(Unit):
+  do IO<Unit>:
+    pair : Client.Session & Result<&1, &1, Client.Error, Unit> <-
+      ByteClient.flush(session)
+    put.flushed(pair)
+
 def put.response(
   session: Client.Session,
   result: Result<&1, &1, Client.Error, Unit>
 ) -> IO(Unit):
   match result:
     case Fail{_}: fail("coordinator client put failed")
-    case Done{Unit{}}: get.request(session)
+    case Done{Unit{}}: put.flush(session)
 
 def put.request.confirmed(
   pair: Client.Session & Result<&1, &1, Client.Error, Unit>

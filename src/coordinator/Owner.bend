@@ -142,6 +142,11 @@ def dispatch.operation(
         pair : ByteDb.Handle & Result<&1, &1, ByteDb.Error, Unit> <-
           ByteDb.delete(handle, key)
         return write.response(pair, context)
+    case Operation.WriteBatch{mutations}:
+      do IO<ByteDb.Handle & Protocol.Response>:
+        pair : ByteDb.Handle & Result<&1, &1, ByteDb.Error, Unit> <-
+          ByteDb.write_batch(handle, mutations)
+        return write.response(pair, context)
     case Operation.Flush{}:
       do IO<ByteDb.Handle & Protocol.Response>:
         pair : ByteDb.Handle & Result<&1, &1, ByteDb.Error, Unit> <-
