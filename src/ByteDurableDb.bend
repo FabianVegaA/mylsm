@@ -2512,6 +2512,62 @@ def snapshot_root_limited(
       snapshot.root.retained(path, lock, state, base_stats,
         ByteMemTable.retained_bytes.keep(table), max_bytes)
 
+def snapshot.root.path.clone.copies(
+  copies: String & String
+) -> Maybe<&1, String> & Maybe<&1, String>:
+  match copies:
+    case (first, second): (Some{first}, Some{second})
+
+def snapshot.root.path.clone(
+  path: Maybe<&1, String>
+) -> Maybe<&1, String> & Maybe<&1, String>:
+  match path:
+    case None{}: (None{}, None{})
+    case Some{value}: snapshot.root.path.clone.copies(path.clone.pair(value))
+
+def snapshot.root.generation.clone.copies(
+  values: Nat & Nat
+) -> Maybe<&1, U32> & Maybe<&1, U32>:
+  match values:
+    case (first, second):
+      (Some{U32.from_nat(first)}, Some{U32.from_nat(second)})
+
+def snapshot.root.generation.clone(
+  generation: Maybe<&1, U32>
+) -> Maybe<&1, U32> & Maybe<&1, U32>:
+  match generation:
+    case None{}: (None{}, None{})
+    case Some{value}:
+      snapshot.root.generation.clone.copies(duplicate_nat_pair(
+        U32.to_nat(value)))
+
+def snapshot.root.clone.fields(
+  paths: Maybe<&1, String> & Maybe<&1, String>,
+  generations: Maybe<&1, U32> & Maybe<&1, U32>,
+  retained_bytes: Nat & Nat,
+  deltas: List<&1, ByteMemTable.Entry> & List<&1, ByteMemTable.Entry>
+) -> SnapshotRoot & SnapshotRoot:
+  match paths:
+    case (first_path, second_path):
+      match generations:
+        case (first_generation, second_generation):
+          match retained_bytes:
+            case (first_bytes, second_bytes):
+              match deltas:
+                case (first_delta, second_delta):
+                  (SnapshotRoot{first_path, first_generation, first_bytes,
+                    first_delta},
+                    SnapshotRoot{second_path, second_generation, second_bytes,
+                      second_delta})
+
+def snapshot.root.clone(root: SnapshotRoot) -> SnapshotRoot & SnapshotRoot:
+  match root:
+    case SnapshotRoot{sst_path, sst_generation, retained_bytes, delta}:
+      snapshot.root.clone.fields(snapshot.root.path.clone(sst_path),
+        snapshot.root.generation.clone(sst_generation),
+        duplicate_nat_pair(retained_bytes),
+        ByteMemTable.entries.clone(delta))
+
 def snapshot.root.sst.bounds(bounds: RangeCursor.Bounds) -> SstCursor.Bounds:
   match bounds:
     case RangeCursor.Bounds{lower, upper, prefix}:

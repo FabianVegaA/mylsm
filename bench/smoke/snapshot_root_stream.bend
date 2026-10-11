@@ -113,7 +113,7 @@ def fixture.point.checked(
           ByteDurableDb.close(handle)
         IO.die(Unit, 1, "snapshot point read returned an incorrect value")
 
-def fixture.point.value(
+def fixture.point.clone.second(
   handle: ByteDurableDb.Handle,
   root: ByteDurableDb.SnapshotRoot,
   result: Result<&1, &1, ByteDurableDb.Error, Maybe<&1, Bytes.Bytes>>
@@ -121,6 +121,92 @@ def fixture.point.value(
   match result:
     case Done{Some{value}}:
       fixture.point.checked(handle, root,
+        fixture.equal(Bytes.eq(value, fixture.bytes(Bytes.from_hex("76")))))
+    case _:
+      do IO<Unit>:
+        _handle_close : Result<&1, &1, ByteDurableDb.Error, Unit> <-
+          ByteDurableDb.close(handle)
+        IO.die(Unit, 1, "second retained-root read did not find its key")
+
+def fixture.point.clone.first.checked.result(
+  handle: ByteDurableDb.Handle,
+  first_root: ByteDurableDb.SnapshotRoot,
+  second_root: ByteDurableDb.SnapshotRoot,
+  matches: Bool
+) -> IO(Unit):
+  match matches:
+    case True{}:
+      do IO<Unit>:
+        second : Result<&1, &1, ByteDurableDb.Error,
+          Maybe<&1, Bytes.Bytes>> <- ByteDurableDb.snapshot.root.get(first_root,
+            fixture.bytes(Bytes.from_hex("61")))
+        fixture.point.clone.second(handle, second_root, second)
+    case False{}:
+      do IO<Unit>:
+        _handle_close : Result<&1, &1, ByteDurableDb.Error, Unit> <-
+          ByteDurableDb.close(handle)
+        IO.die(Unit, 1, "first retained-root read returned a changed value")
+
+def fixture.point.clone.first.checked(
+  handle: ByteDurableDb.Handle,
+  roots: ByteDurableDb.SnapshotRoot & ByteDurableDb.SnapshotRoot,
+  matches: Bool
+) -> IO(Unit):
+  match roots:
+    case (first_root, second_root):
+      fixture.point.clone.first.checked.result(handle, first_root, second_root,
+        matches)
+
+def fixture.point.clone.first.result(
+  handle: ByteDurableDb.Handle,
+  root: ByteDurableDb.SnapshotRoot,
+  result: Result<&1, &1, ByteDurableDb.Error, Maybe<&1, Bytes.Bytes>>
+) -> IO(Unit):
+  match result:
+    case Done{Some{value}}:
+      fixture.point.clone.first.checked(handle,
+        ByteDurableDb.snapshot.root.clone(root),
+        fixture.equal(Bytes.eq(value, fixture.bytes(Bytes.from_hex("76")))))
+    case _:
+      do IO<Unit>:
+        _handle_close : Result<&1, &1, ByteDurableDb.Error, Unit> <-
+          ByteDurableDb.close(handle)
+        IO.die(Unit, 1, "first retained-root read did not find its key")
+
+def fixture.point.clone.first(
+  handle: ByteDurableDb.Handle,
+  roots: ByteDurableDb.SnapshotRoot & ByteDurableDb.SnapshotRoot
+) -> IO(Unit):
+  match roots:
+    case (first_root, second_root):
+      do IO<Unit>:
+        result : Result<&1, &1, ByteDurableDb.Error, Maybe<&1, Bytes.Bytes>> <-
+          ByteDurableDb.snapshot.root.get(first_root,
+            fixture.bytes(Bytes.from_hex("61")))
+        fixture.point.clone.first.result(handle, second_root, result)
+
+def fixture.point.value.checked(
+  handle: ByteDurableDb.Handle,
+  root: ByteDurableDb.SnapshotRoot,
+  valid: Bool
+) -> IO(Unit):
+  match valid:
+    case True{}:
+      fixture.point.clone.first(handle, ByteDurableDb.snapshot.root.clone(root))
+    case False{}:
+      do IO<Unit>:
+        _handle_close : Result<&1, &1, ByteDurableDb.Error, Unit> <-
+          ByteDurableDb.close(handle)
+        IO.die(Unit, 1, "snapshot point read returned an incorrect value")
+
+def fixture.point.value(
+  handle: ByteDurableDb.Handle,
+  root: ByteDurableDb.SnapshotRoot,
+  result: Result<&1, &1, ByteDurableDb.Error, Maybe<&1, Bytes.Bytes>>
+) -> IO(Unit):
+  match result:
+    case Done{Some{value}}:
+      fixture.point.value.checked(handle, root,
         fixture.equal(Bytes.eq(value, fixture.bytes(Bytes.from_hex("78")))))
     case _:
       do IO<Unit>:
