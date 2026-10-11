@@ -47,6 +47,7 @@ run_case() {
     sleep 0.02
   done
   [[ -S "$db/MYLSM.sock" ]] || { cat "$owner_log"; return 1; }
+  printf '\000\000\000\001' > "$db/OWNER.GEN"
 
   MYLSM_DB_PATH="$db" MYLSM_CRASH_TEST_MODE=client \
     "$WORK/client" >"$client_log" 2>&1 &
