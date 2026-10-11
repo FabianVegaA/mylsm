@@ -166,7 +166,11 @@ def Bytes.owner.unit.result(
     case (session, Done{Unit{}}):
       (RemoteByteHandle{session}, Done{Unit{}})
 
-def Bytes.owner.get.result(pair: OwnerClient.Session & Result<&1, &1, OwnerClient.Error, Maybe<&1, PackedBytes.Bytes>>) -> Bytes.Handle & Result<&1, &1, Bytes.Error, Maybe<&1, PackedBytes.Bytes>>:
+def Bytes.owner.get.result(
+  pair:
+    OwnerClient.Session &
+      Result<&1, &1, OwnerClient.Error, Maybe<&1, PackedBytes.Bytes>>
+) -> Bytes.Handle & Result<&1, &1, Bytes.Error, Maybe<&1, PackedBytes.Bytes>>:
   match pair:
     case (session, Fail{error}):
       (RemoteByteHandle{session}, Fail{Bytes.owner.error(error)})
@@ -301,7 +305,9 @@ def Bytes.endpoint.result(
       IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
         Fail{UnsupportedPlatform{}})
 
-def Bytes.canonical.endpoint.paths(paths: String & String) ->
+def Bytes.canonical.endpoint.paths(
+  paths: String & String
+) ->
   IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
   match paths:
     case (endpoint_path, retained_path):
@@ -551,7 +557,11 @@ def Bytes.stats.local(
     case (raw, RawByteDb.Stats{entries, payload_bytes}):
       (ByteHandle{raw}, Done{ByteStats{entries, payload_bytes}})
 
-def Bytes.stats.remote(pair: OwnerClient.Session & Result<&1, &1, OwnerClient.Error, OwnerStatsCodec.Stats>) -> Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Stats>:
+def Bytes.stats.remote(
+  pair:
+    OwnerClient.Session & Result<&1, &1, OwnerClient.Error,
+      OwnerStatsCodec.Stats>
+) -> Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Stats>:
   match pair:
     case (session, Fail{error}):
       (RemoteByteHandle{session}, Fail{Bytes.owner.error(error)})

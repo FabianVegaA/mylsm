@@ -9,8 +9,9 @@ def closed(result: Result<&1, &1, MyLSM.Bytes.Error, Unit>) -> IO(Unit):
     case Fail{_}: IO.die(Unit, 1, "owner generation database close failed")
 
 # Creates the database used by the owner restart fixture.
-def opened(result: Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Handle>) ->
-  IO(Unit):
+def opened(
+  result: Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Handle>
+) -> IO(Unit):
   match result:
     case Fail{_}: IO.die(Unit, 1, "owner generation database creation failed")
     case Done{handle}:

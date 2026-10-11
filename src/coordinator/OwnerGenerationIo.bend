@@ -96,8 +96,10 @@ def read.size(
         _closed : Unit <- File.close(file)
         return Fail{Invalid{}}
 
-def read.opened(paths: String & String, opened: Result<&1, &1, U32 & String, File>) ->
-  IO(Result<&1, &1, Error, U32>):
+def read.opened(
+  paths: String & String,
+  opened: Result<&1, &1, U32 & String, File>
+) -> IO(Result<&1, &1, Error, U32>):
   match paths:
     case (size_path, retained_path):
       match opened:
@@ -119,8 +121,10 @@ def read.path(paths: String & String) -> IO(Result<&1, &1, Error, U32>):
 def read(path: String) -> IO(Result<&1, &1, Error, U32>):
   read.path(path.pair(path))
 
-def write.completed(generation: U32, result: Result<&1, &1, U32 & String, Unit>) ->
-  IO(Result<&1, &1, Error, U32>):
+def write.completed(
+  generation: U32,
+  result: Result<&1, &1, U32 & String, Unit>
+) -> IO(Result<&1, &1, Error, U32>):
   match result:
     case Fail{error}:
       IO.pure(Result<&1, &1, Error, U32>, Fail{host(error)})
@@ -226,8 +230,10 @@ def write.opened(
       write.opened.generation(directory, file,
         Generation.u32.clone.pair(generation))
 
-def write.paths(paths: String & String, generation: U32) ->
-  IO(Result<&1, &1, Error, U32>):
+def write.paths(
+  paths: String & String,
+  generation: U32
+) -> IO(Result<&1, &1, Error, U32>):
   match paths:
     case (open_directory, retained_directory):
       do IO<Result<&1, &1, Error, U32>>:
@@ -239,15 +245,19 @@ def write.paths(paths: String & String, generation: U32) ->
 def write(directory: String, generation: U32) -> IO(Result<&1, &1, Error, U32>):
   write.paths(path.pair(directory), generation)
 
-def next.decision(directory: String, decision: Generation.Decision) ->
-  IO(Result<&1, &1, Error, U32>):
+def next.decision(
+  directory: String,
+  decision: Generation.Decision
+) -> IO(Result<&1, &1, Error, U32>):
   match decision:
     case Generation.GenerationExhausted{}:
       IO.pure(Result<&1, &1, Error, U32>, Fail{Exhausted{}})
     case Generation.GenerationReady{generation}: write(directory, generation)
 
-def next.read(directory: String, result: Result<&1, &1, Error, U32>) ->
-  IO(Result<&1, &1, Error, U32>):
+def next.read(
+  directory: String,
+  result: Result<&1, &1, Error, U32>
+) -> IO(Result<&1, &1, Error, U32>):
   match result:
     case Fail{Invalid{}}:
       IO.pure(Result<&1, &1, Error, U32>, Fail{Invalid{}})

@@ -30,15 +30,17 @@ def get.closed(
         fail("owner generation client read failed")
 
 def get.pair(
-  pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error,
-    Maybe<&1, Bytes.Bytes>>
+  pair:
+    MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error,
+      Maybe<&1, Bytes.Bytes>>
 ) -> IO(Unit):
   match pair:
     case (handle, result): get.closed(handle, result)
 
 # Reads an absent key through the owner generation discovered at open.
-def opened(result: Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Handle>) ->
-  IO(Unit):
+def opened(
+  result: Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Handle>
+) -> IO(Unit):
   match result:
     case Fail{_}: fail("owner generation client could not open owner")
     case Done{handle}:

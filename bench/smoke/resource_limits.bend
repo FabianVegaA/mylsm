@@ -55,8 +55,9 @@ def verified.value(
 
 # Checks that a successful write survived reopen after a rejected request.
 def verified(
-  pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error,
-    Maybe<&1, PackedBytes.Bytes>>
+  pair:
+    MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error,
+      Maybe<&1, PackedBytes.Bytes>>
 ) -> IO(Unit):
   match pair:
     case (handle, Done{Some{found}}):

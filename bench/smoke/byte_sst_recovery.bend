@@ -39,7 +39,11 @@ def checked.entries(handle: MyLSM.Bytes.Handle, valid: Bool) -> IO(Unit):
           MyLSM.Bytes.close(handle)
         finish(result, False{})
 
-def checked.deleted.stats.result(pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Stats>) -> IO(Unit):
+def checked.deleted.stats.result(
+  pair:
+    MyLSM.Bytes.Handle &
+      Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Stats>
+) -> IO(Unit):
   match pair:
     case (handle, Done{MyLSM.ByteStats{entries, payload_bytes}}):
       checked.entries(handle, Bool.and(Nat.is_eq(entries, 2n),
@@ -69,7 +73,11 @@ def checked.replaced.count(handle: MyLSM.Bytes.Handle, valid: Bool) -> IO(Unit):
           MyLSM.Bytes.delete(handle, Bytes.new(1))
         checked.deleted(removed)
 
-def checked.replaced.stats.result(pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Stats>) -> IO(Unit):
+def checked.replaced.stats.result(
+  pair:
+    MyLSM.Bytes.Handle &
+      Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Stats>
+) -> IO(Unit):
   match pair:
     case (handle, Done{MyLSM.ByteStats{entries, payload_bytes}}):
       checked.replaced.count(handle, Bool.and(Nat.is_eq(entries, 3n),
@@ -99,7 +107,11 @@ def checked.after.write.count(handle: MyLSM.Bytes.Handle, valid: Bool) -> IO(Uni
           MyLSM.Bytes.put(handle, packed(Bytes.from_hex("0000")), Bytes.new(0))
         checked.replaced(replaced)
 
-def checked.after.write.result(pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Stats>) -> IO(Unit):
+def checked.after.write.result(
+  pair:
+    MyLSM.Bytes.Handle &
+      Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Stats>
+) -> IO(Unit):
   match pair:
     case (handle, Done{MyLSM.ByteStats{entries, _}}):
       checked.after.write.count(handle, Nat.is_eq(entries, 3n))
@@ -128,7 +140,11 @@ def checked.after.read.start(handle: MyLSM.Bytes.Handle, valid: Bool) -> IO(Unit
           MyLSM.Bytes.put(handle, packed(Bytes.from_hex("0002")), Bytes.new(0))
         checked.write(written)
 
-def checked.after.read.result(pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Stats>) -> IO(Unit):
+def checked.after.read.result(
+  pair:
+    MyLSM.Bytes.Handle &
+      Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Stats>
+) -> IO(Unit):
   match pair:
     case (handle, Done{MyLSM.ByteStats{entries, _}}):
       checked.after.read.start(handle, Nat.is_eq(entries, 2n))
