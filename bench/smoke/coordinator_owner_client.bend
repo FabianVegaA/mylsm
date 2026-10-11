@@ -1,6 +1,8 @@
 import Base
 import ../../src/Console.bend as Console
 import ../../src/coordinator/Client.bend as Client
+import ../../src/coordinator/ByteClient.bend as ByteClient
+import ../../src/coordinator/Io.bend as ClientIo
 import ../../src/coordinator/Protocol.bend as Protocol
 import ../../src/coordinator/UnixSocketIo.bend as UnixSocket
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
@@ -19,94 +21,130 @@ def bytes.from_hex(value: String) -> Bytes.Bytes:
 def fail(message: String) -> IO(Unit):
   IO.die(Unit, 1, message)
 
-def get.response.value.equal(
-  pair: Bytes.Bytes & Bytes.Bytes & Bool
+def owner.rejection.status(status: Protocol.ResponseStatus) -> IO(Unit):
+  match status:
+    case Protocol.InvalidArgument{}:
+      IO.print("OWNER_CLIENT_ERROR_STATUS_PASSED")
+    case _: fail("owner returned an unexpected typed failure status")
+
+def owner.read.error(error: ClientIo.Error) -> IO(Unit):
+  match error:
+    case ClientIo.UnsupportedPlatform{}: fail("owner response socket unsupported")
+    case ClientIo.Host{code, _}:
+      fail("owner response read host error " ++ Nat.show(U32.to_nat(code)))
+    case ClientIo.Truncated{}: fail("owner returned a truncated response")
+    case ClientIo.Malformed{}: fail("owner response frame was malformed")
+    case ClientIo.UnknownOperation{}: fail("owner response used an unknown operation")
+    case ClientIo.FrameTooLarge{}: fail("owner response exceeded its frame limit")
+    case ClientIo.MalformedResponse{}: fail("owner response payload was malformed")
+    case ClientIo.UnexpectedResponse{}: fail("owner response tag was unexpected")
+    case ClientIo.UnknownResponseStatus{}: fail("owner response status code was unknown")
+
+def owner.rejection.checked(
+  pair: Client.Session & Result<&1, &1, Client.Error, Unit>
 ) -> IO(Unit):
   match pair:
-    case (_, (_, equal)):
+    case (_, Done{Unit{}}): fail("owner accepted malformed put arguments")
+    case (_, Fail{Client.OwnerRejected{status}}): owner.rejection.status(status)
+    case (_, Fail{Client.MalformedResponse{}}):
+      fail("owner returned a malformed write response")
+    case (_, Fail{Client.CorrelationMismatch{}}):
+      fail("owner response correlation did not match")
+    case (_, Fail{Client.StaleOwner{}}):
+      fail("owner response generation was stale")
+    case (_, Fail{Client.ConnectFailure{_}}):
+      fail("owner status test could not connect")
+    case (_, Fail{Client.RetryRead{error}}): owner.read.error(error)
+    case (_, Fail{Client.CommitUnknown{_}}):
+      fail("owner classified non-mutation as uncertain")
+    case (_, Fail{Client.FrameTooLarge{}}):
+      fail("owner status test request exceeded its frame limit")
+    case (_, Fail{Client.RequestIdsExhausted{}}):
+      fail("owner status test exhausted request identifiers")
+
+def owner.rejection(session: Client.Session) -> IO(Unit):
+  do IO<Unit>:
+    response : Client.Session & Result<&1, &1, Client.Error, Protocol.Response> <-
+    Client.session.call(session, 2, Bytes.new(0))
+    owner.rejection.checked(ByteClient.write.result(response))
+
+def get.missing.result(
+  pair: Client.Session & Result<&1, &1, Client.Error, Maybe<&1, Bytes.Bytes>>
+) -> IO(Unit):
+  match pair:
+    case (_, Fail{_}): fail("coordinator client missing-key read failed")
+    case (session, Done{None{}}): owner.rejection(session)
+    case (_, Done{Some{_}}): fail("coordinator client found an absent key")
+
+def get.missing(session: Client.Session) -> IO(Unit):
+  do IO<Unit>:
+    pair : Client.Session & Result<&1, &1, Client.Error, Maybe<&1, Bytes.Bytes>> <-
+      ByteClient.get(session, bytes.from_hex("0102"))
+    get.missing.result(pair)
+
+def get.response.value.equal(
+  pair: Client.Session & (Bytes.Bytes & Bytes.Bytes & Bool)
+) -> IO(Unit):
+  match pair:
+    case (session, (_, (_, equal))):
       match equal:
-        case True{}: IO.print("OWNER_CLIENT_SOCKET_PASSED")
+        case True{}: get.missing(session)
         case False{}: fail("coordinator client read changed bytes")
 
 # Confirms that a byte get returns the exact non-UTF-8 value through IPC.
 def get.response(
-  result: Result<&1, &1, Client.Error, Protocol.Response>
+  session: Client.Session,
+  result: Result<&1, &1, Client.Error, Maybe<&1, Bytes.Bytes>>
 ) -> IO(Unit):
   match result:
     case Fail{_}: fail("coordinator client get failed")
-    case Done{response}:
-      match response:
-        case Protocol.Response{_, _, _, status, payload}:
-          match status:
-            case Protocol.Success{}:
-              get.response.value.equal(Bytes.eq(payload,
-                bytes.from_hex("80ff00")))
-            case _: fail("coordinator owner did not find the byte key")
+    case Done{Some{value}}:
+      get.response.value.equal((session,
+        Bytes.eq(value, bytes.from_hex("80ff00"))))
+    case Done{None{}}: fail("coordinator owner did not find the byte key")
 
 def get.request.confirmed(
-  pair: Client.Session & Result<&1, &1, Client.Error, Protocol.Response>
+  pair: Client.Session & Result<&1, &1, Client.Error, Maybe<&1, Bytes.Bytes>>
 ) -> IO(Unit):
   match pair:
-    case (_, result): get.response(result)
+    case (session, result): get.response(session, result)
 
 # Sends one read request through the public coordinator client transport.
 def get.request.result(
-  pair: Client.Session & Result<&1, &1, Client.Error, Protocol.Response>
+  pair: Client.Session & Result<&1, &1, Client.Error, Maybe<&1, Bytes.Bytes>>
 ) -> IO(Unit):
-  get.request.confirmed(Client.session.checked(pair))
+  get.request.confirmed(pair)
 
 def get.request(session: Client.Session) -> IO(Unit):
   do IO<Unit>:
-    pair : Client.Session & Result<&1, &1, Client.Error, Protocol.Response> <-
-      Client.session.get(session, bytes.from_hex("00ff"))
+    pair : Client.Session & Result<&1, &1, Client.Error, Maybe<&1, Bytes.Bytes>> <-
+      ByteClient.get(session, bytes.from_hex("00ff"))
     get.request.result(pair)
-
-def put.response.session.empty(
-  session: Client.Session,
-  is_empty: Bool
-) -> IO(Unit):
-  match is_empty:
-    case True{}: get.request(session)
-    case False{}: fail("coordinator put response carried data")
-
-# Checks that the owner acknowledged the byte put with an empty payload.
-def put.response.session.length(
-  session: Client.Session,
-  measured: Bytes.Bytes & U32
-) -> IO(Unit):
-  match measured:
-    case (_, length): put.response.session.empty(session, U32.is_eq(length, 0))
 
 def put.response(
   session: Client.Session,
-  result: Result<&1, &1, Client.Error, Protocol.Response>
+  result: Result<&1, &1, Client.Error, Unit>
 ) -> IO(Unit):
   match result:
     case Fail{_}: fail("coordinator client put failed")
-    case Done{response}:
-      match response:
-        case Protocol.Response{_, _, _, status, payload}:
-          match status:
-            case Protocol.Success{}:
-              put.response.session.length(session, Bytes.length(payload))
-            case _: fail("coordinator owner rejected the byte put")
+    case Done{Unit{}}: get.request(session)
 
 def put.request.confirmed(
-  pair: Client.Session & Result<&1, &1, Client.Error, Protocol.Response>
+  pair: Client.Session & Result<&1, &1, Client.Error, Unit>
 ) -> IO(Unit):
   match pair:
     case (session, result): put.response(session, result)
 
 # Sends a binary mutation through the public coordinator client transport.
 def put.request.result(
-  pair: Client.Session & Result<&1, &1, Client.Error, Protocol.Response>
+  pair: Client.Session & Result<&1, &1, Client.Error, Unit>
 ) -> IO(Unit):
-  put.request.confirmed(Client.session.checked(pair))
+  put.request.confirmed(pair)
 
 def put.request(endpoint: String) -> IO(Unit):
   do IO<Unit>:
-    pair : Client.Session & Result<&1, &1, Client.Error, Protocol.Response> <-
-      Client.session.put(Client.session.open(endpoint, 1),
+    pair : Client.Session & Result<&1, &1, Client.Error, Unit> <-
+      ByteClient.put(Client.session.open(endpoint, 1),
         bytes.from_hex("00ff"), bytes.from_hex("80ff00"))
     put.request.result(pair)
 

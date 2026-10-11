@@ -67,3 +67,12 @@ def Laws.successful_owner_status_is_accepted():
 
 def Laws.owner_failure_statuses_are_rejected():
   {==}
+
+def Laws.get_success_status_has_value():
+  {==}
+
+def Laws.get_not_found_status_is_missing():
+  {==}
+
+def Laws.get_commit_unknown_status_is_failure():
+  {==}

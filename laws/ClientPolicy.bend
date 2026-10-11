@@ -120,3 +120,18 @@ law owner_failure_statuses_are_rejected:
     Bool.not(ClientPolicy.response.accepted(Protocol.InvalidUtf8{})) &&
     Bool.not(ClientPolicy.response.accepted(Protocol.UnsupportedFormat{}))) ==
     True{} : Bool}
+
+# Preserves an owner value response as a present read result.
+law get_success_status_has_value:
+  {ClientPolicy.response.get.status(Protocol.Success{}) ==
+    ClientPolicy.GetValueStatus{} : ClientPolicy.GetStatus}
+
+# Translates the owner not-found status into an absent read result.
+law get_not_found_status_is_missing:
+  {ClientPolicy.response.get.status(Protocol.NotFound{}) ==
+    ClientPolicy.GetMissingStatus{} : ClientPolicy.GetStatus}
+
+# Keeps uncertain commits and other failures out of the read-value path.
+law get_commit_unknown_status_is_failure:
+  {ClientPolicy.response.get.status(Protocol.CommitUnknown{}) ==
+    ClientPolicy.GetFailureStatus{Protocol.CommitUnknown{}} : ClientPolicy.GetStatus}

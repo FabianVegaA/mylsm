@@ -29,6 +29,12 @@ type RequestDecision is Type:
   RequestAssigned{id: U32, next: RequestSequence}
   RequestIdsExhausted{}
 
+# Classifies owner read statuses as a value, absence, or typed failure.
+type GetStatus is Data:
+  GetValueStatus{}
+  GetMissingStatus{}
+  GetFailureStatus{status: Protocol.ResponseStatus}
+
 def response.generation.result(
   generation: Nat,
   generation_matches: Bool
@@ -88,6 +94,12 @@ def response.accepted(status: Protocol.ResponseStatus) -> Bool:
   match status:
     case Protocol.Success{}: True{}
     case _: False{}
+
+def response.get.status(status: Protocol.ResponseStatus) -> GetStatus:
+  match status:
+    case Protocol.Success{}: GetValueStatus{}
+    case Protocol.NotFound{}: GetMissingStatus{}
+    case _: GetFailureStatus{status}
 
 def request_id.take.available(
   ids: U32 & U32,

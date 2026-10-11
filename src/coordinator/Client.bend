@@ -15,6 +15,7 @@ type Error is Type:
   FrameTooLarge{}
   StaleOwner{}
   CorrelationMismatch{}
+  MalformedResponse{}
   RequestIdsExhausted{}
   OwnerRejected{status: Protocol.ResponseStatus}
 
