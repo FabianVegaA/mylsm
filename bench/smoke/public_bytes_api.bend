@@ -173,7 +173,7 @@ def create.batch.rejected(
   result: Result<&1, &1, MyLSM.Bytes.Error, Unit>
 ) -> IO(Unit):
   match result:
-    case Fail{MyLSM.InvalidArgument{}}:
+    case Fail{MyLSM.ResourceLimit{}}:
       create.write.valid(handle)
     case _:
       do IO<Unit>:

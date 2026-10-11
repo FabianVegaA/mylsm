@@ -369,6 +369,12 @@ def batch_count_result(
           Fail{DurableError.Error{
             DurableError.ResourceLimit{}, "write", path, 0, "batch mutation count exceeds 256"
           }}))
+    case BatchPolicy.BatchBytesExceeded{}:
+      IO.pure(Handle & Result<&1, &1, DurableError.Error, WriteOutcome>,
+        (Handle{path, lock, db, Policy.Open{}, Policy.next_operation_errors(operation_errors)},
+          Fail{DurableError.Error{
+            DurableError.ResourceLimit{}, "write", path, 0, "batch encoded bytes exceed the configured limit"
+          }}))
 # Validates the mutation count before attempting a commit.
 def batch_count(
   +db: Db.Db,
@@ -377,7 +383,9 @@ def batch_count(
   operation_errors: Nat,
   +path: String,
 ) -> IO(Handle & Result<&1, &1, DurableError.Error, WriteOutcome>):
-  batch_count_result(db, muts, lock, operation_errors, path, BatchPolicy.validate_count(List.length(&2, Wal.Mut, muts)))
+  batch_count_result(db, muts, lock, operation_errors, path,
+    BatchPolicy.validate_batch(List.length(&2, Wal.Mut, muts),
+      BatchPolicy.utf8_batch_bytes(muts)))
 
 # Validates and commits a public mutation batch atomically.
 def write_batch(

@@ -9,6 +9,7 @@ import ./ByteWalIo.bend as ByteWalIo
 import ./DbLock.bend as DbLock
 import ./DurableError.bend as DurableError
 import ./DurableBatchPolicy.bend as BatchPolicy
+import ./coordinator/QueuePolicy.bend as QueuePolicy
 import ./Fs.bend as Fs
 import ./Keys.bend as Keys
 import ./scan/Cursor.bend as Cursor
@@ -511,20 +512,32 @@ def write.count.validated(
   match validation:
     case BatchPolicy.ValidBatch{}:
       write.encoded(path, lock, table, Open{}, ByteWal.Batch{ordered})
+    case BatchPolicy.BatchBytesExceeded{}:
+      IO.pure(Handle & Result<&1, &1, Error, Unit>,
+        (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}},
+          Fail{ResourceLimit{}}))
+    case BatchPolicy.BatchCountExceeded{}:
+      IO.pure(Handle & Result<&1, &1, Error, Unit>,
+        (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}},
+          Fail{ResourceLimit{}}))
     case _:
       IO.pure(Handle & Result<&1, &1, Error, Unit>,
         (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}}, Fail{InvalidArgument{}}))
 
-def write.count.result(
+def write.count.measured(
   +path: String,
   lock: DbLock.Lock,
   table: ByteMemTable.Table,
-  pair: List<&1, ByteWal.Mutation> & Nat
+  measured: BatchPolicy.ByteBatchMeasurement
 ) -> IO(Handle & Result<&1, &1, Error, Unit>):
-  match pair:
-    case (ordered, count):
-      write.count.validated(path, lock, table, ordered,
-        BatchPolicy.validate_count(count))
+  match measured:
+    case BatchPolicy.BatchMeasured{mutations, count, encoded_bytes}:
+      write.count.validated(path, lock, table, mutations,
+        BatchPolicy.validate_batch(count, encoded_bytes))
+    case BatchPolicy.BatchTooMany{}:
+      IO.pure(Handle & Result<&1, &1, Error, Unit>,
+        (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}},
+          Fail{ResourceLimit{}}))
 
 def write.counted(
   +path: String,
@@ -541,8 +554,8 @@ def write.counted(
     case Open{}:
       match batch:
         case ByteWal.Batch{mutations}:
-          write.count.result(path, lock, table,
-            ByteWalIo.mutations.count(mutations))
+          write.count.measured(path, lock, table,
+            BatchPolicy.byte_batch.measure(mutations))
 
 def write.retained(
   base_stats: VisibleStats.Stats,
@@ -1319,6 +1332,12 @@ def batch.validation.decided(
   match validation:
     case BatchPolicy.ValidBatch{}:
       batch.prepare(handle, mutations, entries)
+    case BatchPolicy.BatchBytesExceeded{}:
+      IO.pure(Handle & Result<&1, &1, Error, BatchPrepared>,
+        (handle, Fail{ResourceLimit{}}))
+    case BatchPolicy.BatchCountExceeded{}:
+      IO.pure(Handle & Result<&1, &1, Error, BatchPrepared>,
+        (handle, Fail{ResourceLimit{}}))
     case _:
       IO.pure(Handle & Result<&1, &1, Error, BatchPrepared>,
         (handle, Fail{InvalidArgument{}}))
@@ -1326,19 +1345,23 @@ def batch.validation.decided(
 def batch.validation.result(
   handle: Handle,
   entries: List<&1, ByteMemTable.Entry>,
-  pair: List<&1, ByteWal.Mutation> & Nat
+  measured: BatchPolicy.ByteBatchMeasurement
 ) -> IO(Handle & Result<&1, &1, Error, BatchPrepared>):
-  match pair:
-    case (mutations, count):
+  match measured:
+    case BatchPolicy.BatchMeasured{mutations, count, encoded_bytes}:
       batch.validation.decided(handle, entries, mutations,
-        BatchPolicy.validate_count(count))
+        BatchPolicy.validate_batch(count, encoded_bytes))
+    case BatchPolicy.BatchTooMany{}:
+      IO.pure(Handle & Result<&1, &1, Error, BatchPrepared>,
+        (handle, Fail{ResourceLimit{}}))
 
 def batch.validate(
   handle: Handle,
   mutations: List<&1, ByteWal.Mutation>,
   entries: List<&1, ByteMemTable.Entry>
 ) -> IO(Handle & Result<&1, &1, Error, BatchPrepared>):
-  batch.validation.result(handle, entries, ByteWalIo.mutations.count(mutations))
+  batch.validation.result(handle, entries,
+    BatchPolicy.byte_batch.measure(mutations))
 
 def batch.build.result(
   handle: Handle,
@@ -1430,34 +1453,45 @@ def write_batch.validation.result(
 ) -> IO(Handle & Result<&1, &1, Error, Unit>):
   match validation:
     case BatchPolicy.ValidBatch{}: write_batch.validated(handle, mutations, count)
+    case BatchPolicy.BatchBytesExceeded{}:
+      IO.pure(Handle & Result<&1, &1, Error, Unit>,
+        (handle, Fail{ResourceLimit{}}))
+    case BatchPolicy.BatchCountExceeded{}:
+      IO.pure(Handle & Result<&1, &1, Error, Unit>,
+        (handle, Fail{ResourceLimit{}}))
     case _:
       IO.pure(Handle & Result<&1, &1, Error, Unit>,
         (handle, Fail{InvalidArgument{}}))
 
-def write_batch.validation(
+def write_batch.validation.counted(
   handle: Handle,
   mutations: List<&1, ByteWal.Mutation>,
-  counts: Nat & Nat
+  counts: Nat & Nat,
+  encoded_bytes: Nat
 ) -> IO(Handle & Result<&1, &1, Error, Unit>):
   match counts:
-    case (count, retained):
-      write_batch.validation.result(handle, mutations, retained,
-        BatchPolicy.validate_count(count))
+    case (count, validation_count):
+      write_batch.validation.result(handle, mutations, count,
+        BatchPolicy.validate_batch(validation_count, encoded_bytes))
 
-def write_batch.counted(
+def write_batch.measured(
   handle: Handle,
-  pair: List<&1, ByteWal.Mutation> & Nat
+  measured: BatchPolicy.ByteBatchMeasurement
 ) -> IO(Handle & Result<&1, &1, Error, Unit>):
-  match pair:
-    case (mutations, count):
-      write_batch.validation(handle, mutations, duplicate_nat_pair(count))
+  match measured:
+    case BatchPolicy.BatchMeasured{mutations, count, encoded_bytes}:
+      write_batch.validation.counted(handle, mutations,
+        QueuePolicy.nat.clone.pair(count), encoded_bytes)
+    case BatchPolicy.BatchTooMany{}:
+      IO.pure(Handle & Result<&1, &1, Error, Unit>,
+        (handle, Fail{ResourceLimit{}}))
 
 # Reconciles each unique batch key against the SST before one atomic WAL append.
 def write_batch(
   handle: Handle,
   mutations: List<&1, ByteWal.Mutation>
 ) -> IO(Handle & Result<&1, &1, Error, Unit>):
-  write_batch.counted(handle, ByteWalIo.mutations.count(mutations))
+  write_batch.measured(handle, BatchPolicy.byte_batch.measure(mutations))
 
 def put.keys.retained(
   probe_key: Bytes.Bytes,
