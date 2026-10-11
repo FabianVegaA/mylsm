@@ -1,4 +1,5 @@
 import Base
+import ../ByteMemTable.bend as ByteMemTable
 import ../coordinator/QueuePolicy.bend as QueuePolicy
 import ./FormatInspect.bend as FormatInspect
 
@@ -35,6 +36,9 @@ type Publication is Data:
 type PublicationDecision is Data:
   PublicationAdvanced{state: Publication}
   PublicationRejected{}
+
+def canonical.entries(table: ByteMemTable.Table) -> List<&1, ByteMemTable.Entry>:
+  ByteMemTable.compact.live(ByteMemTable.ordered_entries(table))
 
 # Begins publication only for a source admitted by the migration plan.
 def begin(decision: Decision) -> PublicationDecision:
