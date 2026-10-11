@@ -19,6 +19,10 @@ def bytes.equal(pair: Bytes.Bytes & Bytes.Bytes & Bool) -> Bool:
   match pair:
     case (_, (_, equal)): equal
 
+# Creates the binary value that forces the WAL writer across a chunk boundary.
+def value.expected() -> Bytes.Bytes:
+  Bytes.new(131072)
+
 def client.put.result(
   pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, Unit>
 ) -> IO(Unit):
@@ -39,23 +43,33 @@ def client.opened(
       do IO<Unit>:
         pair : MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error,
           Unit> <- MyLSM.Bytes.put(handle, bytes.from_hex("00ff"),
-            bytes.from_hex("80fe"))
+            value.expected())
         client.put.result(pair)
     case Fail{_}: fail("could not connect to owner for crash test")
 
 def read.valid(
-  result: Result<&1, &1, MyLSM.Bytes.Error, Maybe<&1, Bytes.Bytes>>
+  result: Result<&1, &1, MyLSM.Bytes.Error, Maybe<&1, Bytes.Bytes>>,
+  expected_present: Bool
 ) -> Bool:
   match result:
     case Done{Some{value}}:
-      bytes.equal(Bytes.eq(value, bytes.from_hex("80fe")))
-    case _: False{}
+      Bool.and(expected_present,
+        bytes.equal(Bytes.eq(value, value.expected())))
+    case Done{None{}}: Bool.not(expected_present)
+    case Fail{_}: False{}
 
-def read.verify(
+# Duplicates an expectation flag for independent verification branches.
+def bool.clone.pair(value: Bool) -> Bool & Bool:
+  match value:
+    case True{}: (True{}, True{})
+    case False{}: (False{}, False{})
+
+# Confirms the recovered key state against the requested crash boundary.
+def read.verify.present(
   handle: MyLSM.Bytes.Handle,
-  valid: Bool
+  expected_present: Bool
 ) -> IO(Unit):
-  match valid:
+  match expected_present:
     case True{}:
       do IO<Unit>:
         _closed : Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
@@ -65,16 +79,41 @@ def read.verify(
       do IO<Unit>:
         _closed : Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
           MyLSM.Bytes.close(handle)
+        IO.print("UNCOMMITTED_VALUE_ABSENT")
+
+def read.verify(
+  handle: MyLSM.Bytes.Handle,
+  valid: Bool,
+  expected_present: Bool
+) -> IO(Unit):
+  match valid:
+    case True{}:
+      read.verify.present(handle, expected_present)
+    case False{}:
+      do IO<Unit>:
+        _closed : Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
+          MyLSM.Bytes.close(handle)
         fail("owner crash lost or changed the acknowledged WAL value")
 
-def verifier.read(
-  pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, Maybe<&1, Bytes.Bytes>>
+def verifier.read.cloned(
+  pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, Maybe<&1, Bytes.Bytes>>,
+  expected: Bool & Bool
 ) -> IO(Unit):
   match pair:
-    case (handle, result): read.verify(handle, read.valid(result))
+    case (handle, result):
+      match expected:
+        case (for_read, for_verify): read.verify(handle,
+          read.valid(result, for_read), for_verify)
+
+def verifier.read(
+  pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, Maybe<&1, Bytes.Bytes>>,
+  expected_present: Bool
+) -> IO(Unit):
+  verifier.read.cloned(pair, bool.clone.pair(expected_present))
 
 def verifier.opened(
-  result: Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Handle>
+  result: Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Handle>,
+  expected_present: Bool
 ) -> IO(Unit):
   match result:
     case Done{handle}:
@@ -82,10 +121,10 @@ def verifier.opened(
         value : MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error,
           Maybe<&1, Bytes.Bytes>> <-
             MyLSM.Bytes.get(handle, bytes.from_hex("00ff"))
-        verifier.read(value)
+        verifier.read(value, expected_present)
     case Fail{_}: fail("database lock was not released after owner death")
 
-def main.mode(path: String, mode: String) -> IO(Unit):
+def main.mode(path: String, mode: String, expected_present: Bool) -> IO(Unit):
   match mode:
     case "client":
       do IO<Unit>:
@@ -96,11 +135,12 @@ def main.mode(path: String, mode: String) -> IO(Unit):
       do IO<Unit>:
         opened : Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Handle> <-
           MyLSM.Bytes.open_existing(path)
-        verifier.opened(opened)
+        verifier.opened(opened, expected_present)
     case _: fail("unknown crash-test mode")
 
 def main() -> IO(Unit):
   do IO<Unit>:
     path : String <- IO.try(String, Console.get_env("MYLSM_DB_PATH"))
     mode : String <- IO.try(String, Console.get_env("MYLSM_CRASH_TEST_MODE"))
-    main.mode(path, mode)
+    expected : String <- IO.try(String, Console.get_env("MYLSM_EXPECT_PRESENT"))
+    main.mode(path, mode, String.eq(expected, "yes"))

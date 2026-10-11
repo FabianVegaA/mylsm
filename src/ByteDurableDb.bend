@@ -18,6 +18,7 @@ import ./scan/SstCursor.bend as SstCursor
 import ./scan/RangeCursor.bend as RangeCursor
 import ./scan/VisibleCursor.bend as VisibleCursor
 import ./scan/VisibleStats.bend as VisibleStats
+import ./CrashPoint.bend as CrashPoint
 import ./scan/ScanWorkPolicy.bend as ScanWorkPolicy
 import ./ByteRecoveryPolicy.bend as RecoveryPolicy
 import ./Wal.bend as Wal
@@ -446,12 +447,16 @@ def append.synced(
   table: ByteMemTable.Table,
   apply_frame: Bytes.Bytes,
   result: Result<&1, &1, U32 & String, Unit>
-) -> Handle & Result<&1, &1, Error, Unit>:
+) -> IO(Handle & Result<&1, &1, Error, Unit>):
   match result:
     case Fail{error}:
-      append.unknown(path, lock, table, error)
+      IO.pure(Handle & Result<&1, &1, Error, Unit>,
+        append.unknown(path, lock, table, error))
     case Done{Unit{}}:
-      append.applied(path, lock, table, ByteWal.decode(apply_frame))
+      do IO<Handle & Result<&1, &1, Error, Unit>>:
+        _checkpoint : Result<&1, &1, U32 & String, Unit> <-
+          CrashPoint.hit("wal.after_sync_before_apply")
+        return append.applied(path, lock, table, ByteWal.decode(apply_frame))
 
 # Replaces the in-memory table only after the WAL frame is durable.
 def append.frames(
@@ -465,7 +470,7 @@ def append.frames(
       do IO<Handle & Result<&1, &1, Error, Unit>>:
         appended : Result<&1, &1, U32 & String, Unit> <-
           ByteWalIo.append.encoded(Done{append_frame}, path ++ "/WAL")
-        return append.synced(path, lock, table, apply_frame, appended)
+        append.synced(path, lock, table, apply_frame, appended)
 
 # Distinguishes pre-append encoding rejection from uncertain host writes.
 def append.encoded(

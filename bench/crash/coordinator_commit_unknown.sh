@@ -2,8 +2,7 @@
 set -euo pipefail
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-WORK=$(mktemp -d "${TMPDIR:-/tmp}/mylsm-commit-unknown.XXXXXX")
-DB="$WORK/db"
+WORK=$(mktemp -d /private/tmp/mcu.XXXXXX)
 OWNER_PID=
 CLIENT_PID=
 
@@ -23,53 +22,78 @@ trap cleanup EXIT
 bend "$ROOT/bench/smoke/coordinator_owner_socket.bend" -o "$WORK/owner"
 bend "$ROOT/bench/crash/coordinator_commit_unknown.bend" -o "$WORK/client"
 
-MYLSM_DB_PATH="$DB" MYLSM_CRASH_POINT=owner.after_mutation.before_response \
-  "$WORK/owner" >"$WORK/owner.log" 2>&1 &
-OWNER_PID=$!
+run_case() {
+  local checkpoint=$1 expected_present=$2 case_dir db owner_log client_log verify_log marker
+  case_dir="$WORK/$checkpoint"
+  db="$case_dir/db"
+  owner_log="$case_dir/owner.log"
+  client_log="$case_dir/client.log"
+  verify_log="$case_dir/verify.log"
+  marker="crash_point_reached=$checkpoint"
+  mkdir -p -- "$case_dir"
 
-for ((attempt = 0; attempt < 500; attempt += 1)); do
-  if [[ -S "$DB/MYLSM.sock" ]]; then
-    break
+  MYLSM_DB_PATH="$db" MYLSM_CRASH_POINT="$checkpoint" \
+    "$WORK/owner" >"$owner_log" 2>&1 &
+  OWNER_PID=$!
+
+  for ((attempt = 0; attempt < 500; attempt += 1)); do
+    if [[ -S "$db/MYLSM.sock" ]]; then
+      break
+    fi
+    if ! kill -0 "$OWNER_PID" 2>/dev/null; then
+      cat "$owner_log"
+      return 1
+    fi
+    sleep 0.02
+  done
+  [[ -S "$db/MYLSM.sock" ]] || { cat "$owner_log"; return 1; }
+
+  MYLSM_DB_PATH="$db" MYLSM_CRASH_TEST_MODE=client \
+    "$WORK/client" >"$client_log" 2>&1 &
+  CLIENT_PID=$!
+
+  for ((attempt = 0; attempt < 500; attempt += 1)); do
+    if grep -qxF "$marker" "$owner_log"; then
+      break
+    fi
+    if ! kill -0 "$OWNER_PID" 2>/dev/null; then
+      cat "$owner_log"
+      return 1
+    fi
+    sleep 0.02
+  done
+  grep -qxF "$marker" "$owner_log"
+
+  kill -9 "$OWNER_PID"
+  set +e
+  wait "$OWNER_PID"
+  owner_status=$?
+  set -e
+  OWNER_PID=
+  [[ "$owner_status" -eq 137 ]] || {
+    echo "owner kill status was $owner_status at $checkpoint" >&2
+    return 1
+  }
+
+  wait "$CLIENT_PID"
+  CLIENT_PID=
+  grep -qxF 'COMMIT_UNKNOWN_RECEIVED' "$client_log"
+  rm -f -- "$db/MYLSM.sock"
+
+  expected=no
+  [[ "$expected_present" == present ]] && expected=yes
+  MYLSM_DB_PATH="$db" MYLSM_CRASH_TEST_MODE=verify \
+    MYLSM_EXPECT_PRESENT="$expected" "$WORK/client" >"$verify_log" 2>&1
+  if [[ "$expected_present" == present ]]; then
+    grep -qxF 'COMMITTED_VALUE_RECOVERED' "$verify_log"
+  else
+    grep -qxF 'UNCOMMITTED_VALUE_ABSENT' "$verify_log"
   fi
-  if ! kill -0 "$OWNER_PID" 2>/dev/null; then
-    cat "$WORK/owner.log"
-    exit 1
-  fi
-  sleep 0.02
-done
-[[ -S "$DB/MYLSM.sock" ]] || { cat "$WORK/owner.log"; exit 1; }
+  echo "OWNER_CRASH_BOUNDARY_PASSED checkpoint=$checkpoint recovered=$expected_present"
+}
 
-MYLSM_DB_PATH="$DB" MYLSM_CRASH_TEST_MODE=client \
-  "$WORK/client" >"$WORK/client.log" 2>&1 &
-CLIENT_PID=$!
-
-for ((attempt = 0; attempt < 500; attempt += 1)); do
-  if grep -qxF 'crash_point_reached=owner.after_mutation.before_response' \
-      "$WORK/owner.log"; then
-    break
-  fi
-  if ! kill -0 "$OWNER_PID" 2>/dev/null; then
-    cat "$WORK/owner.log"
-    exit 1
-  fi
-  sleep 0.02
-done
-grep -qxF 'crash_point_reached=owner.after_mutation.before_response' \
-  "$WORK/owner.log"
-
-kill -9 "$OWNER_PID"
-set +e
-wait "$OWNER_PID"
-OWNER_STATUS=$?
-set -e
-OWNER_PID=
-[[ "$OWNER_STATUS" -eq 137 ]] || { echo "owner kill status was $OWNER_STATUS" >&2; exit 1; }
-
-wait "$CLIENT_PID"
-CLIENT_PID=
-grep -qxF 'COMMIT_UNKNOWN_RECEIVED' "$WORK/client.log"
-rm -f -- "$DB/MYLSM.sock"
-
-MYLSM_DB_PATH="$DB" MYLSM_CRASH_TEST_MODE=verify "$WORK/client" >"$WORK/verify.log" 2>&1
-grep -qxF 'COMMITTED_VALUE_RECOVERED' "$WORK/verify.log"
+run_case wal.before_append absent
+run_case wal.during_append absent
+run_case wal.after_sync_before_apply present
+run_case owner.after_mutation.before_response present
 echo 'OWNER_COMMIT_UNKNOWN_RECOVERY_PASSED'

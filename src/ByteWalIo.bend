@@ -4,6 +4,7 @@ import ./ByteWal.bend as ByteWal
 import ./Fs.bend as Fs
 import ./SstStreamIo.bend as SstStreamIo
 import ./Wal.bend as Wal
+import ./CrashPoint.bend as CrashPoint
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # Tracks the owned file and bounded phase state during byte WAL replay.
@@ -574,6 +575,96 @@ def append.written(
     case (file, result):
       append.synced(result, file, path)
 
+# Retains the requested portion of a duplicated WAL frame.
+def append.slice(pair: Bytes.Bytes & Bytes.Bytes) -> Bytes.Bytes:
+  match pair:
+    case (_, bytes): bytes
+
+# Stops between WAL chunks or writes the remaining frame before sync.
+def append.first.written(
+  pair: File & Result<&1, &1, U32 & String, Unit>,
+  remaining: Bytes.Bytes,
+  +path: String
+) -> IO(Result<&1, &1, U32 & String, Unit>):
+  match pair:
+    case (file, Fail{failure}):
+      do IO<Result<&1, &1, U32 & String, Unit>>:
+        _closed : Unit <- File.close(file)
+        return Fail{failure}
+    case (file, Done{Unit{}}):
+      do IO<Result<&1, &1, U32 & String, Unit>>:
+        _checkpoint : Result<&1, &1, U32 & String, Unit> <-
+          CrashPoint.hit("wal.during_append")
+        written : File & Result<&1, &1, U32 & String, Unit> <-
+          Fs.write_bytes(file, remaining)
+        append.written(written, path)
+
+# Writes the first bounded WAL chunk and continues through the split point.
+def append.chunked.rest(
+  file: File,
+  first: Bytes.Bytes,
+  remaining: Bytes.Bytes,
+  +path: String
+) -> IO(Result<&1, &1, U32 & String, Unit>):
+  do IO<Result<&1, &1, U32 & String, Unit>>:
+    written : File & Result<&1, &1, U32 & String, Unit> <-
+      Fs.write_bytes(file, first)
+    append.first.written(written, remaining, path)
+
+# Splits duplicated frame buffers around one bounded WAL write chunk.
+def append.chunked.cloned(
+  file: File,
+  sources: Bytes.Bytes & Bytes.Bytes,
+  total: U32,
+  +path: String
+) -> IO(Result<&1, &1, U32 & String, Unit>):
+  match sources:
+    case (first_source, rest_source):
+      append.chunked.rest(file,
+        append.slice(Bytes.slice(first_source, 0, 65536)),
+        append.slice(Bytes.slice(rest_source, 65536,
+          (total - 65536 : U32))), path)
+
+# Clones a large WAL frame before forming its bounded append chunks.
+def append.chunked.slices(
+  file: File,
+  frame: Bytes.Bytes,
+  total: U32,
+  +path: String
+) -> IO(Result<&1, &1, U32 & String, Unit>):
+  do IO<Result<&1, &1, U32 & String, Unit>>:
+    sources : Bytes.Bytes & Bytes.Bytes <-
+      IO.pure(Bytes.Bytes & Bytes.Bytes, ByteMemTable.bytes.clone(frame))
+    append.chunked.cloned(file, sources, total, path)
+
+# Selects full-frame or chunked writing after opening the WAL.
+def append.opened.checked(
+  file: File,
+  frame: Bytes.Bytes,
+  total: U32,
+  +path: String,
+  large: Bool
+) -> IO(Result<&1, &1, U32 & String, Unit>):
+  match large:
+    case True{}:
+      append.chunked.slices(file, frame, total, path)
+    case False{}:
+      do IO<Result<&1, &1, U32 & String, Unit>>:
+        written : File & Result<&1, &1, U32 & String, Unit> <-
+          Fs.write_bytes(file, frame)
+        append.written(written, path)
+
+# Routes an opened WAL frame according to its encoded byte length.
+def append.opened.frame(
+  file: File,
+  frame: Bytes.Bytes,
+  +path: String
+) -> IO(Result<&1, &1, U32 & String, Unit>):
+  match frame:
+    case Bytes.Bytes{+total, _}:
+      append.opened.checked(file, frame, total, path,
+        U32.is_le(65537, total))
+
 def append.opened(
   opened: Result<&1, &1, U32 & String, File>,
   frame: Bytes.Bytes,
@@ -584,8 +675,9 @@ def append.opened(
       IO.pure(Result<&1, &1, U32 & String, Unit>, Fail{failure})
     case Done{file}:
       do IO<Result<&1, &1, U32 & String, Unit>>:
-        pair : File & Result<&1, &1, U32 & String, Unit> <- Fs.write_bytes(file, frame)
-        append.written(pair, path)
+        _checkpoint : Result<&1, &1, U32 & String, Unit> <-
+          CrashPoint.hit("wal.before_append")
+        append.opened.frame(file, frame, path)
 
 def append.encoded(
   result: Result<&1, &1, Wal.Error, Bytes.Bytes>,
