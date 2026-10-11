@@ -101,3 +101,11 @@ def Laws.publication_retains_positive_generation_references(references):
   match references:
     case 0n: {==}
     case 1n+rest: {==}
+
+def Laws.publication_prepends_to_retained_generations(references):
+  match references:
+    case 0n: {==}
+    case 1n+rest: {==}
+
+def Laws.publication_preserves_older_retained_generations():
+  {==}

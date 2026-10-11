@@ -149,3 +149,21 @@ law publication_retains_positive_generation_references:
   {Snapshot.publish_generation(13n, 8192n, 1n+references) ==
     Snapshot.Published{14n, Snapshot.GenerationRetained{13n, 8192n, 1n+references}} :
     Snapshot.GenerationDecision}
+
+# A publication preserves previously retired generations and prepends its reader-pinned predecessor.
+law publication_prepends_to_retained_generations:
+  for references: Nat
+  {Snapshot.publish.registry(Snapshot.GenerationRegistry{
+    Snapshot.FileGeneration{7n, 4096n, 1n+references},
+    [Snapshot.FileGeneration{5n, 1024n, 2n}]}, 8192n) ==
+    Snapshot.GenerationRegistry{Snapshot.FileGeneration{8n, 8192n, 0n},
+      [Snapshot.FileGeneration{7n, 4096n, 1n+references},
+       Snapshot.FileGeneration{5n, 1024n, 2n}]} : Snapshot.GenerationRegistry}
+
+# A publication without current readers still preserves older retained generations.
+law publication_preserves_older_retained_generations:
+  {Snapshot.publish.registry(Snapshot.GenerationRegistry{
+    Snapshot.FileGeneration{7n, 4096n, 0n},
+    [Snapshot.FileGeneration{5n, 1024n, 2n}]}, 8192n) ==
+    Snapshot.GenerationRegistry{Snapshot.FileGeneration{8n, 8192n, 0n},
+      [Snapshot.FileGeneration{5n, 1024n, 2n}]} : Snapshot.GenerationRegistry}

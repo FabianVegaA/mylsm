@@ -51,6 +51,15 @@ type RetentionDecision is Data:
   Reclaim{generation: Nat, bytes: Nat}
   InvalidReference{}
 
+# Tracks one published SST generation and its live reader references.
+type FileGeneration is Data:
+  FileGeneration{number: Nat, bytes: Nat, references: Nat}
+
+# Keeps the current generation separate from all reader-retained generations.
+type GenerationRegistry is Data:
+  GenerationRegistry{current: FileGeneration,
+    retired: List<&2, FileGeneration>}
+
 # Produces the updated reservation only when both bounds admit it.
 def reserve.result(
   count: Nat,
@@ -285,6 +294,29 @@ def publish_generation(
   references: Nat
 ) -> GenerationDecision:
   publish_generation.copied(nat.duplicate(current), current_bytes, references)
+
+def publish.registry.current(
+  current: FileGeneration,
+  retired: List<&2, FileGeneration>,
+  next_bytes: Nat
+) -> GenerationRegistry:
+  match current:
+    case FileGeneration{+number, +bytes, references}:
+      match references:
+        case 0n:
+          GenerationRegistry{FileGeneration{Nat.add(number, 1n),
+            next_bytes, 0n}, retired}
+        case 1n+rest:
+          GenerationRegistry{FileGeneration{Nat.add(number, 1n),
+            next_bytes, 0n}, Con{FileGeneration{number, bytes, 1n+rest}, retired}}
+
+def publish.registry(
+  registry: GenerationRegistry,
+  next_bytes: Nat
+) -> GenerationRegistry:
+  match registry:
+    case GenerationRegistry{current, retired}:
+      publish.registry.current(current, retired, next_bytes)
 
 # Releases one reference and reclaims a retired generation after its final reader.
 def release_generation(retired: RetiredGeneration) -> RetentionDecision:
