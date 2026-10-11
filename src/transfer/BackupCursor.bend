@@ -3,6 +3,7 @@ import ../ByteMemTable.bend as ByteMemTable
 import ../scan/VisibleCursor.bend as VisibleCursor
 import ./Backup.bend as Backup
 import ./BackupCursorPolicy.bend as Policy
+import ../coordinator/CursorCodec.bend as CursorCodec
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # Separates bounded record emission from footer emission and completion.
@@ -71,6 +72,10 @@ def start.counts(
 # Emits the format header and prepares the first incremental source read.
 def start(cursor: VisibleCursor.Cursor, entry_count: Nat) -> Step:
   start.counts(Some{cursor}, Backup.nat.duplicate.pair(entry_count))
+
+# Initializes the same bounded encoder without a local cursor handle.
+def start.owner(entry_count: Nat) -> Step:
+  start.counts(None{}, Backup.nat.duplicate.pair(entry_count))
 
 def block.written(
   result: Result<&1, &1, Backup.Error, Bytes.Bytes>,
@@ -314,3 +319,27 @@ def advance.active(
 # Applies one result returned by the bounded visible cursor.
 def advance(stream: Stream, source_step: VisibleCursor.Step) -> Step:
   advance.active(stream, source_step)
+
+# Applies one frame returned by a retained owner cursor.
+def advance.owner.decision(
+  stream: Stream,
+  decision: Policy.OwnerFrameDecision
+) -> Step:
+  match stream:
+    case Stream{CursorBlocks{}, _, pending, pending_count, seen, expected,
+        entry_count, block_count, block_index}:
+      match decision:
+        case Policy.OwnerCursorItem{key, value}:
+          item(ByteMemTable.Entry{key, Some{value}}, None{}, pending,
+            seen, pending_count, expected, entry_count, block_count,
+            block_index)
+        case Policy.OwnerCursorEnd{}:
+          finish(Stream{CursorBlocks{}, None{}, pending, pending_count,
+            seen, expected, entry_count, block_count, block_index})
+    case Stream{CursorFooter{}, cursor, pending, pending_count, seen,
+        expected, entry_count, block_count, block_index}:
+      footer(cursor, seen, expected, entry_count, block_count, block_index)
+    case Stream{CursorFinished{}, _, _, _, _, _, _, _, _}: End{}
+
+def advance.owner(stream: Stream, frame: CursorCodec.Frame) -> Step:
+  advance.owner.decision(stream, Policy.owner.frame(frame))

@@ -1,5 +1,7 @@
 import Base
 import ../src/transfer/BackupCursorPolicy.bend as Policy
+import ../src/coordinator/CursorCodec.bend as CursorCodec
+import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # Keeps one item in the pending block and records it as consumed.
 law first_cursor_entry_is_buffered:
@@ -32,3 +34,12 @@ law early_cursor_end_is_rejected:
 # Ensures consecutive block frames receive distinct sequential indexes.
 law each_encoded_block_advances_its_index_once:
   {Policy.block.index.next(4n) == 5n : Nat}
+
+# Distinguishes an owner end marker from a record with empty byte fields.
+law owner_end_frame_is_classified_as_end:
+  {Policy.owner.frame(CursorCodec.CursorEnd{}) == Policy.OwnerCursorEnd{} : Policy.OwnerFrameDecision}
+
+# Preserves empty raw key and value fields in an owner item frame.
+law owner_item_frame_preserves_empty_bytes:
+  {Policy.owner.frame(CursorCodec.CursorItem{Bytes.new(0), Bytes.new(0)}) ==
+    Policy.OwnerCursorItem{Bytes.new(0), Bytes.new(0)} : Policy.OwnerFrameDecision}

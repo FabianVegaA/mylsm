@@ -24,3 +24,9 @@ def Laws.early_cursor_end_is_rejected():
 
 def Laws.each_encoded_block_advances_its_index_once():
   {==}
+
+def Laws.owner_end_frame_is_classified_as_end():
+  {==}
+
+def Laws.owner_item_frame_preserves_empty_bytes():
+  {==}

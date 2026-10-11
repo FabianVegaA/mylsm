@@ -1,5 +1,7 @@
 import Base
 import ../coordinator/QueuePolicy.bend as QueuePolicy
+import ../coordinator/CursorCodec.bend as CursorCodec
+import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # Reports whether one item is buffered, completes a block, or exceeds bounds.
 type AppendDecision is Data:
@@ -13,8 +15,19 @@ type FinishDecision is Data:
   CursorFinalBlock{pending: Nat}
   CursorFinishRejected{}
 
+# Carries an owner end marker or one unchanged raw-byte record.
+type OwnerFrameDecision is Type:
+  OwnerCursorEnd{}
+  OwnerCursorItem{key: Bytes.Bytes, value: Bytes.Bytes}
+
 def block.index.next(index: Nat) -> Nat:
   Nat.add(index, 1n)
+
+# Preserves raw bytes while classifying one owner cursor response.
+def owner.frame(frame: CursorCodec.Frame) -> OwnerFrameDecision:
+  match frame:
+    case CursorCodec.CursorEnd{}: OwnerCursorEnd{}
+    case CursorCodec.CursorItem{key, value}: OwnerCursorItem{key, value}
 
 # Selects buffering, a full block, or rejection after the count check.
 def append.capacity(seen: Nat, pending: Nat) -> AppendDecision:
