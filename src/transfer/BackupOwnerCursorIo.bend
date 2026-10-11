@@ -9,6 +9,7 @@ import ../coordinator/Protocol.bend as Protocol
 import ./BackupCursor.bend as BackupCursor
 import ./BackupCursorIo.bend as BackupCursorIo
 import ./BackupIo.bend as BackupIo
+import ./BackupOwnerPolicy.bend as Policy
 import ./Backup.bend as Backup
 
 # Tracks the retained owner snapshot and its export cursor lifecycle.
@@ -52,28 +53,30 @@ def source.clone(source: OwnerSource) -> OwnerSource & OwnerSource:
         Protocol.u32.duplicate.triple(snapshot_id),
         Protocol.u32.duplicate.triple(cursor_id), cursor_live)
 
-def source.error(error: Client.Error) -> U32 & String:
+# Converts socket and protocol errors into the pure owner-error policy.
+def source.error(error: Client.Error) -> Backup.Error:
   match error:
     case Client.ConnectFailure{ClientSocket.Host{code, message}}:
-      (code, message)
+      Policy.source.error(Policy.ConnectHost{code, message})
     case Client.ConnectFailure{ClientSocket.UnsupportedPlatform{}}:
-      (95, "owner snapshot cursor transport is unsupported")
-    case Client.RetryRead{ClientIo.Host{code, message}}: (code, message)
+      Policy.source.error(Policy.ConnectUnsupported{})
+    case Client.RetryRead{ClientIo.Host{code, message}}:
+      Policy.source.error(Policy.ReadHost{code, message})
     case Client.RetryRead{ClientIo.UnsupportedPlatform{}}:
-      (95, "owner snapshot cursor transport is unsupported")
-    case Client.RetryRead{_}: (5, "owner snapshot cursor read failed")
-    case Client.CommitUnknown{ClientIo.Host{code, message}}: (code, message)
-    case Client.CommitUnknown{_}: (5, "owner snapshot cursor state is uncertain")
-    case Client.FrameTooLarge{}: (75, "owner cursor frame exceeded limit")
-    case Client.StaleOwner{}: (116, "owner cursor generation is stale")
-    case Client.CorrelationMismatch{}: (71, "owner cursor correlation mismatch")
-    case Client.MalformedResponse{}: (71, "owner cursor response is malformed")
-    case Client.RequestIdsExhausted{}: (75, "owner cursor request ids exhausted")
-    case Client.OwnerRejected{_}: (5, "owner rejected snapshot cursor read")
-
-def source.error.value(pair: U32 & String) -> Backup.Error:
-  match pair:
-    case (code, message): Backup.SourceFailure{code, message}
+      Policy.source.error(Policy.ReadUnsupported{})
+    case Client.RetryRead{_}: Policy.source.error(Policy.ReadFailure{})
+    case Client.CommitUnknown{ClientIo.Host{code, message}}:
+      Policy.source.error(Policy.CommitHost{code, message})
+    case Client.CommitUnknown{_}: Policy.source.error(Policy.CommitFailure{})
+    case Client.FrameTooLarge{}: Policy.source.error(Policy.FrameTooLarge{})
+    case Client.StaleOwner{}: Policy.source.error(Policy.StaleOwner{})
+    case Client.CorrelationMismatch{}:
+      Policy.source.error(Policy.CorrelationMismatch{})
+    case Client.MalformedResponse{}:
+      Policy.source.error(Policy.MalformedResponse{})
+    case Client.RequestIdsExhausted{}:
+      Policy.source.error(Policy.RequestIdsExhausted{})
+    case Client.OwnerRejected{_}: Policy.source.error(Policy.OwnerRejected{})
 
 def source.step.result(
   source: OwnerSource,
@@ -86,7 +89,7 @@ def source.step.result(
         case (session, Fail{error}):
           (OwnerSource{session, snapshot_id, cursor_id, cursor_live},
             BackupCursor.Failure{None{},
-              source.error.value(source.error(error))})
+              source.error(error)})
         case (session, Done{frame}):
           match frame:
             case CursorCodec.CursorEnd{}:
@@ -180,21 +183,9 @@ def close.success.snapshot(
   pair: Client.Session & Result<&1, &1, Client.Error, Unit>
 ) -> IO(Result<&1, &1, BackupIo.Error, Unit>):
   match pair:
-    case (_, Fail{Client.ConnectFailure{ClientSocket.Host{code, message}}}):
+    case (_, Fail{error}):
       BackupCursorIo.close.error(file, temporary, None{},
-        Backup.SourceFailure{code, message})
-    case (_, Fail{Client.RetryRead{ClientIo.Host{code, message}}}):
-      BackupCursorIo.close.error(file, temporary, None{},
-        Backup.SourceFailure{code, message})
-    case (_, Fail{Client.ConnectFailure{ClientSocket.UnsupportedPlatform{}}}):
-      BackupCursorIo.close.error(file, temporary, None{},
-        Backup.SourceFailure{95, "owner snapshot cursor transport is unsupported"})
-    case (_, Fail{Client.RetryRead{ClientIo.UnsupportedPlatform{}}}):
-      BackupCursorIo.close.error(file, temporary, None{},
-        Backup.SourceFailure{95, "owner snapshot cursor transport is unsupported"})
-    case (_, Fail{_}):
-      BackupCursorIo.close.error(file, temporary, None{},
-        source.error.value(source.error(Client.MalformedResponse{})))
+        source.error(error))
     case (_, Done{Unit{}}):
       BackupCursorIo.close.file(destination, temporary, file)
 
