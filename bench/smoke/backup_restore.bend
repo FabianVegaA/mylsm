@@ -20,6 +20,32 @@ def empty.valid(result: Result<&1, &1, Restore.Error, Restore.Decoded>) -> Bool:
     case Done{Restore.Decoded{Nil{}}}: True{}
     case _: False{}
 
+# Accepts only the exporter's typed ordering rejection.
+def source.order.result(
+  result: Result<&1, &1, Backup.Error, Backup.Stream>
+) -> Bool:
+  match result:
+    case Fail{Backup.InvalidOrder{}}: True{}
+    case _: False{}
+
+# Rejects a source list that repeats or reverses a byte key.
+def source.order.rejected(entries: List<&1, ByteMemTable.Entry>) -> Bool:
+  source.order.result(Backup.start(entries))
+
+# Builds duplicate-key and descending-key source lists for export preflight.
+def source.order.valid() -> Bool:
+  Bool.and(
+    source.order.rejected(Con{
+      ByteMemTable.Entry{packed(Bytes.from_hex("01")),
+        Some{packed(Bytes.from_hex("aa"))}},
+      Con{ByteMemTable.Entry{packed(Bytes.from_hex("01")),
+        Some{packed(Bytes.from_hex("bb"))}}, Nil{}}}),
+    source.order.rejected(Con{
+      ByteMemTable.Entry{packed(Bytes.from_hex("02")),
+        Some{packed(Bytes.from_hex("aa"))}},
+      Con{ByteMemTable.Entry{packed(Bytes.from_hex("01")),
+        Some{packed(Bytes.from_hex("bb"))}}, Nil{}}}))
+
 def backup.empty() -> Bytes.Bytes:
   Bytes.concat([
     packed(Bytes.from_hex("4d594c534d424b31000000010000000000000000")),
@@ -252,6 +278,8 @@ def check.block.index(value: Maybe<&1, Bytes.Bytes>) -> IO(Unit):
 
 def main() -> IO(Unit):
   do IO<Unit>:
+    require(source.order.valid(),
+      "backup source should reject duplicate and descending keys")
     valid : Result<&1, &1, Restore.Error, Restore.Decoded> = Restore.decode(backup.empty())
     require(empty.valid(valid), "empty backup should restore")
     corrupted : Bytes.Bytes = Bytes.set.u32be(backup.empty(), 32, 0)
