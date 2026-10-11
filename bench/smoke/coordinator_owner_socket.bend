@@ -40,7 +40,7 @@ def listening(
 ) -> IO(Unit):
   match pair:
     case (server, Done{Unit{}}):
-      Owner.serve.loop(3n, Owner.Serving{server, handle, endpoint, 1})
+      Owner.serve.loop(6n, Owner.Serving{server, handle, endpoint, 1})
     case (server, Fail{_}): failed(server, handle, endpoint, "owner listen failed")
 
 # Restricts endpoint access before accepting client connections.

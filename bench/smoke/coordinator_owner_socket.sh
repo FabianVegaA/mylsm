@@ -5,7 +5,9 @@ ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/mylsm-owner-socket.XXXXXX")
 DB="$WORK/db"
 SERVER_PID=
-trap 'if [[ -n "$SERVER_PID" ]]; then kill "$SERVER_PID" 2>/dev/null || true; wait "$SERVER_PID" 2>/dev/null || true; fi; rm -rf "$WORK"' EXIT
+CLIENT_ONE_PID=
+CLIENT_TWO_PID=
+trap 'for pid in "$CLIENT_ONE_PID" "$CLIENT_TWO_PID" "$SERVER_PID"; do if [[ -n "$pid" ]]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi; done; rm -rf "$WORK"' EXIT
 
 bend "$ROOT/bench/smoke/coordinator_owner_socket.bend" -o "$WORK/owner-server"
 bend "$ROOT/bench/smoke/coordinator_owner_client.bend" -o "$WORK/owner-client"
@@ -28,7 +30,14 @@ if [[ ! -S "$DB/OWNER.sock" ]]; then
   exit 1
 fi
 
-MYLSM_OWNER_ENDPOINT="$DB/OWNER.sock" "$WORK/owner-client"
+MYLSM_OWNER_ENDPOINT="$DB/OWNER.sock" "$WORK/owner-client" &
+CLIENT_ONE_PID=$!
+MYLSM_OWNER_ENDPOINT="$DB/OWNER.sock" "$WORK/owner-client" &
+CLIENT_TWO_PID=$!
+wait "$CLIENT_ONE_PID"
+CLIENT_ONE_PID=
+wait "$CLIENT_TWO_PID"
+CLIENT_TWO_PID=
 wait "$SERVER_PID"
 SERVER_PID=
 cat "$WORK/server.log"
