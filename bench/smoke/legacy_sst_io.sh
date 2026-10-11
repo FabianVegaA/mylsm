@@ -6,7 +6,8 @@ DB=$(mktemp -d "${TMPDIR:-/tmp}/mylsm-legacy-sst.XXXXXX")
 DEST="$DB-migrated"
 CONFLICT_DEST="$DB-conflict"
 CONFLICT_BUNDLE="$CONFLICT_DEST.migrate-060.bundle"
-trap 'rm -rf "$DB" "$DEST" "$DEST.migrate-060.bundle" "$DEST.migrate-060.bundle.backup-060.tmp" "$DEST.restore-060.tmp" "$CONFLICT_DEST" "$CONFLICT_BUNDLE" "$CONFLICT_BUNDLE.backup-060.tmp" "$CONFLICT_DEST.restore-060.tmp"' EXIT
+AGGREGATE_DEST="$DB-aggregate-migrated"
+trap 'rm -rf "$DB" "$DEST" "$DEST.migrate-060.bundle" "$DEST.migrate-060.bundle.backup-060.tmp" "$DEST.restore-060.tmp" "$CONFLICT_DEST" "$CONFLICT_BUNDLE" "$CONFLICT_BUNDLE.backup-060.tmp" "$CONFLICT_DEST.restore-060.tmp" "$DB-aggregate" "$AGGREGATE_DEST" "$AGGREGATE_DEST.migrate-060.bundle" "$AGGREGATE_DEST.migrate-060.bundle.backup-060.tmp" "$AGGREGATE_DEST.restore-060.tmp"' EXIT
 rmdir "$DB"
 
 MYLSM_DB_PATH="$DB" bend "$ROOT/bench/smoke/legacy_sst_io.bend"
@@ -50,6 +51,11 @@ MYLSM_DB_PATH="$DB-aggregate" bend "$ROOT/bench/smoke/legacy_sst_multi_manifest.
 truncate -s 67108864 "$DB-aggregate/l0/1.tbl"
 AGGREGATE_BEFORE=$(cksum "$DB-aggregate/LOCK" "$DB-aggregate/MANIFEST" "$DB-aggregate/l0/0.tbl" "$DB-aggregate/l0/1.tbl")
 MYLSM_DB_PATH="$DB-aggregate" bend "$ROOT/bench/smoke/legacy_sst_aggregate_limit.bend"
+AGGREGATE_VALIDATED=$(cksum "$DB-aggregate/LOCK" "$DB-aggregate/MANIFEST" "$DB-aggregate/l0/0.tbl" "$DB-aggregate/l0/1.tbl")
+test "$AGGREGATE_BEFORE" = "$AGGREGATE_VALIDATED"
+MYLSM_DB_PATH="$DB-aggregate" MYLSM_MIGRATE_DEST="$AGGREGATE_DEST" bend "$ROOT/bench/smoke/legacy_migration_limit.bend"
+test ! -e "$AGGREGATE_DEST"
+test ! -e "$AGGREGATE_DEST.migrate-060.bundle"
 AGGREGATE_AFTER=$(cksum "$DB-aggregate/LOCK" "$DB-aggregate/MANIFEST" "$DB-aggregate/l0/0.tbl" "$DB-aggregate/l0/1.tbl")
 test "$AGGREGATE_BEFORE" = "$AGGREGATE_AFTER"
 truncate -s 67108865 "$DB/l0/0.tbl"
