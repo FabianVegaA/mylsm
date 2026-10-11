@@ -68,12 +68,20 @@ def fixture.source.applied() -> Result<&1, &1, U32 & String, ByteMemTable.Table>
     Migrate.legacy.sources.chronological(fixture.source.sst(),
       fixture.source.wal()), ByteMemTable.empty())
 
+def fixture.source.converted() -> Result<&1, &1, U32 & String, List<&1, ByteMemTable.Entry>>:
+  Migrate.legacy.snapshot.entries(fixture.source.sst(), fixture.source.wal())
+
 def fixture.source.no.visible(result: Result<&1, &1, U32 & String, ByteMemTable.Table>) -> Bool:
   match result:
     case Fail{_}: False{}
     case Done{table}:
       Nat.is_eq(List.length(&1, ByteMemTable.Entry,
         Migrate.canonical.entries(table)), 0n)
+
+def fixture.source.no.canonical(result: Result<&1, &1, U32 & String, List<&1, ByteMemTable.Entry>>) -> Bool:
+  match result:
+    case Fail{_}: False{}
+    case Done{entries}: Nat.is_eq(List.length(&1, ByteMemTable.Entry, entries), 0n)
 
 def fixture.chronological.visible(value: Maybe<&1, Bytes.Bytes>) -> Bool:
   match value:
@@ -116,3 +124,7 @@ law migration_applies_legacy_mutations_chronologically:
 # Replayed WAL mutations are newer than SST records and retain tombstone precedence.
 law migration_wal_tombstone_shadows_legacy_sst:
   {fixture.source.no.visible(fixture.source.applied()) == True{} : Bool}
+
+# The composed snapshot converter emits no record hidden by a WAL tombstone.
+law migration_snapshot_conversion_drops_wal_shadowed_records:
+  {fixture.source.no.canonical(fixture.source.converted()) == True{} : Bool}

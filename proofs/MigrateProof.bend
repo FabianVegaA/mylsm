@@ -18,3 +18,6 @@ def Laws.migration_applies_legacy_mutations_chronologically():
 
 def Laws.migration_wal_tombstone_shadows_legacy_sst():
   {==}
+
+def Laws.migration_snapshot_conversion_drops_wal_shadowed_records():
+  {==}

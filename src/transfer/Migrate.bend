@@ -191,6 +191,28 @@ def legacy.sources.chronological(
     List.reverse(&2, MemTable.Entry, sst_newest_first),
     legacy.batches.entries(wal_batches))
 
+def legacy.snapshot.table(
+  sst_newest_first: List<&2, MemTable.Entry>,
+  wal_batches: List<&2, Wal.Batch>
+) -> Result<&1, &1, U32 & String, ByteMemTable.Table>:
+  legacy.apply.chronological(
+    legacy.sources.chronological(sst_newest_first, wal_batches),
+    ByteMemTable.empty())
+
+def legacy.snapshot.canonicalize(
+  result: Result<&1, &1, U32 & String, ByteMemTable.Table>
+) -> Result<&1, &1, U32 & String, List<&1, ByteMemTable.Entry>>:
+  match result:
+    case Fail{error}: Fail{error}
+    case Done{table}: Done{canonical.entries(table)}
+
+def legacy.snapshot.entries(
+  sst_newest_first: List<&2, MemTable.Entry>,
+  wal_batches: List<&2, Wal.Batch>
+) -> Result<&1, &1, U32 & String, List<&1, ByteMemTable.Entry>>:
+  legacy.snapshot.canonicalize(
+    legacy.snapshot.table(sst_newest_first, wal_batches))
+
 # Begins publication only for a source admitted by the migration plan.
 def begin(decision: Decision) -> PublicationDecision:
   match decision:
