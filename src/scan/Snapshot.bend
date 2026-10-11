@@ -1,4 +1,5 @@
 import Base
+import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # Reports whether the requested snapshot fits the retained-resource limits.
 type Decision is Data:
@@ -82,6 +83,92 @@ type GenerationReleaseDecision is Data:
   GenerationReclaimed{registry: GenerationRegistry, number: Nat, bytes: Nat}
   MissingReference{registry: GenerationRegistry}
 
+# Carries the next owner resource identifier and terminal exhaustion state.
+type ResourceIdAllocator is Data:
+  ResourceIdAllocator{next_id: U32, exhausted: Bool}
+
+# Reports an allocated owner identifier or preserves an exhausted allocator.
+type ResourceIdDecision is Data:
+  ResourceIdAllocated{id: U32, allocator: ResourceIdAllocator}
+  ResourceIdExhausted{allocator: ResourceIdAllocator}
+
+def nat.duplicate.step(pair: Nat & Nat) -> Nat & Nat:
+  match pair:
+    case (left, right): (Nat.add(1n, left), Nat.add(1n, right))
+
+def nat.duplicate(value: Nat) -> Nat & Nat:
+  match value:
+    case 0n: (0n, 0n)
+    case 1n+rest: nat.duplicate.step(nat.duplicate(rest))
+
+def allocate_resource_id.maximum(
+  next_ids: U32 & U32,
+  at_max: Bool
+) -> ResourceIdDecision:
+  match next_ids:
+    case (next_id, increment_id):
+      match at_max:
+        case True{}:
+          ResourceIdAllocated{next_id,
+            ResourceIdAllocator{increment_id, True{}}}
+        case False{}:
+          ResourceIdAllocated{next_id,
+            ResourceIdAllocator{U32.add(increment_id, 1), False{}}}
+
+def u32.bytes(value: U32) -> Bytes.Bytes:
+  Bytes.set.u32be(Bytes.new(4), 0, value)
+
+def u32.clone.pair.results(
+  results: (Bytes.Bytes & Maybe<&2, U32>) & (Bytes.Bytes & Maybe<&2, U32>)
+) -> U32 & U32:
+  match results:
+    case ((_, Some{first}), (_, Some{second})): (first, second)
+    case _: (0, 0)
+
+def u32.clone.pair.bytes(bytes: Bytes.Bytes & Bytes.Bytes) -> U32 & U32:
+  match bytes:
+    case (left, right):
+      u32.clone.pair.results((Bytes.get.u32be(left, 0),
+        Bytes.get.u32be(right, 0)))
+
+def u32.clone.pair.buffers(
+  +len: U32,
+  buffers: Array<U32> & Array<U32>
+) -> U32 & U32:
+  match buffers:
+    case (left, right):
+      u32.clone.pair.bytes((Bytes.Bytes{len, left}, Bytes.Bytes{len, right}))
+
+def u32.duplicate.encoded(bytes: Bytes.Bytes) -> U32 & U32:
+  match bytes:
+    case Bytes.Bytes{+len, buf}:
+      u32.clone.pair.buffers(len,
+        Bytes.copy.bytes(len, buf, Bytes.alloc(len), 0, 0))
+
+def u32.duplicate(value: U32) -> U32 & U32:
+  u32.duplicate.encoded(u32.bytes(value))
+
+def allocate_resource_id.at_limit(
+  copies: U32 & U32,
+  exhausted: Bool
+) -> ResourceIdDecision:
+  match copies:
+    case (next_id, check_id):
+      match exhausted:
+        case True{}:
+          ResourceIdExhausted{ResourceIdAllocator{next_id, exhausted}}
+        case False{}:
+          allocate_resource_id.maximum(u32.duplicate(next_id),
+            U32.is_eq(check_id, 4294967295))
+
+# Allocates one nonrecycled owner resource identifier without integer wraparound.
+def allocate_resource_id(
+  allocator: ResourceIdAllocator
+) -> ResourceIdDecision:
+  match allocator:
+    case ResourceIdAllocator{next_id, exhausted}:
+      allocate_resource_id.at_limit(u32.duplicate(next_id), exhausted)
+
 # Produces the updated reservation only when both bounds admit it.
 def reserve.result(
   count: Nat,
@@ -93,17 +180,6 @@ def reserve.result(
       Retained{Nat.add(count, 1n), retained_bytes}
     case _:
       ResourceLimit{}
-
-# Increments both copies of a recursively duplicated natural number.
-def nat.duplicate.step(pair: Nat & Nat) -> Nat & Nat:
-  match pair:
-    case (left, right): (Nat.add(1n, left), Nat.add(1n, right))
-
-# Creates two equal natural numbers without reusing an affine value.
-def nat.duplicate(value: Nat) -> Nat & Nat:
-  match value:
-    case 0n: (0n, 0n)
-    case 1n+rest: nat.duplicate.step(nat.duplicate(rest))
 
 # Computes the updated retained-byte total and both admission checks.
 def reserve.bytes(

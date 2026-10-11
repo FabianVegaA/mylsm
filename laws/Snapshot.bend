@@ -218,3 +218,23 @@ law release_missing_generation_preserves_registry:
     Snapshot.MissingReference{Snapshot.GenerationRegistry{
       Snapshot.FileGeneration{7n, 4096n, 0n},
       [Snapshot.FileGeneration{5n, 1024n, 1n}]}} : Snapshot.GenerationReleaseDecision}
+
+# Allocates the first nonzero owner resource identifier and advances the allocator.
+law first_resource_identifier_is_one:
+  {Snapshot.allocate_resource_id(Snapshot.ResourceIdAllocator{1, False{}}) ==
+    Snapshot.ResourceIdAllocated{1,
+      Snapshot.ResourceIdAllocator{2, False{}}} : Snapshot.ResourceIdDecision}
+
+# Allocates the maximum identifier once and records exhaustion without wrapping.
+law maximum_resource_identifier_does_not_wrap:
+  {Snapshot.allocate_resource_id(Snapshot.ResourceIdAllocator{
+    4294967295, False{}}) == Snapshot.ResourceIdAllocated{4294967295,
+      Snapshot.ResourceIdAllocator{4294967295, True{}}} :
+    Snapshot.ResourceIdDecision}
+
+# Preserves an exhausted allocator and rejects all later identifier requests.
+law exhausted_resource_identifier_is_rejected:
+  {Snapshot.allocate_resource_id(Snapshot.ResourceIdAllocator{
+    4294967295, True{}}) == Snapshot.ResourceIdExhausted{
+      Snapshot.ResourceIdAllocator{4294967295, True{}}} :
+    Snapshot.ResourceIdDecision}

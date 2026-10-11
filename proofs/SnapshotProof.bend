@@ -124,3 +124,12 @@ def Laws.release_nonfinal_retired_generation():
 
 def Laws.release_missing_generation_preserves_registry():
   {==}
+
+def Laws.first_resource_identifier_is_one():
+  {==}
+
+def Laws.maximum_resource_identifier_does_not_wrap():
+  {==}
+
+def Laws.exhausted_resource_identifier_is_rejected():
+  {==}
