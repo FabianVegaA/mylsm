@@ -142,3 +142,15 @@ def Laws.owner_snapshot_rejection_preserves_registry():
 
 def Laws.owner_snapshot_id_exhaustion_preserves_registry():
   {==}
+
+def Laws.owner_snapshot_cursor_acquire_increments_reference():
+  {==}
+
+def Laws.owner_snapshot_cursor_limit_preserves_resource():
+  {==}
+
+def Laws.owner_snapshot_cursor_release_decrements_reference():
+  {==}
+
+def Laws.owner_snapshot_cursor_release_underflow_preserves_resource():
+  {==}

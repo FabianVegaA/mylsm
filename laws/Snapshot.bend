@@ -266,3 +266,35 @@ law owner_snapshot_id_exhaustion_preserves_registry:
     Nil{}}, 5n, 64n, (4n, 128n)) == Snapshot.OwnerSnapshotRejected{
       Snapshot.OwnerRegistry{Snapshot.ResourceIdAllocator{4294967295, True{}},
         Snapshot.Registry{0n, 0n}, Nil{}}} : Snapshot.OwnerOpenDecision}
+
+# Adds one child reference while preserving the snapshot identity and budget.
+law owner_snapshot_cursor_acquire_increments_reference:
+  {Snapshot.snapshot.resource.cursor.acquire(
+    Snapshot.SnapshotResource{3, 7n, 64n, 0n}, 2n) ==
+    Snapshot.SnapshotCursorAcquired{
+      Snapshot.SnapshotResource{3, 7n, 64n, 1n}} :
+    Snapshot.SnapshotCursorDecision}
+
+# Rejects a cursor at the per-snapshot limit without changing its resource.
+law owner_snapshot_cursor_limit_preserves_resource:
+  {Snapshot.snapshot.resource.cursor.acquire(
+    Snapshot.SnapshotResource{3, 7n, 64n, 1n}, 1n) ==
+    Snapshot.SnapshotCursorLimit{
+      Snapshot.SnapshotResource{3, 7n, 64n, 1n}} :
+    Snapshot.SnapshotCursorDecision}
+
+# Releases one child reference while preserving snapshot identity and bytes.
+law owner_snapshot_cursor_release_decrements_reference:
+  {Snapshot.snapshot.resource.cursor.release(
+    Snapshot.SnapshotResource{3, 7n, 64n, 1n}) ==
+    Snapshot.SnapshotCursorReleased{
+      Snapshot.SnapshotResource{3, 7n, 64n, 0n}} :
+    Snapshot.SnapshotCursorDecision}
+
+# Rejects cursor underflow without changing its snapshot resource.
+law owner_snapshot_cursor_release_underflow_preserves_resource:
+  {Snapshot.snapshot.resource.cursor.release(
+    Snapshot.SnapshotResource{3, 7n, 64n, 0n}) ==
+    Snapshot.SnapshotCursorUnderflow{
+      Snapshot.SnapshotResource{3, 7n, 64n, 0n}} :
+    Snapshot.SnapshotCursorDecision}

@@ -107,6 +107,15 @@ type OwnerOpenDecision is Data:
   OwnerSnapshotOpened{registry: OwnerRegistry, snapshot_id: U32}
   OwnerSnapshotRejected{registry: OwnerRegistry}
 
+# Reports a snapshot cursor-reference update or preserves its prior resource.
+type SnapshotCursorDecision is Data:
+  SnapshotCursorAcquired{resource: SnapshotResource}
+  SnapshotCursorLimit{resource: SnapshotResource}
+  SnapshotCursorReleased{resource: SnapshotResource}
+  SnapshotCursorUnderflow{resource: SnapshotResource}
+
+
+
 def nat.duplicate.step(pair: Nat & Nat) -> Nat & Nat:
   match pair:
     case (left, right): (Nat.add(1n, left), Nat.add(1n, right))
@@ -446,6 +455,105 @@ def owner.snapshot.open(
     case OwnerRegistry{allocator, reservations, snapshots}:
       owner.snapshot.open.available(allocator, reservations, snapshots,
         generation, nat.duplicate(requested_bytes), limits)
+
+def snapshot.resource.duplicate.parts(
+  ids: U32 & U32,
+  generations: Nat & Nat,
+  retained: Nat & Nat,
+  cursors: Nat & Nat
+) -> SnapshotResource & SnapshotResource:
+  match ids:
+    case (first_id, second_id):
+      match generations:
+        case (first_generation, second_generation):
+          match retained:
+            case (first_bytes, second_bytes):
+              match cursors:
+                case (first_count, second_count):
+                  (SnapshotResource{first_id, first_generation, first_bytes,
+                    first_count}, SnapshotResource{second_id, second_generation,
+                    second_bytes, second_count})
+
+def snapshot.resource.duplicate(resource: SnapshotResource) -> SnapshotResource & SnapshotResource:
+  match resource:
+    case SnapshotResource{id, generation, retained_bytes, cursor_count}:
+      snapshot.resource.duplicate.parts(u32.duplicate(id),
+        nat.duplicate(generation), nat.duplicate(retained_bytes),
+        nat.duplicate(cursor_count))
+
+def snapshot.resource.cursor.acquire.result(
+  resource: SnapshotResource,
+  admitted: Bool
+) -> SnapshotCursorDecision:
+  match resource:
+    case SnapshotResource{id, generation, retained_bytes, cursor_count}:
+      match admitted:
+        case True{}:
+          SnapshotCursorAcquired{SnapshotResource{id, generation,
+            retained_bytes, Nat.add(cursor_count, 1n)}}
+        case False{}: SnapshotCursorLimit{resource}
+
+def snapshot.resource.cursor.acquire.checked(
+  resource: SnapshotResource,
+  cursor_count: Nat,
+  max_cursors: Nat
+) -> SnapshotCursorDecision:
+  snapshot.resource.cursor.acquire.result(resource,
+    Nat.is_lt(cursor_count, max_cursors))
+
+def snapshot.resource.cursor.acquire.copied(
+  copies: SnapshotResource & SnapshotResource,
+  max_cursors: Nat
+) -> SnapshotCursorDecision:
+  match copies:
+    case (for_check, for_update):
+      match for_check:
+        case SnapshotResource{_, _, _, cursor_count}:
+          snapshot.resource.cursor.acquire.checked(for_update, cursor_count,
+            max_cursors)
+
+# Acquires one child reference without changing a snapshot at its cursor limit.
+def snapshot.resource.cursor.acquire(
+  resource: SnapshotResource,
+  max_cursors: Nat
+) -> SnapshotCursorDecision:
+  snapshot.resource.cursor.acquire.copied(
+    snapshot.resource.duplicate(resource), max_cursors)
+
+def snapshot.resource.cursor.release.result(
+  resource: SnapshotResource,
+  has_reference: Bool
+) -> SnapshotCursorDecision:
+  match resource:
+    case SnapshotResource{id, generation, retained_bytes, cursor_count}:
+      match has_reference:
+        case True{}:
+          SnapshotCursorReleased{SnapshotResource{id, generation,
+            retained_bytes, Nat.sub(cursor_count, 1n)}}
+        case False{}: SnapshotCursorUnderflow{resource}
+
+def snapshot.resource.cursor.release.checked(
+  resource: SnapshotResource,
+  cursor_count: Nat
+) -> SnapshotCursorDecision:
+  snapshot.resource.cursor.release.result(resource,
+    Nat.is_lt(0n, cursor_count))
+
+def snapshot.resource.cursor.release.copied(
+  copies: SnapshotResource & SnapshotResource
+) -> SnapshotCursorDecision:
+  match copies:
+    case (for_check, for_update):
+      match for_check:
+        case SnapshotResource{_, _, _, cursor_count}:
+          snapshot.resource.cursor.release.checked(for_update, cursor_count)
+
+# Releases one child reference and preserves the resource on underflow.
+def snapshot.resource.cursor.release(
+  resource: SnapshotResource
+) -> SnapshotCursorDecision:
+  snapshot.resource.cursor.release.copied(
+    snapshot.resource.duplicate(resource))
 
 # Maps a valid registry release to successful snapshot closure.
 def snapshot.close.registry(decision: RegistryReleaseDecision) -> SnapshotCloseDecision:
