@@ -90,8 +90,8 @@ After a successful flush, the durable handle drops the published entries from it
 MemTable and retains their visible totals as base stats, so subsequent lookups and
 scans use the SST instead of holding a duplicate full table in memory.
 `scan_seek(cursor, lower)` advances the inclusive lower bound and `scan_close` releases
-the SST reader, returning a typed result. Until the SST index carries separator keys,
-`scan_next` may return `StreamSkip` for records read before the seek key. Range bounds are lower-inclusive and
+the SST reader, returning a typed result. The generation-five SST index stores block
+separators, so a validated cursor can route directly to the selected block. Range bounds are lower-inclusive and
 upper-exclusive; prefix bounds compare exact bytes. The UTF-8 facade provides matching
 operations over String bounds and shares the byte ordering. Its cursor enters terminal
 failure if a stored key or value cannot be decoded, and close reports reader errors.
@@ -100,13 +100,15 @@ Top-level `inspect(path)` canonicalizes the database path, requires its existing
 repairing or creating database files. It reports package/storage identity and
 manifest integrity; it does not yet validate WAL or SST contents.
 Both facades also expose IO-based `snapshot`, snapshot `get`/range/prefix scans, and
-`close`. Snapshot creation preflights estimated retained bytes, reads the published SST
-when present, overlays the active delta, and retains a canonical visible-entry copy up
-to 64 MiB. Each snapshot cursor owns another clone so it can outlive the snapshot value
-and database handle; this remains materialized snapshot storage, not retained immutable
-roots or file generations.
+`close`. Local direct handles preflight estimated retained bytes, read the published SST
+when present, overlay the active delta, and retain a canonical visible-entry copy up to
+64 MiB. Owner-backed snapshots retain a block-backed root and owner-issued resource IDs;
+their cursors route reads to that owner and are bounded by its snapshot and cursor limits.
 Both facades expose IO-based `backup` plus `backup_next` for bounded encoded chunks and
-`backup_to(path, handle)` for durable publication. `backup_to` creates a directory at
+`backup_to(path, handle)` for durable publication on local handles. `backup_to` captures
+an immutable retained root and streams it through a bounded cursor, exporting the delta
+and SST from the same view without materializing all visible results. Remote `backup_to`
+is not yet supported. The method creates a directory at
 `path` containing the exchange file `BACKUP`; it stages that directory beside the
 destination, syncs the file and directory, publishes it with no-replace rename, and
 syncs the parent. If the final sync fails after rename, it returns `CommitUnknown`.
@@ -128,16 +130,17 @@ the replacement SST/WAL checkpoint; it does not yet compact multiple levels. Blo
 recovery validates one bounded block at a time and retains compact SST metadata; WAL
 records replay into the active delta. Public scans use the file-level `SstCursor`, which
 reads one block at a time and applies range/prefix filters and forward lower-bound
-positioning. The serialized index and root are validated incrementally. Each
-positional read is capped at 16 KiB so its read assembly and hash inputs fit the
-64 KiB resident-buffer budget; total index size no longer sets a rejection threshold.
-The current SST index has no separator keys, so a lower-bound seek may still read earlier
-blocks. Backup and restore have host-level file publication fixtures, but export still
-materializes a snapshot and restore validates a bounded whole exchange in memory. Retained
-snapshot accounting, retained-file reclamation, coordinated writers, and safe 0.5.0.0
-migration remain outstanding acceptance requirements.
-`Bytes.stats` currently reports canonical visible entry count and payload bytes; it does
-not yet report disk, buffer, cursor, snapshot, or coordinator retention.
+positioning. The serialized index and root are validated incrementally. Each positional
+read is capped at 16 KiB so its read assembly and hash inputs fit the 64 KiB resident-buffer
+budget; separator routing avoids scanning from the start for a validated lower-bound seek.
+The explicit local snapshot API still materializes a bounded clone of visible entries;
+owner-backed snapshots retain block-backed roots and route cursors through the owner.
+Deferred generation-file reclamation, coordinated writers, and safe 0.5.0.0 migration
+remain outstanding acceptance requirements. Restore validates a bounded whole exchange in
+memory before publication. `Bytes.Stats` reports canonical visible entry and payload
+totals plus active owner snapshots, their retained bytes, and owner cursors. Local direct
+handles report zero for owner-managed resources; disk, buffer, queue, connection,
+operation-failure, and persistent-generation metrics remain open.
 Consumer smoke fixtures include `bench/smoke/byte_block_reader.sh`,
 `bench/smoke/utf8_facade.sh`,
 `bench/smoke/shared_utf8_bytes.sh`,
