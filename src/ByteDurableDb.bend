@@ -2452,7 +2452,6 @@ def snapshot.root.snapshot.delta(
 
 def snapshot.root.preflight.estimated(
   handle: Handle,
-  _stats: VisibleStats.Stats,
   copied: List<&1, ByteMemTable.Entry>,
   delta_bytes: Nat,
   max_bytes: Nat
@@ -2463,18 +2462,16 @@ def snapshot.root.preflight.ready(
   +path: String,
   lock: DbLock.Lock,
   state: HandleState,
-  stats: VisibleStats.Stats & VisibleStats.Stats,
+  stats: VisibleStats.Stats,
   entries: List<&1, ByteMemTable.Entry> & List<&1, ByteMemTable.Entry>,
   delta_bytes: Nat,
   max_bytes: Nat
 ) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
-  match stats:
-    case (for_handle, for_estimate):
-      match entries:
-        case (live_entries, copied_entries):
-          snapshot.root.preflight.estimated(
-            Handle{path, lock, ByteMemTable.Table{live_entries}, state,
-              for_handle}, for_estimate, copied_entries, delta_bytes, max_bytes)
+  match entries:
+    case (live_entries, copied_entries):
+      snapshot.root.preflight.estimated(
+        Handle{path, lock, ByteMemTable.Table{live_entries}, state, stats},
+        copied_entries, delta_bytes, max_bytes)
 
 def snapshot.root.preflight(
   handle: Handle,
@@ -2486,7 +2483,7 @@ def snapshot.root.preflight(
       match table:
         case ByteMemTable.Table{entries}:
           snapshot.root.preflight.ready(path, lock, state,
-            VisibleStats.clone(base_stats), ByteMemTable.entries.clone(entries),
+            base_stats, ByteMemTable.entries.clone(entries),
             delta_bytes, max_bytes)
 
 def snapshot.root.retained(

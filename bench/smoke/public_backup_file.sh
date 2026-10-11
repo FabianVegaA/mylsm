@@ -21,3 +21,17 @@ MYLSM_BACKUP_PATH="$WORK/backup" \
 MYLSM_RESTORE_DESTINATION="$WORK/restored" \
 MYLSM_RESTORE_CHECK_PATH="$WORK/restored" \
   bend "$ROOT/bench/smoke/public_restore_from.bend"
+
+MYLSM_DB_PATH="$WORK/delta-db" \
+MYLSM_BACKUP_PATH="$WORK/delta-backup" \
+MYLSM_BACKUP_BLOCKED_PATH="$WORK/readonly/delta-backup" \
+MYLSM_BACKUP_SKIP_FLUSH=true \
+  bend "$ROOT/bench/smoke/public_backup_file.bend"
+
+test -f "$WORK/delta-backup/BACKUP"
+test "$(wc -c < "$WORK/delta-backup/BACKUP" | tr -d ' ')" -gt 131072
+
+MYLSM_BACKUP_PATH="$WORK/delta-backup" \
+MYLSM_RESTORE_DESTINATION="$WORK/delta-restored" \
+MYLSM_RESTORE_CHECK_PATH="$WORK/delta-restored" \
+  bend "$ROOT/bench/smoke/public_restore_from.bend"

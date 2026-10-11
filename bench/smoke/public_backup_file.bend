@@ -196,6 +196,19 @@ def backup.flushed(
           MyLSM.Bytes.delete(handle, key(7n))
         backup.deleted(path, deleted)
 
+def backup.written.mode(
+  +path: String,
+  handle: MyLSM.Bytes.Handle,
+  skip_flush: Bool
+) -> IO(Unit):
+  match skip_flush:
+    case True{}: backup.flushed(path, (handle, Done{Unit{}}))
+    case False{}:
+      do IO<Unit>:
+        pair : MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
+          MyLSM.Bytes.flush(handle)
+        backup.flushed(path, pair)
+
 def backup.written.result(
   +path: String,
   handle: MyLSM.Bytes.Handle,
@@ -208,9 +221,8 @@ def backup.written.result(
         IO.die(Unit, 1, "backup fixture write failed")
     case Done{Unit{}}:
       do IO<Unit>:
-        pair : MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
-          MyLSM.Bytes.flush(handle)
-        backup.flushed(path, pair)
+        mode : String <- IO.try(String, Console.get_env("MYLSM_BACKUP_SKIP_FLUSH"))
+        backup.written.mode(path, handle, String.eq(mode, "true"))
 
 def backup.written(
   +path: String,

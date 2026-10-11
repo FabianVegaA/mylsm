@@ -186,14 +186,14 @@ def point_read.matches(order: Cmp) -> Bool:
 
 
 
-def nat.duplicate.step(pair: Nat & Nat) -> Nat & Nat:
-  match pair:
-    case (left, right): (Nat.add(1n, left), Nat.add(1n, right))
+def nat.duplicate.go(value: Nat, first: Nat, second: Nat) -> Nat & Nat:
+  match value:
+    case 0n: (first, second)
+    case 1n+rest:
+      nat.duplicate.go(rest, Nat.add(1n, first), Nat.add(1n, second))
 
 def nat.duplicate(value: Nat) -> Nat & Nat:
-  match value:
-    case 0n: (0n, 0n)
-    case 1n+rest: nat.duplicate.step(nat.duplicate(rest))
+  nat.duplicate.go(value, 0n, 0n)
 
 def allocate_resource_id.maximum(
   next_ids: U32 & U32,

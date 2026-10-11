@@ -940,6 +940,27 @@ def Bytes.backup_to.opened(
           BackupCursorIo.export(path, cursor, entries, fuel)
         return Bytes.backup_to.result(ByteHandle{raw}, result)
 
+def Bytes.backup_to.rooted(
+  path: String,
+  entries: Nat,
+  fuel: Nat,
+  pair:
+    RawByteDb.Handle &
+    Result<&1, &1, RawByteDb.Error, RawByteDb.SnapshotRoot>
+) -> IO(Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>):
+  match pair:
+    case (raw, Fail{error}):
+      IO.pure(Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>,
+        (ByteHandle{raw}, Fail{Bytes.error(error)}))
+    case (raw, Done{root}):
+      do IO<Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>>:
+        opened : Result<&1, &1, RawByteDb.Error, VisibleByteCursor.Cursor> <-
+          RawByteDb.snapshot.root.cursor.open(root,
+            ByteRangeCursor.Bounds{None{}, None{}, None{}})
+        exported : Bytes.Handle & Result<&1, &1, Bytes.Error, Unit> <-
+          Bytes.backup_to.opened(path, entries, fuel, (raw, opened))
+        return exported
+
 def Bytes.backup_to.budgeted(
   path: String,
   entries: Nat,
@@ -948,9 +969,10 @@ def Bytes.backup_to.budgeted(
   match pair:
     case (raw, fuel):
       do IO<Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>>:
-        opened : RawByteDb.Handle & Result<&1, &1, RawByteDb.Error, VisibleByteCursor.Cursor> <-
-          RawByteDb.scan.open(raw, ByteRangeCursor.Bounds{None{}, None{}, None{}})
-        Bytes.backup_to.opened(path, entries, fuel, opened)
+        rooted : RawByteDb.Handle &
+          Result<&1, &1, RawByteDb.Error, RawByteDb.SnapshotRoot> <-
+            RawByteDb.snapshot_root_limited(67108864n, raw)
+        Bytes.backup_to.rooted(path, entries, fuel, rooted)
 
 def Bytes.backup_to.statsed(
   path: String,
