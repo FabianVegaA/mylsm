@@ -7,6 +7,19 @@ law operation_error_count_increments:
   for count: Nat
   {Policy.next_operation_errors(count) == Nat.add(count, 1n) : Nat}
 
+# Classifies empty resident metrics exactly across every counter and state.
+law empty_resident_stats_match_all_zero_counters:
+  for entries: Nat
+  for payload_bytes: Nat
+  for cache_entries: Nat
+  for operation_errors: Nat
+  for maintenance_blocked: Bool
+  {Policy.stats.resident.empty(entries, payload_bytes, cache_entries,
+    operation_errors, maintenance_blocked) ==
+    (Nat.is_eq(entries, 0n) && Nat.is_eq(payload_bytes, 0n) &&
+      Nat.is_eq(cache_entries, 0n) && Nat.is_eq(operation_errors, 0n) &&
+      Bool.not(maintenance_blocked)) : Bool}
+
 # A healthy handle accepts data operations.
 law healthy_state_accepts_operations:
   {Policy.accepts_data_operation(Policy.Open{}) == True{} : Bool}

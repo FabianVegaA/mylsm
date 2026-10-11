@@ -4,6 +4,15 @@ import ../laws/DurableDbPolicy.bend as Laws
 def Laws.operation_error_count_increments(_count):
   {==}
 
+def Laws.empty_resident_stats_match_all_zero_counters(
+  _entries,
+  _payload_bytes,
+  _cache_entries,
+  _operation_errors,
+  _maintenance_blocked
+):
+  {==}
+
 def Laws.healthy_state_accepts_operations():
   {==}
 

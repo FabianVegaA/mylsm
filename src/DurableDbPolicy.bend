@@ -11,6 +11,18 @@ type HandleState is Data:
 def next_operation_errors(count: Nat) -> Nat:
   Nat.add(count, 1n)
 
+# Identifies a reopened database with no resident state or operation failures.
+def stats.resident.empty(
+  entries: Nat,
+  payload_bytes: Nat,
+  cache_entries: Nat,
+  operation_errors: Nat,
+  maintenance_blocked: Bool
+) -> Bool:
+  Nat.is_eq(entries, 0n) && Nat.is_eq(payload_bytes, 0n) &&
+    Nat.is_eq(cache_entries, 0n) && Nat.is_eq(operation_errors, 0n) &&
+    Bool.not(maintenance_blocked)
+
 # Distinguishes failures before and after WAL append begins.
 type AppendPhase is Data:
   BeforeAppend{}
