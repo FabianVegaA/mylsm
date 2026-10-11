@@ -3,6 +3,8 @@ import ../Fs.bend as Fs
 import ../coordinator/Client.bend as Client
 import ../coordinator/ByteClient.bend as ByteClient
 import ../coordinator/CursorCodec.bend as CursorCodec
+import ../coordinator/Io.bend as ClientIo
+import ../coordinator/UnixSocketIo.bend as ClientSocket
 import ../coordinator/Protocol.bend as Protocol
 import ./BackupCursor.bend as BackupCursor
 import ./BackupCursorIo.bend as BackupCursorIo
@@ -50,8 +52,24 @@ def source.clone(source: OwnerSource) -> OwnerSource & OwnerSource:
         Protocol.u32.duplicate.triple(snapshot_id),
         Protocol.u32.duplicate.triple(cursor_id), cursor_live)
 
-def source.error(_: Client.Error) -> U32 & String:
-  (5, "owner snapshot cursor request failed")
+def source.error(error: Client.Error) -> U32 & String:
+  match error:
+    case Client.ConnectFailure{ClientSocket.Host{code, message}}:
+      (code, message)
+    case Client.ConnectFailure{ClientSocket.UnsupportedPlatform{}}:
+      (95, "owner snapshot cursor transport is unsupported")
+    case Client.RetryRead{ClientIo.Host{code, message}}: (code, message)
+    case Client.RetryRead{ClientIo.UnsupportedPlatform{}}:
+      (95, "owner snapshot cursor transport is unsupported")
+    case Client.RetryRead{_}: (5, "owner snapshot cursor read failed")
+    case Client.CommitUnknown{ClientIo.Host{code, message}}: (code, message)
+    case Client.CommitUnknown{_}: (5, "owner snapshot cursor state is uncertain")
+    case Client.FrameTooLarge{}: (75, "owner cursor frame exceeded limit")
+    case Client.StaleOwner{}: (116, "owner cursor generation is stale")
+    case Client.CorrelationMismatch{}: (71, "owner cursor correlation mismatch")
+    case Client.MalformedResponse{}: (71, "owner cursor response is malformed")
+    case Client.RequestIdsExhausted{}: (75, "owner cursor request ids exhausted")
+    case Client.OwnerRejected{_}: (5, "owner rejected snapshot cursor read")
 
 def source.error.value(pair: U32 & String) -> Backup.Error:
   match pair:
@@ -162,6 +180,18 @@ def close.success.snapshot(
   pair: Client.Session & Result<&1, &1, Client.Error, Unit>
 ) -> IO(Result<&1, &1, BackupIo.Error, Unit>):
   match pair:
+    case (_, Fail{Client.ConnectFailure{ClientSocket.Host{code, message}}}):
+      BackupCursorIo.close.error(file, temporary, None{},
+        Backup.SourceFailure{code, message})
+    case (_, Fail{Client.RetryRead{ClientIo.Host{code, message}}}):
+      BackupCursorIo.close.error(file, temporary, None{},
+        Backup.SourceFailure{code, message})
+    case (_, Fail{Client.ConnectFailure{ClientSocket.UnsupportedPlatform{}}}):
+      BackupCursorIo.close.error(file, temporary, None{},
+        Backup.ResourceLimit{})
+    case (_, Fail{Client.RetryRead{ClientIo.UnsupportedPlatform{}}}):
+      BackupCursorIo.close.error(file, temporary, None{},
+        Backup.ResourceLimit{})
     case (_, Fail{_}):
       BackupCursorIo.close.error(file, temporary, None{},
         source.error.value(source.error(Client.MalformedResponse{})))
