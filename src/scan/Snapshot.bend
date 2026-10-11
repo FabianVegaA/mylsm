@@ -114,6 +114,11 @@ type SnapshotCursorDecision is Data:
   SnapshotCursorReleased{resource: SnapshotResource}
   SnapshotCursorUnderflow{resource: SnapshotResource}
 
+def point_read.matches(order: Cmp) -> Bool:
+  match order:
+    case EQ{}: True{}
+    case _: False{}
+
 
 
 def nat.duplicate.step(pair: Nat & Nat) -> Nat & Nat:

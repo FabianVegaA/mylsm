@@ -95,6 +95,58 @@ def fixture.opened(
         step : VisibleCursor.Step <- VisibleCursor.next(cursor)
         fixture.next(handle, step)
 
+def fixture.point.checked(
+  handle: ByteDurableDb.Handle,
+  root: ByteDurableDb.SnapshotRoot,
+  matches: Bool
+) -> IO(Unit):
+  match matches:
+    case True{}:
+      do IO<Unit>:
+        opened : Result<&1, &1, ByteDurableDb.Error, VisibleCursor.Cursor> <-
+          ByteDurableDb.snapshot.root.cursor.open(root,
+            RangeCursor.Bounds{None{}, None{}, None{}})
+        fixture.opened(handle, opened)
+    case False{}:
+      do IO<Unit>:
+        _handle_close : Result<&1, &1, ByteDurableDb.Error, Unit> <-
+          ByteDurableDb.close(handle)
+        IO.die(Unit, 1, "snapshot point read returned an incorrect value")
+
+def fixture.point.value(
+  handle: ByteDurableDb.Handle,
+  root: ByteDurableDb.SnapshotRoot,
+  result: Result<&1, &1, ByteDurableDb.Error, Maybe<&1, Bytes.Bytes>>
+) -> IO(Unit):
+  match result:
+    case Done{Some{value}}:
+      fixture.point.checked(handle, root,
+        fixture.equal(Bytes.eq(value, fixture.bytes(Bytes.from_hex("78")))))
+    case _:
+      do IO<Unit>:
+        _handle_close : Result<&1, &1, ByteDurableDb.Error, Unit> <-
+          ByteDurableDb.close(handle)
+        IO.die(Unit, 1, "snapshot point read did not find its key")
+
+def fixture.point.root(
+  root: ByteDurableDb.SnapshotRoot,
+  pair:
+    ByteDurableDb.Handle &
+      Result<&1, &1, ByteDurableDb.Error, ByteDurableDb.SnapshotRoot>
+) -> IO(Unit):
+  match pair:
+    case (handle, Fail{_}):
+      do IO<Unit>:
+        _handle_close : Result<&1, &1, ByteDurableDb.Error, Unit> <-
+          ByteDurableDb.close(handle)
+        IO.die(Unit, 1, "snapshot point-read root capture failed")
+    case (handle, Done{point_root}):
+      do IO<Unit>:
+        value : Result<&1, &1, ByteDurableDb.Error, Maybe<&1, Bytes.Bytes>> <-
+          ByteDurableDb.snapshot.root.get(point_root,
+            fixture.bytes(Bytes.from_hex("61")))
+        fixture.point.value(handle, root, value)
+
 # Opens the captured root after later mutations and compaction complete.
 def fixture.compacted(
   root: ByteDurableDb.SnapshotRoot,
@@ -103,10 +155,10 @@ def fixture.compacted(
   match pair:
     case (handle, Done{Unit{}}):
       do IO<Unit>:
-        opened : Result<&1, &1, ByteDurableDb.Error, VisibleCursor.Cursor> <-
-          ByteDurableDb.snapshot.root.cursor.open(root,
-            RangeCursor.Bounds{None{}, None{}, None{}})
-        fixture.opened(handle, opened)
+        point : ByteDurableDb.Handle &
+          Result<&1, &1, ByteDurableDb.Error, ByteDurableDb.SnapshotRoot> <-
+            ByteDurableDb.snapshot_root_limited(1048576n, handle)
+        fixture.point.root(root, point)
     case (handle, Fail{_}):
       do IO<Unit>:
         _handle_close : Result<&1, &1, ByteDurableDb.Error, Unit> <-

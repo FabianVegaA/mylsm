@@ -53,6 +53,15 @@ type SnapshotRoot is Type:
   SnapshotRoot{sst_path: Maybe<&1, String>, sst_generation: Maybe<&1, U32>,
     retained_bytes: Nat, delta: List<&1, ByteMemTable.Entry>}
 
+# Carries a block cursor and its retained-byte budget from one immutable root.
+type SnapshotCursorRoot is Type:
+  SnapshotCursorRoot{retained_bytes: Nat, cursor: VisibleCursor.Cursor}
+
+# Holds an incremental point-read transition over a retained snapshot cursor.
+type SnapshotPointRead is Type:
+  SnapshotPointNeed{cursor: VisibleCursor.Cursor, query: Bytes.Bytes}
+  SnapshotPointStep{step: VisibleCursor.Step, query: Bytes.Bytes}
+
 # Reports canonical byte entry count and payload size.
 type Stats is Data:
   Stats{entries: Nat, payload_bytes: Nat}
@@ -2509,42 +2518,220 @@ def snapshot.root.sst.bounds(bounds: RangeCursor.Bounds) -> SstCursor.Bounds:
       SstCursor.Bounds{lower, upper, prefix}
 
 def snapshot.root.cursor.opened(
+  retained_bytes: Nat,
   delta: List<&1, ByteMemTable.Entry>,
   bounds: RangeCursor.Bounds,
   opened: Result<&1, &1, U32 & String, SstCursor.Cursor>
-) -> IO(Result<&1, &1, Error, VisibleCursor.Cursor>):
+) -> IO(Result<&1, &1, Error, SnapshotCursorRoot>):
   match opened:
     case Fail{(code, message)}:
-      IO.pure(Result<&1, &1, Error, VisibleCursor.Cursor>,
+      IO.pure(Result<&1, &1, Error, SnapshotCursorRoot>,
         Fail{recovery.error(code, message)})
     case Done{base}:
-      IO.pure(Result<&1, &1, Error, VisibleCursor.Cursor>,
-        Done{VisibleCursor.open(Some{base}, delta, bounds)})
+      IO.pure(Result<&1, &1, Error, SnapshotCursorRoot>,
+        Done{SnapshotCursorRoot{retained_bytes,
+          VisibleCursor.open(Some{base}, delta, bounds)}})
 
 def snapshot.root.cursor.open.copied(
   bounds: RangeCursor.Bounds & RangeCursor.Bounds,
   root: SnapshotRoot
-) -> IO(Result<&1, &1, Error, VisibleCursor.Cursor>):
+) -> IO(Result<&1, &1, Error, SnapshotCursorRoot>):
   match bounds:
     case (visible_bounds, sst_bounds):
       match root:
-        case SnapshotRoot{sst_path, _, _, delta}:
+        case SnapshotRoot{sst_path, _, retained_bytes, delta}:
           match sst_path:
             case None{}:
-              IO.pure(Result<&1, &1, Error, VisibleCursor.Cursor>,
-                Done{VisibleCursor.open(None{}, delta, visible_bounds)})
+              IO.pure(Result<&1, &1, Error, SnapshotCursorRoot>,
+                Done{SnapshotCursorRoot{retained_bytes,
+                  VisibleCursor.open(None{}, delta, visible_bounds)}})
             case Some{path}:
-              do IO<Result<&1, &1, Error, VisibleCursor.Cursor>>:
+              do IO<Result<&1, &1, Error, SnapshotCursorRoot>>:
                 opened : Result<&1, &1, U32 & String, SstCursor.Cursor> <-
                   SstCursor.open.trusted(path,
                     snapshot.root.sst.bounds(sst_bounds))
-                snapshot.root.cursor.opened(delta, visible_bounds, opened)
+                snapshot.root.cursor.opened(retained_bytes, delta,
+                  visible_bounds, opened)
+
+def snapshot.root.cursor.open.state(
+  root: SnapshotRoot,
+  bounds: RangeCursor.Bounds
+) -> IO(Result<&1, &1, Error, SnapshotCursorRoot>):
+  snapshot.root.cursor.open.copied(RangeCursor.bounds.clone(bounds), root)
+
+def snapshot.root.cursor.open.result(
+  result: Result<&1, &1, Error, SnapshotCursorRoot>
+) -> Result<&1, &1, Error, VisibleCursor.Cursor>:
+  match result:
+    case Fail{error}: Fail{error}
+    case Done{SnapshotCursorRoot{_, cursor}}: Done{cursor}
 
 def snapshot.root.cursor.open(
   root: SnapshotRoot,
   bounds: RangeCursor.Bounds
 ) -> IO(Result<&1, &1, Error, VisibleCursor.Cursor>):
-  snapshot.root.cursor.open.copied(RangeCursor.bounds.clone(bounds), root)
+  do IO<Result<&1, &1, Error, VisibleCursor.Cursor>>:
+    opened : Result<&1, &1, Error, SnapshotCursorRoot> <-
+      snapshot.root.cursor.open.state(root, bounds)
+    return snapshot.root.cursor.open.result(opened)
+
+def snapshot.root.get.closed(
+  value: Maybe<&1, Bytes.Bytes>,
+  closed: Result<&1, &1, U32 & String, Unit>
+) -> Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>:
+  match closed:
+    case Fail{(code, message)}: Fail{recovery.error(code, message)}
+    case Done{Unit{}}: Done{value}
+
+def snapshot.root.get.close(
+  cursor: VisibleCursor.Cursor,
+  value: Maybe<&1, Bytes.Bytes>
+) -> IO(Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>):
+  do IO<Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>>:
+    closed : Result<&1, &1, U32 & String, Unit> <- VisibleCursor.close(cursor)
+    return snapshot.root.get.closed(value, closed)
+
+def snapshot.root.get.item.checked(
+  value: Maybe<&1, Bytes.Bytes>,
+  matches: Bool
+) -> Maybe<&1, Bytes.Bytes>:
+  match value:
+    case None{}: None{}
+    case Some{bytes}:
+      match matches:
+        case True{}: Some{bytes}
+        case False{}: None{}
+
+def snapshot.root.get.item.compared(
+  value: Maybe<&1, Bytes.Bytes>,
+  keys: Bytes.Bytes & Bytes.Bytes
+) -> Maybe<&1, Bytes.Bytes>:
+  match keys:
+    case (key, query):
+      snapshot.root.get.item.checked(value,
+        SnapshotPolicy.point_read.matches(Keys.Bytes.cmp(key, query)))
+
+def snapshot.root.get.item.copies(
+  value: Maybe<&1, Bytes.Bytes>,
+  copies: (Bytes.Bytes & Bytes.Bytes) & (Bytes.Bytes & Bytes.Bytes)
+) -> Maybe<&1, Bytes.Bytes>:
+  match copies:
+    case ((_, key), (query, _)):
+      snapshot.root.get.item.compared(value, (key, query))
+
+def snapshot.root.get.item.value(
+  key: Bytes.Bytes,
+  value: Maybe<&1, Bytes.Bytes>,
+  query: Bytes.Bytes
+) -> Maybe<&1, Bytes.Bytes>:
+  snapshot.root.get.item.copies(value,
+    (ByteMemTable.bytes.clone(key), ByteMemTable.bytes.clone(query)))
+
+def snapshot.root.get.item(
+  entry: ByteMemTable.Entry,
+  cursor: VisibleCursor.Cursor,
+  query: Bytes.Bytes
+) -> IO(Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>):
+  match entry:
+    case ByteMemTable.Entry{key, value}:
+      snapshot.root.get.close(cursor,
+        snapshot.root.get.item.value(key, value, query))
+
+def snapshot.root.get.step(
+  query: Bytes.Bytes,
+  step: VisibleCursor.Step
+) -> SnapshotPointRead:
+  SnapshotPointStep{step, query}
+
+def snapshot.root.get.exhausted.closed(
+  closed: Result<&1, &1, U32 & String, Unit>
+) -> Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>:
+  match closed:
+    case Fail{(code, message)}: Fail{recovery.error(code, message)}
+    case Done{Unit{}}: Fail{ResourceLimit{}}
+
+def snapshot.root.get.exhausted(
+  cursor: VisibleCursor.Cursor
+) -> IO(Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>):
+  do IO<Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>>:
+    closed : Result<&1, &1, U32 & String, Unit> <- VisibleCursor.close(cursor)
+    return snapshot.root.get.exhausted.closed(closed)
+
+def snapshot.root.get.exhausted.step(
+  query: Bytes.Bytes,
+  step: VisibleCursor.Step
+) -> IO(Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>):
+  match step:
+    case VisibleCursor.Item{entry, cursor}:
+      snapshot.root.get.item(entry, cursor, query)
+    case VisibleCursor.Skip{cursor}:
+      snapshot.root.get.exhausted(cursor)
+    case VisibleCursor.End{}:
+      IO.pure(Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>, Done{None{}})
+    case VisibleCursor.Error{(code, message)}:
+      IO.pure(Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>,
+        Fail{recovery.error(code, message)})
+
+def snapshot.root.get.loop(
+  fuel: Nat,
+  state: SnapshotPointRead
+) -> IO(Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>):
+  match fuel:
+    case 0n:
+      match state:
+        case SnapshotPointNeed{cursor, _}:
+          snapshot.root.get.exhausted(cursor)
+        case SnapshotPointStep{step, query}:
+          snapshot.root.get.exhausted.step(query, step)
+    case 1n+rest:
+      match state:
+        case SnapshotPointNeed{cursor, query}:
+          do IO<Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>>:
+            step : VisibleCursor.Step <- VisibleCursor.next(cursor)
+            snapshot.root.get.loop(rest,
+              snapshot.root.get.step(query, step))
+        case SnapshotPointStep{step, query}:
+          match step:
+            case VisibleCursor.Item{entry, cursor}:
+              snapshot.root.get.item(entry, cursor, query)
+            case VisibleCursor.Skip{cursor}:
+              snapshot.root.get.loop(rest,
+                SnapshotPointNeed{cursor, query})
+            case VisibleCursor.End{}:
+              IO.pure(Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>,
+                Done{None{}})
+            case VisibleCursor.Error{(code, message)}:
+              IO.pure(Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>,
+                Fail{recovery.error(code, message)})
+
+def snapshot.root.get.opened(
+  query: Bytes.Bytes,
+  opened: Result<&1, &1, Error, SnapshotCursorRoot>
+) -> IO(Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>):
+  match opened:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>, Fail{error})
+    case Done{SnapshotCursorRoot{retained_bytes, cursor}}:
+      snapshot.root.get.loop(Nat.add(retained_bytes, 2n),
+        SnapshotPointNeed{cursor, query})
+
+def snapshot.root.get.copied(
+  root: SnapshotRoot,
+  copies: Bytes.Bytes & Bytes.Bytes
+) -> IO(Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>):
+  match copies:
+    case (query, lower):
+      do IO<Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>>:
+        opened : Result<&1, &1, Error, SnapshotCursorRoot> <-
+          snapshot.root.cursor.open.state(root,
+            RangeCursor.Bounds{Some{lower}, None{}, None{}})
+        snapshot.root.get.opened(query, opened)
+
+def snapshot.root.get(
+  root: SnapshotRoot,
+  key: Bytes.Bytes
+) -> IO(Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>):
+  snapshot.root.get.copied(root, ByteMemTable.bytes.clone(key))
 
 # Restores a read handle after byte lookup.
 def close.released(

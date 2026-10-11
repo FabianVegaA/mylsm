@@ -1,6 +1,14 @@
 import Base
 import ../laws/Snapshot.bend as Laws
 
+# Witnesses a point lookup matching the exact lower-bounded key.
+def Laws.snapshot_point_read_accepts_equal_key():
+  {==}
+
+# Witnesses a point lookup rejecting the next key after its lower bound.
+def Laws.snapshot_point_read_rejects_greater_key():
+  {==}
+
 # Witnesses exact retention-budget acceptance.
 def Laws.exact_retention_budget_is_accepted():
   {==}

@@ -1,6 +1,14 @@
 import Base
 import ../src/scan/Snapshot.bend as Snapshot
 
+# A point lookup matches only when the first lower-bounded key is equal.
+law snapshot_point_read_accepts_equal_key:
+  {Snapshot.point_read.matches(EQ{}) == True{} : Bool}
+
+# A point lookup rejects the next key after its inclusive lower bound.
+law snapshot_point_read_rejects_greater_key:
+  {Snapshot.point_read.matches(GT{}) == False{} : Bool}
+
 # Admits a snapshot exactly at both configured retention limits.
 law exact_retention_budget_is_accepted:
   {Snapshot.reserve(1n, 8n, 4n, 2n, 12n) == Snapshot.Retained{2n, 12n} : Snapshot.Decision}
