@@ -261,29 +261,29 @@ law exhausted_resource_identifier_is_rejected:
 law owner_snapshot_admission_records_resource:
   {Snapshot.owner.snapshot.open(Snapshot.OwnerRegistry{
     Snapshot.ResourceIdAllocator{1, False{}}, Snapshot.Registry{0n, 0n},
-    Nil{}}, 3n, 64n, (2n, 128n)) == Snapshot.OwnerSnapshotOpened{
+    Nil{}, Nil{}}, 3n, 64n, (2n, 128n)) == Snapshot.OwnerSnapshotOpened{
       Snapshot.OwnerRegistry{Snapshot.ResourceIdAllocator{2, False{}},
         Snapshot.Registry{1n, 64n},
-        [Snapshot.SnapshotResource{1, 3n, 64n, 0n}]}, 1} :
+        [Snapshot.SnapshotResource{1, 3n, 64n, 0n}], Nil{}}, 1} :
     Snapshot.OwnerOpenDecision}
 
 # Rejects an over-budget snapshot while preserving IDs, counters, and resources.
 law owner_snapshot_rejection_preserves_registry:
   {Snapshot.owner.snapshot.open(Snapshot.OwnerRegistry{
     Snapshot.ResourceIdAllocator{4, False{}}, Snapshot.Registry{1n, 80n},
-    [Snapshot.SnapshotResource{3, 2n, 80n, 0n}]}, 5n, 64n, (4n, 128n)) ==
+    [Snapshot.SnapshotResource{3, 2n, 80n, 0n}], Nil{}}, 5n, 64n, (4n, 128n)) ==
     Snapshot.OwnerSnapshotRejected{Snapshot.OwnerRegistry{
       Snapshot.ResourceIdAllocator{4, False{}}, Snapshot.Registry{1n, 80n},
-      [Snapshot.SnapshotResource{3, 2n, 80n, 0n}]}} :
+      [Snapshot.SnapshotResource{3, 2n, 80n, 0n}], Nil{}}} :
     Snapshot.OwnerOpenDecision}
 
 # Rejects exhausted owner IDs without charging an otherwise admissible snapshot.
 law owner_snapshot_id_exhaustion_preserves_registry:
   {Snapshot.owner.snapshot.open(Snapshot.OwnerRegistry{
     Snapshot.ResourceIdAllocator{4294967295, True{}}, Snapshot.Registry{0n, 0n},
-    Nil{}}, 5n, 64n, (4n, 128n)) == Snapshot.OwnerSnapshotRejected{
+    Nil{}, Nil{}}, 5n, 64n, (4n, 128n)) == Snapshot.OwnerSnapshotRejected{
       Snapshot.OwnerRegistry{Snapshot.ResourceIdAllocator{4294967295, True{}},
-        Snapshot.Registry{0n, 0n}, Nil{}}} : Snapshot.OwnerOpenDecision}
+        Snapshot.Registry{0n, 0n}, Nil{}, Nil{}}} : Snapshot.OwnerOpenDecision}
 
 # Adds one child reference while preserving the snapshot identity and budget.
 law owner_snapshot_cursor_acquire_increments_reference:
@@ -316,3 +316,60 @@ law owner_snapshot_cursor_release_underflow_preserves_resource:
     Snapshot.SnapshotCursorUnderflow{
       Snapshot.SnapshotResource{3, 7n, 64n, 0n}} :
     Snapshot.SnapshotCursorDecision}
+
+# Allocates a cursor ID and increments its owner's snapshot reference.
+law owner_cursor_open_records_child_reference:
+  {Snapshot.owner.cursor.open(Snapshot.OwnerRegistry{
+    Snapshot.ResourceIdAllocator{2, False{}}, Snapshot.Registry{1n, 64n},
+    [Snapshot.SnapshotResource{1, 3n, 64n, 0n}], Nil{}}, 1, 2n) ==
+    Snapshot.OwnerCursorOpened{Snapshot.OwnerRegistry{
+      Snapshot.ResourceIdAllocator{3, False{}}, Snapshot.Registry{1n, 64n},
+      [Snapshot.SnapshotResource{1, 3n, 64n, 1n}],
+      [Snapshot.CursorResource{2, 1}]}, 2} : Snapshot.OwnerCursorOpenDecision}
+
+# Updates the requested snapshot while preserving unrelated registry entries.
+law owner_cursor_open_preserves_unrelated_snapshots:
+  {Snapshot.owner.cursor.open(Snapshot.OwnerRegistry{
+    Snapshot.ResourceIdAllocator{10, False{}}, Snapshot.Registry{3n, 192n},
+    [Snapshot.SnapshotResource{1, 4n, 64n, 0n},
+     Snapshot.SnapshotResource{2, 5n, 64n, 0n},
+     Snapshot.SnapshotResource{3, 6n, 64n, 0n}], Nil{}}, 2, 2n) ==
+    Snapshot.OwnerCursorOpened{Snapshot.OwnerRegistry{
+      Snapshot.ResourceIdAllocator{11, False{}}, Snapshot.Registry{3n, 192n},
+      [Snapshot.SnapshotResource{1, 4n, 64n, 0n},
+       Snapshot.SnapshotResource{2, 5n, 64n, 1n},
+       Snapshot.SnapshotResource{3, 6n, 64n, 0n}],
+      [Snapshot.CursorResource{10, 2}]}, 10} :
+    Snapshot.OwnerCursorOpenDecision}
+
+# Rejects a missing snapshot without consuming an owner cursor identifier.
+law owner_cursor_open_missing_snapshot_preserves_registry:
+  {Snapshot.owner.cursor.open(Snapshot.OwnerRegistry{
+    Snapshot.ResourceIdAllocator{2, False{}}, Snapshot.Registry{1n, 64n},
+    [Snapshot.SnapshotResource{1, 3n, 64n, 0n}], Nil{}}, 9, 2n) ==
+    Snapshot.OwnerCursorRejected{Snapshot.OwnerRegistry{
+      Snapshot.ResourceIdAllocator{2, False{}}, Snapshot.Registry{1n, 64n},
+      [Snapshot.SnapshotResource{1, 3n, 64n, 0n}], Nil{}}} :
+    Snapshot.OwnerCursorOpenDecision}
+
+# Preserves the owner registry when one snapshot reaches its cursor limit.
+law owner_cursor_open_limit_preserves_registry:
+  {Snapshot.owner.cursor.open(Snapshot.OwnerRegistry{
+    Snapshot.ResourceIdAllocator{2, False{}}, Snapshot.Registry{1n, 64n},
+    [Snapshot.SnapshotResource{1, 3n, 64n, 1n}], Nil{}}, 1, 1n) ==
+    Snapshot.OwnerCursorRejected{Snapshot.OwnerRegistry{
+      Snapshot.ResourceIdAllocator{2, False{}}, Snapshot.Registry{1n, 64n},
+      [Snapshot.SnapshotResource{1, 3n, 64n, 1n}], Nil{}}} :
+    Snapshot.OwnerCursorOpenDecision}
+
+# Preserves the registry when cursor ID allocation is exhausted.
+law owner_cursor_open_exhausted_id_preserves_registry:
+  {Snapshot.owner.cursor.open(Snapshot.OwnerRegistry{
+    Snapshot.ResourceIdAllocator{4294967295, True{}},
+    Snapshot.Registry{1n, 64n},
+    [Snapshot.SnapshotResource{1, 3n, 64n, 0n}], Nil{}}, 1, 2n) ==
+    Snapshot.OwnerCursorRejected{Snapshot.OwnerRegistry{
+      Snapshot.ResourceIdAllocator{4294967295, True{}},
+      Snapshot.Registry{1n, 64n},
+      [Snapshot.SnapshotResource{1, 3n, 64n, 0n}], Nil{}}} :
+    Snapshot.OwnerCursorOpenDecision}

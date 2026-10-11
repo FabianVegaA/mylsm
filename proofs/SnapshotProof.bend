@@ -168,3 +168,18 @@ def Laws.owner_snapshot_cursor_release_decrements_reference():
 
 def Laws.owner_snapshot_cursor_release_underflow_preserves_resource():
   {==}
+
+def Laws.owner_cursor_open_records_child_reference():
+  {==}
+
+def Laws.owner_cursor_open_preserves_unrelated_snapshots():
+  {==}
+
+def Laws.owner_cursor_open_missing_snapshot_preserves_registry():
+  {==}
+
+def Laws.owner_cursor_open_limit_preserves_registry():
+  {==}
+
+def Laws.owner_cursor_open_exhausted_id_preserves_registry():
+  {==}

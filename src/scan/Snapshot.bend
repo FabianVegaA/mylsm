@@ -97,15 +97,41 @@ type SnapshotResource is Data:
   SnapshotResource{id: U32, generation: Nat, retained_bytes: Nat,
     cursor_count: Nat}
 
+# Identifies one owner-managed cursor and its parent snapshot.
+type CursorResource is Data:
+  CursorResource{id: U32, snapshot_id: U32}
+
 # Holds aggregate snapshot reservations and their owner-issued identifiers.
 type OwnerRegistry is Data:
   OwnerRegistry{allocator: ResourceIdAllocator, reservations: Registry,
-    snapshots: List<&2, SnapshotResource>}
+    snapshots: List<&2, SnapshotResource>, cursors: List<&2, CursorResource>}
 
 # Reports an admitted owner snapshot or the exact registry after rejection.
 type OwnerOpenDecision is Data:
   OwnerSnapshotOpened{registry: OwnerRegistry, snapshot_id: U32}
   OwnerSnapshotRejected{registry: OwnerRegistry}
+
+# Reports a cursor acquisition or the unchanged owner registry on rejection.
+type OwnerCursorOpenDecision is Data:
+  OwnerCursorOpened{registry: OwnerRegistry, cursor_id: U32}
+  OwnerCursorRejected{registry: OwnerRegistry}
+
+# Reports replacement of one snapshot's cursor count in the owner registry.
+type SnapshotListCursorDecision is Data:
+  SnapshotListUpdated{snapshots: List<&2, SnapshotResource>}
+  SnapshotListRejected{snapshots: List<&2, SnapshotResource>}
+
+# Carries the recursive snapshot lookup without losing the original list prefix.
+type SnapshotListCursorState is Type:
+  SnapshotCursorSearch{snapshots: List<&2, SnapshotResource>,
+    snapshot_id: U32, max_cursors: Nat,
+    prefix: List<&2, SnapshotResource>}
+  SnapshotCursorCompareCopies{copies: SnapshotResource & SnapshotResource,
+    tail: List<&2, SnapshotResource>, snapshot_ids: U32 & U32,
+    max_cursors: Nat, prefix: List<&2, SnapshotResource>}
+  SnapshotCursorCompare{matches: Bool, resource: SnapshotResource,
+    tail: List<&2, SnapshotResource>, snapshot_id: U32, max_cursors: Nat,
+    prefix: List<&2, SnapshotResource>}
 
 # Reports a snapshot cursor-reference update or preserves its prior resource.
 type SnapshotCursorDecision is Data:
@@ -359,46 +385,53 @@ def registry.release(registry: Registry, released_bytes: Nat) -> RegistryRelease
 def owner.snapshot.open.release(
   allocator: ResourceIdAllocator,
   snapshots: List<&2, SnapshotResource>,
+  cursors: List<&2, CursorResource>,
   decision: RegistryReleaseDecision
 ) -> OwnerOpenDecision:
   match decision:
     case Released{reservations}:
-      OwnerSnapshotRejected{OwnerRegistry{allocator, reservations, snapshots}}
+      OwnerSnapshotRejected{OwnerRegistry{allocator, reservations, snapshots,
+        cursors}}
     case InvalidRelease{reservations}:
-      OwnerSnapshotRejected{OwnerRegistry{allocator, reservations, snapshots}}
+      OwnerSnapshotRejected{OwnerRegistry{allocator, reservations, snapshots,
+        cursors}}
 
 def owner.snapshot.open.created(
   ids: U32 & U32,
   allocator: ResourceIdAllocator,
   reservations: Registry,
   snapshots: List<&2, SnapshotResource>,
+  cursors: List<&2, CursorResource>,
   generation: Nat,
   retained_bytes: Nat
 ) -> OwnerOpenDecision:
   match ids:
     case (snapshot_id, entry_id):
       OwnerSnapshotOpened{OwnerRegistry{allocator, reservations,
-        Con{SnapshotResource{entry_id, generation, retained_bytes, 0n}, snapshots}},
+        Con{SnapshotResource{entry_id, generation, retained_bytes, 0n}, snapshots},
+        cursors},
         snapshot_id}
 
 def owner.snapshot.open.id(
   allocation: ResourceIdDecision,
   reservations: Registry,
   snapshots: List<&2, SnapshotResource>,
+  cursors: List<&2, CursorResource>,
   generation: Nat,
   retained_bytes: Nat
 ) -> OwnerOpenDecision:
   match allocation:
     case ResourceIdAllocated{id, allocator}:
       owner.snapshot.open.created(u32.duplicate(id), allocator, reservations,
-        snapshots, generation, retained_bytes)
+        snapshots, cursors, generation, retained_bytes)
     case ResourceIdExhausted{allocator}:
-      owner.snapshot.open.release(allocator, snapshots,
+      owner.snapshot.open.release(allocator, snapshots, cursors,
         registry.release(reservations, retained_bytes))
 
 def owner.snapshot.open.reserved(
   allocator: ResourceIdAllocator,
   snapshots: List<&2, SnapshotResource>,
+  cursors: List<&2, CursorResource>,
   generation: Nat,
   requests: Nat & Nat,
   decision: RegistryDecision
@@ -408,13 +441,15 @@ def owner.snapshot.open.reserved(
       match decision:
         case Admitted{reservations}:
           owner.snapshot.open.id(allocate_resource_id(allocator), reservations,
-            snapshots, generation, release_bytes)
+            snapshots, cursors, generation, release_bytes)
         case Rejected{reservations}:
-          OwnerSnapshotRejected{OwnerRegistry{allocator, reservations, snapshots}}
+          OwnerSnapshotRejected{OwnerRegistry{allocator, reservations,
+            snapshots, cursors}}
 
 def owner.snapshot.open.budget(
   allocator: ResourceIdAllocator,
   snapshots: List<&2, SnapshotResource>,
+  cursors: List<&2, CursorResource>,
   generation: Nat,
   requested_bytes: Nat & Nat,
   release_bytes: Nat,
@@ -425,8 +460,8 @@ def owner.snapshot.open.budget(
     case (retained_for_entry, retained_for_admission):
       match limits:
         case (max_snapshots, max_retained_bytes):
-          owner.snapshot.open.reserved(allocator, snapshots, generation,
-            (retained_for_entry, release_bytes),
+          owner.snapshot.open.reserved(allocator, snapshots, cursors,
+            generation, (retained_for_entry, release_bytes),
             registry.reserve(reservations, retained_for_admission,
               max_snapshots, max_retained_bytes))
 
@@ -434,6 +469,7 @@ def owner.snapshot.open.available(
   allocator: ResourceIdAllocator,
   reservations: Registry,
   snapshots: List<&2, SnapshotResource>,
+  cursors: List<&2, CursorResource>,
   generation: Nat,
   requests: Nat & Nat,
   limits: Nat & Nat
@@ -442,12 +478,13 @@ def owner.snapshot.open.available(
     case ResourceIdAllocator{next_id, exhausted}:
       match exhausted:
         case True{}:
-          OwnerSnapshotRejected{OwnerRegistry{allocator, reservations, snapshots}}
+          OwnerSnapshotRejected{OwnerRegistry{allocator, reservations,
+            snapshots, cursors}}
         case False{}:
           match requests:
             case (requested_bytes, release_bytes):
-              owner.snapshot.open.budget(allocator, snapshots, generation,
-                nat.duplicate(requested_bytes), release_bytes, limits,
+              owner.snapshot.open.budget(allocator, snapshots, cursors,
+                generation, nat.duplicate(requested_bytes), release_bytes, limits,
                 reservations)
 
 def owner.snapshot.open(
@@ -457,8 +494,9 @@ def owner.snapshot.open(
   limits: Nat & Nat
 ) -> OwnerOpenDecision:
   match owner:
-    case OwnerRegistry{allocator, reservations, snapshots}:
+    case OwnerRegistry{allocator, reservations, snapshots, cursors}:
       owner.snapshot.open.available(allocator, reservations, snapshots,
+        cursors,
         generation, nat.duplicate(requested_bytes), limits)
 
 def snapshot.resource.duplicate.parts(
@@ -559,6 +597,213 @@ def snapshot.resource.cursor.release(
 ) -> SnapshotCursorDecision:
   snapshot.resource.cursor.release.copied(
     snapshot.resource.duplicate(resource))
+
+def snapshot.list.cursor.restore(
+  prefix: List<&2, SnapshotResource>,
+  snapshots: List<&2, SnapshotResource>
+) -> List<&2, SnapshotResource>:
+  match prefix:
+    case Nil{}: snapshots
+    case Con{resource, tail}:
+      snapshot.list.cursor.restore(tail, Con{resource, snapshots})
+
+def snapshot.list.cursor.length.keep.go(
+  snapshots: List<&2, SnapshotResource>,
+  reversed: List<&2, SnapshotResource>,
+  length: Nat
+) -> List<&2, SnapshotResource> & Nat:
+  match snapshots:
+    case Nil{}:
+      (List.reverse(&2, SnapshotResource, reversed), length)
+    case Con{resource, tail}:
+      snapshot.list.cursor.length.keep.go(tail, Con{resource, reversed},
+        Nat.add(length, 1n))
+
+def snapshot.list.cursor.length.keep(
+  snapshots: List<&2, SnapshotResource>
+) -> List<&2, SnapshotResource> & Nat:
+  snapshot.list.cursor.length.keep.go(snapshots, Nil{}, 0n)
+
+def snapshot.list.cursor.resolve(
+  prefix: List<&2, SnapshotResource>,
+  tail: List<&2, SnapshotResource>,
+  acquired: SnapshotCursorDecision
+) -> SnapshotListCursorDecision:
+  match acquired:
+    case SnapshotCursorAcquired{resource}:
+      SnapshotListUpdated{snapshot.list.cursor.restore(prefix,
+        Con{resource, tail})}
+    case SnapshotCursorLimit{resource}:
+      SnapshotListRejected{snapshot.list.cursor.restore(prefix,
+        Con{resource, tail})}
+    case SnapshotCursorReleased{resource}:
+      SnapshotListRejected{snapshot.list.cursor.restore(prefix,
+        Con{resource, tail})}
+    case SnapshotCursorUnderflow{resource}:
+      SnapshotListRejected{snapshot.list.cursor.restore(prefix,
+        Con{resource, tail})}
+
+def snapshot.list.cursor.exhausted(
+  state: SnapshotListCursorState
+) -> SnapshotListCursorDecision:
+  match state:
+    case SnapshotCursorSearch{snapshots, _, _, prefix}:
+      SnapshotListRejected{snapshot.list.cursor.restore(prefix, snapshots)}
+    case SnapshotCursorCompareCopies{copies, tail, _, _, prefix}:
+      match copies:
+        case (_, resource):
+          SnapshotListRejected{snapshot.list.cursor.restore(prefix,
+            Con{resource, tail})}
+    case SnapshotCursorCompare{_, resource, tail, _, _, prefix}:
+      SnapshotListRejected{snapshot.list.cursor.restore(prefix,
+        Con{resource, tail})}
+
+# Updates exactly one snapshot cursor count and preserves every unrelated entry.
+def snapshot.list.cursor.acquire.loop(
+  fuel: Nat,
+  state: SnapshotListCursorState
+) -> SnapshotListCursorDecision:
+  match fuel:
+    case 0n:
+      snapshot.list.cursor.exhausted(state)
+    case 1n+rest:
+      match state:
+        case SnapshotCursorSearch{snapshots, snapshot_id, max_cursors,
+            prefix}:
+          match snapshots:
+            case Nil{}:
+              SnapshotListRejected{snapshot.list.cursor.restore(prefix,
+                Nil{})}
+            case Con{resource, tail}:
+              snapshot.list.cursor.acquire.loop(rest,
+                SnapshotCursorCompareCopies{
+                  snapshot.resource.duplicate(resource), tail,
+                  u32.duplicate(snapshot_id), max_cursors, prefix})
+        case SnapshotCursorCompareCopies{copies, tail, snapshot_ids,
+            max_cursors, prefix}:
+          match copies:
+            case (for_check, for_update):
+              match for_check:
+                case SnapshotResource{id, _, _, _}:
+                  match snapshot_ids:
+                    case (current_id, next_id):
+                      snapshot.list.cursor.acquire.loop(rest,
+                        SnapshotCursorCompare{U32.is_eq(id, current_id),
+                          for_update, tail, next_id, max_cursors, prefix})
+        case SnapshotCursorCompare{matches, resource, tail, snapshot_id,
+            max_cursors, prefix}:
+          match matches:
+            case True{}:
+              snapshot.list.cursor.resolve(prefix, tail,
+                snapshot.resource.cursor.acquire(resource, max_cursors))
+            case False{}:
+              snapshot.list.cursor.acquire.loop(rest,
+                SnapshotCursorSearch{tail, snapshot_id, max_cursors,
+                  Con{resource, prefix}})
+
+def snapshot.list.cursor.acquire.measured(
+  measured: List<&2, SnapshotResource> & Nat,
+  snapshot_id: U32,
+  max_cursors: Nat
+) -> SnapshotListCursorDecision:
+  match measured:
+    case (snapshots, length):
+      snapshot.list.cursor.acquire.loop(
+        Nat.add(Nat.mul(3n, length), 1n),
+        SnapshotCursorSearch{snapshots, snapshot_id, max_cursors, Nil{}})
+
+# Adds one cursor reference to the owner record identified by its snapshot ID.
+def snapshot.list.cursor.acquire(
+  snapshots: List<&2, SnapshotResource>,
+  snapshot_id: U32,
+  max_cursors: Nat
+) -> SnapshotListCursorDecision:
+  snapshot.list.cursor.acquire.measured(
+    snapshot.list.cursor.length.keep(snapshots), snapshot_id, max_cursors)
+
+def owner.cursor.open.ready(
+  cursor_ids: U32 & U32,
+  allocator: ResourceIdAllocator,
+  reservations: Registry,
+  snapshots: List<&2, SnapshotResource>,
+  cursors: List<&2, CursorResource>,
+  snapshot_id: U32
+) -> OwnerCursorOpenDecision:
+  match cursor_ids:
+    case (cursor_id, entry_id):
+      OwnerCursorOpened{OwnerRegistry{allocator, reservations, snapshots,
+        Con{CursorResource{entry_id, snapshot_id}, cursors}}, cursor_id}
+
+def owner.cursor.open.allocated(
+  allocation: ResourceIdDecision,
+  reservations: Registry,
+  snapshots: List<&2, SnapshotResource>,
+  cursors: List<&2, CursorResource>,
+  snapshot_id: U32
+) -> OwnerCursorOpenDecision:
+  match allocation:
+    case ResourceIdAllocated{cursor_id, next_allocator}:
+      owner.cursor.open.ready(u32.duplicate(cursor_id), next_allocator,
+        reservations, snapshots, cursors, snapshot_id)
+    case ResourceIdExhausted{allocator}:
+      OwnerCursorRejected{OwnerRegistry{allocator, reservations,
+        snapshots, cursors}}
+
+def owner.cursor.open.snapshot(
+  allocator: ResourceIdAllocator,
+  reservations: Registry,
+  cursors: List<&2, CursorResource>,
+  snapshot_id: U32,
+  updated: SnapshotListCursorDecision
+) -> OwnerCursorOpenDecision:
+  match updated:
+    case SnapshotListUpdated{snapshots}:
+      owner.cursor.open.allocated(allocate_resource_id(allocator),
+        reservations, snapshots, cursors, snapshot_id)
+    case SnapshotListRejected{snapshots}:
+      OwnerCursorRejected{OwnerRegistry{allocator, reservations, snapshots,
+        cursors}}
+
+def owner.cursor.open.request(
+  allocator: ResourceIdAllocator,
+  reservations: Registry,
+  snapshots: List<&2, SnapshotResource>,
+  cursors: List<&2, CursorResource>,
+  snapshot_ids: U32 & U32,
+  max_cursors: Nat
+) -> OwnerCursorOpenDecision:
+  match snapshot_ids:
+    case (cursor_snapshot_id, lookup_snapshot_id):
+      owner.cursor.open.snapshot(allocator, reservations, cursors,
+        cursor_snapshot_id,
+        snapshot.list.cursor.acquire(snapshots, lookup_snapshot_id,
+          max_cursors))
+
+# Rejects cursor opens when the owner ID space is exhausted.
+def owner.cursor.open.available(
+  owner: OwnerRegistry,
+  snapshot_id: U32,
+  max_cursors: Nat
+) -> OwnerCursorOpenDecision:
+  match owner:
+    case OwnerRegistry{allocator, reservations, snapshots, cursors}:
+      match allocator:
+        case ResourceIdAllocator{_, exhausted}:
+          match exhausted:
+            case True{}:
+              OwnerCursorRejected{OwnerRegistry{allocator, reservations,
+                snapshots, cursors}}
+            case False{}:
+              owner.cursor.open.request(allocator, reservations, snapshots,
+                cursors, u32.duplicate(snapshot_id), max_cursors)
+
+# Acquires a unique owner cursor ID and a child reference on its snapshot.
+def owner.cursor.open(
+  owner: OwnerRegistry,
+  snapshot_id: U32,
+  max_cursors: Nat
+) -> OwnerCursorOpenDecision:
+  owner.cursor.open.available(owner, snapshot_id, max_cursors)
 
 # Maps a valid registry release to successful snapshot closure.
 def snapshot.close.registry(decision: RegistryReleaseDecision) -> SnapshotCloseDecision:
