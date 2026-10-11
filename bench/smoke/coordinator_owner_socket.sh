@@ -12,6 +12,7 @@ trap 'for pid in "$CLIENT_ONE_PID" "$CLIENT_TWO_PID" "$SERVER_PID"; do if [[ -n 
 bend "$ROOT/bench/smoke/coordinator_owner_socket.bend" -o "$WORK/owner-server"
 bend "$ROOT/bench/smoke/coordinator_owner_client.bend" -o "$WORK/owner-client"
 bend "$ROOT/bench/smoke/public_coordinator_client.bend" -o "$WORK/public-owner-client"
+bend "$ROOT/bench/smoke/public_utf8_coordinator_client.bend" -o "$WORK/public-utf8-owner-client"
 bend "$ROOT/bench/smoke/coordinator_owner_reacquire.bend" -o "$WORK/owner-reacquire"
 MYLSM_DB_PATH="$DB" "$WORK/owner-server" >"$WORK/server.log" 2>&1 &
 SERVER_PID=$!
@@ -43,6 +44,7 @@ CLIENT_ONE_PID=
 wait "$CLIENT_TWO_PID"
 CLIENT_TWO_PID=
 MYLSM_DB_PATH="$DB" "$WORK/public-owner-client"
+MYLSM_DB_PATH="$DB" "$WORK/public-utf8-owner-client"
 wait "$SERVER_PID"
 SERVER_PID=
 cat "$WORK/server.log"
