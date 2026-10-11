@@ -139,15 +139,25 @@ type OwnerCursorCloseDecision is Data:
   OwnerCursorClosed{registry: OwnerRegistry, snapshot_id: U32}
   OwnerCursorCloseRejected{registry: OwnerRegistry}
 
+# Reports snapshot closure, live-child Busy, or unchanged registry rejection.
+type OwnerSnapshotCloseDecision is Data:
+  OwnerSnapshotClosed{registry: OwnerRegistry, resource: SnapshotResource}
+  OwnerSnapshotBusy{registry: OwnerRegistry}
+  OwnerSnapshotCloseRejected{registry: OwnerRegistry}
+
 # Reports replacement of one snapshot's cursor count in the owner registry.
 type SnapshotListCursorDecision is Data:
   SnapshotListUpdated{snapshots: List<&2, SnapshotResource>}
   SnapshotListRejected{snapshots: List<&2, SnapshotResource>}
+  SnapshotListClosed{prefix: List<&2, SnapshotResource>,
+    resource: SnapshotResource, tail: List<&2, SnapshotResource>}
+  SnapshotListBusy{snapshots: List<&2, SnapshotResource>}
 
 # Selects whether a snapshot child reference is acquired or released.
 type SnapshotCursorAction is Data:
   SnapshotCursorAcquire{max_cursors: Nat}
   SnapshotCursorRelease{}
+  SnapshotCursorClose{}
 
 # Carries the recursive snapshot lookup without losing the original list prefix.
 type SnapshotListCursorState is Type:
@@ -672,6 +682,30 @@ def snapshot.list.cursor.resolve(
       SnapshotListRejected{snapshot.list.cursor.restore(prefix,
         Con{resource, tail})}
 
+def snapshot.list.cursor.close.result(
+  can_close: Bool,
+  prefix: List<&2, SnapshotResource>,
+  resource: SnapshotResource,
+  tail: List<&2, SnapshotResource>
+) -> SnapshotListCursorDecision:
+  match can_close:
+    case True{}: SnapshotListClosed{prefix, resource, tail}
+    case False{}:
+      SnapshotListBusy{snapshot.list.cursor.restore(prefix,
+        Con{resource, tail})}
+
+def snapshot.list.cursor.close.resource(
+  copies: SnapshotResource & SnapshotResource,
+  prefix: List<&2, SnapshotResource>,
+  tail: List<&2, SnapshotResource>
+) -> SnapshotListCursorDecision:
+  match copies:
+    case (for_check, for_update):
+      match for_check:
+        case SnapshotResource{_, _, _, cursor_count}:
+          snapshot.list.cursor.close.result(Nat.is_eq(cursor_count, 0n),
+            prefix, for_update, tail)
+
 def snapshot.list.cursor.action(
   prefix: List<&2, SnapshotResource>,
   tail: List<&2, SnapshotResource>,
@@ -685,6 +719,9 @@ def snapshot.list.cursor.action(
     case SnapshotCursorRelease{}:
       snapshot.list.cursor.resolve(prefix, tail,
         snapshot.resource.cursor.release(resource))
+    case SnapshotCursorClose{}:
+      snapshot.list.cursor.close.resource(
+        snapshot.resource.duplicate(resource), prefix, tail)
 
 def snapshot.list.cursor.exhausted(
   state: SnapshotListCursorState
@@ -773,6 +810,15 @@ def snapshot.list.cursor.release(
     snapshot.list.cursor.length.keep(snapshots), snapshot_id,
     SnapshotCursorRelease{})
 
+# Removes a childless snapshot record and reports Busy while cursors remain.
+def snapshot.list.cursor.close(
+  snapshots: List<&2, SnapshotResource>,
+  snapshot_id: U32
+) -> SnapshotListCursorDecision:
+  snapshot.list.cursor.acquire.measured(
+    snapshot.list.cursor.length.keep(snapshots), snapshot_id,
+    SnapshotCursorClose{})
+
 def owner.cursor.open.ready(
   cursor_ids: U32 & U32,
   allocator: ResourceIdAllocator,
@@ -813,6 +859,12 @@ def owner.cursor.open.snapshot(
       owner.cursor.open.allocated(allocate_resource_id(allocator),
         reservations, snapshots, cursors, snapshot_id)
     case SnapshotListRejected{snapshots}:
+      OwnerCursorRejected{OwnerRegistry{allocator, reservations, snapshots,
+        cursors}}
+    case SnapshotListClosed{prefix, resource, tail}:
+      OwnerCursorRejected{OwnerRegistry{allocator, reservations,
+        snapshot.list.cursor.restore(prefix, Con{resource, tail}), cursors}}
+    case SnapshotListBusy{snapshots}:
       OwnerCursorRejected{OwnerRegistry{allocator, reservations, snapshots,
         cursors}}
 
@@ -979,6 +1031,15 @@ def owner.cursor.close.released(
     case SnapshotListRejected{snapshots}:
       OwnerCursorCloseRejected{OwnerRegistry{allocator, reservations,
         snapshots, cursor.list.restore(prefix, Con{resource, tail})}}
+    case SnapshotListClosed{snapshot_prefix, snapshot_resource,
+        snapshot_tail}:
+      OwnerCursorCloseRejected{OwnerRegistry{allocator, reservations,
+        snapshot.list.cursor.restore(snapshot_prefix,
+          Con{snapshot_resource, snapshot_tail}),
+        cursor.list.restore(prefix, Con{resource, tail})}}
+    case SnapshotListBusy{snapshots}:
+      OwnerCursorCloseRejected{OwnerRegistry{allocator, reservations,
+        snapshots, cursor.list.restore(prefix, Con{resource, tail})}}
 
 def owner.cursor.close.release.id(
   allocator: ResourceIdAllocator,
@@ -1033,6 +1094,68 @@ def owner.cursor.close(
     case OwnerRegistry{allocator, reservations, snapshots, cursors}:
       owner.cursor.close.removed(allocator, reservations, snapshots,
         cursor.list.remove(cursors, cursor_id))
+
+def owner.snapshot.close.released(
+  decision: RegistryReleaseDecision,
+  allocator: ResourceIdAllocator,
+  cursors: List<&2, CursorResource>,
+  prefix: List<&2, SnapshotResource>,
+  resource: SnapshotResource,
+  tail: List<&2, SnapshotResource>
+) -> OwnerSnapshotCloseDecision:
+  match decision:
+    case Released{reservations}:
+      OwnerSnapshotClosed{OwnerRegistry{allocator, reservations,
+        snapshot.list.cursor.restore(prefix, tail), cursors}, resource}
+    case InvalidRelease{reservations}:
+      OwnerSnapshotCloseRejected{OwnerRegistry{allocator, reservations,
+        snapshot.list.cursor.restore(prefix, Con{resource, tail}), cursors}}
+
+def owner.snapshot.close.resource(
+  copies: SnapshotResource & SnapshotResource,
+  allocator: ResourceIdAllocator,
+  cursors: List<&2, CursorResource>,
+  prefix: List<&2, SnapshotResource>,
+  tail: List<&2, SnapshotResource>,
+  reservations: Registry
+) -> OwnerSnapshotCloseDecision:
+  match copies:
+    case (for_check, for_update):
+      match for_check:
+        case SnapshotResource{_, _, retained_bytes, _}:
+          owner.snapshot.close.released(
+            registry.release(reservations, retained_bytes), allocator,
+            cursors, prefix, for_update, tail)
+
+def owner.snapshot.close.list(
+  allocator: ResourceIdAllocator,
+  reservations: Registry,
+  cursors: List<&2, CursorResource>,
+  decision: SnapshotListCursorDecision
+) -> OwnerSnapshotCloseDecision:
+  match decision:
+    case SnapshotListClosed{prefix, resource, tail}:
+      owner.snapshot.close.resource(snapshot.resource.duplicate(resource),
+        allocator, cursors, prefix, tail, reservations)
+    case SnapshotListBusy{snapshots}:
+      OwnerSnapshotBusy{OwnerRegistry{allocator, reservations, snapshots,
+        cursors}}
+    case SnapshotListRejected{snapshots}:
+      OwnerSnapshotCloseRejected{OwnerRegistry{allocator, reservations,
+        snapshots, cursors}}
+    case SnapshotListUpdated{snapshots}:
+      OwnerSnapshotCloseRejected{OwnerRegistry{allocator, reservations,
+        snapshots, cursors}}
+
+# Closes a snapshot only after its final cursor releases the retained root.
+def owner.snapshot.close(
+  owner: OwnerRegistry,
+  snapshot_id: U32
+) -> OwnerSnapshotCloseDecision:
+  match owner:
+    case OwnerRegistry{allocator, reservations, snapshots, cursors}:
+      owner.snapshot.close.list(allocator, reservations, cursors,
+        snapshot.list.cursor.close(snapshots, snapshot_id))
 
 # Maps a valid registry release to successful snapshot closure.
 def snapshot.close.registry(decision: RegistryReleaseDecision) -> SnapshotCloseDecision:

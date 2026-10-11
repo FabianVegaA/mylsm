@@ -195,3 +195,18 @@ def Laws.owner_cursor_close_missing_id_preserves_registry():
 
 def Laws.owner_cursor_close_underflow_preserves_registry():
   {==}
+
+def Laws.owner_snapshot_close_releases_retained_budget():
+  {==}
+
+def Laws.owner_snapshot_close_preserves_unrelated_resources():
+  {==}
+
+def Laws.owner_snapshot_close_with_child_preserves_registry():
+  {==}
+
+def Laws.owner_snapshot_close_missing_id_preserves_registry():
+  {==}
+
+def Laws.owner_snapshot_close_budget_underflow_preserves_registry():
+  {==}

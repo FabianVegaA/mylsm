@@ -419,3 +419,58 @@ law owner_cursor_close_underflow_preserves_registry:
       Snapshot.ResourceIdAllocator{3, False{}}, Snapshot.Registry{1n, 64n},
       [Snapshot.SnapshotResource{1, 3n, 64n, 0n}],
       [Snapshot.CursorResource{2, 1}]}} : Snapshot.OwnerCursorCloseDecision}
+
+# Releases the aggregate reservation after closing a childless snapshot.
+law owner_snapshot_close_releases_retained_budget:
+  {Snapshot.owner.snapshot.close(Snapshot.OwnerRegistry{
+    Snapshot.ResourceIdAllocator{3, False{}}, Snapshot.Registry{1n, 64n},
+    [Snapshot.SnapshotResource{1, 3n, 64n, 0n}], Nil{}}, 1) ==
+    Snapshot.OwnerSnapshotClosed{Snapshot.OwnerRegistry{
+      Snapshot.ResourceIdAllocator{3, False{}}, Snapshot.Registry{0n, 0n},
+      Nil{}, Nil{}}, Snapshot.SnapshotResource{1, 3n, 64n, 0n}} :
+    Snapshot.OwnerSnapshotCloseDecision}
+
+# Closes the requested snapshot while preserving earlier retained resources.
+law owner_snapshot_close_preserves_unrelated_resources:
+  {Snapshot.owner.snapshot.close(Snapshot.OwnerRegistry{
+    Snapshot.ResourceIdAllocator{12, False{}}, Snapshot.Registry{2n, 128n},
+    [Snapshot.SnapshotResource{1, 4n, 64n, 1n},
+     Snapshot.SnapshotResource{2, 5n, 64n, 0n}],
+    [Snapshot.CursorResource{10, 1}]}, 2) ==
+    Snapshot.OwnerSnapshotClosed{Snapshot.OwnerRegistry{
+      Snapshot.ResourceIdAllocator{12, False{}}, Snapshot.Registry{1n, 64n},
+      [Snapshot.SnapshotResource{1, 4n, 64n, 1n}],
+      [Snapshot.CursorResource{10, 1}]},
+      Snapshot.SnapshotResource{2, 5n, 64n, 0n}} :
+    Snapshot.OwnerSnapshotCloseDecision}
+
+# Returns Busy without changing an open snapshot that still has a cursor.
+law owner_snapshot_close_with_child_preserves_registry:
+  {Snapshot.owner.snapshot.close(Snapshot.OwnerRegistry{
+    Snapshot.ResourceIdAllocator{3, False{}}, Snapshot.Registry{1n, 64n},
+    [Snapshot.SnapshotResource{1, 3n, 64n, 1n}],
+    [Snapshot.CursorResource{2, 1}]}, 1) ==
+    Snapshot.OwnerSnapshotBusy{Snapshot.OwnerRegistry{
+      Snapshot.ResourceIdAllocator{3, False{}}, Snapshot.Registry{1n, 64n},
+      [Snapshot.SnapshotResource{1, 3n, 64n, 1n}],
+      [Snapshot.CursorResource{2, 1}]}} : Snapshot.OwnerSnapshotCloseDecision}
+
+# Rejects an unknown snapshot without releasing any retained reservation.
+law owner_snapshot_close_missing_id_preserves_registry:
+  {Snapshot.owner.snapshot.close(Snapshot.OwnerRegistry{
+    Snapshot.ResourceIdAllocator{3, False{}}, Snapshot.Registry{1n, 64n},
+    [Snapshot.SnapshotResource{1, 3n, 64n, 0n}], Nil{}}, 9) ==
+    Snapshot.OwnerSnapshotCloseRejected{Snapshot.OwnerRegistry{
+      Snapshot.ResourceIdAllocator{3, False{}}, Snapshot.Registry{1n, 64n},
+      [Snapshot.SnapshotResource{1, 3n, 64n, 0n}], Nil{}}} :
+    Snapshot.OwnerSnapshotCloseDecision}
+
+# Restores the childless snapshot when aggregate budget accounting is invalid.
+law owner_snapshot_close_budget_underflow_preserves_registry:
+  {Snapshot.owner.snapshot.close(Snapshot.OwnerRegistry{
+    Snapshot.ResourceIdAllocator{3, False{}}, Snapshot.Registry{0n, 0n},
+    [Snapshot.SnapshotResource{1, 3n, 64n, 0n}], Nil{}}, 1) ==
+    Snapshot.OwnerSnapshotCloseRejected{Snapshot.OwnerRegistry{
+      Snapshot.ResourceIdAllocator{3, False{}}, Snapshot.Registry{0n, 0n},
+      [Snapshot.SnapshotResource{1, 3n, 64n, 0n}], Nil{}}} :
+    Snapshot.OwnerSnapshotCloseDecision}
