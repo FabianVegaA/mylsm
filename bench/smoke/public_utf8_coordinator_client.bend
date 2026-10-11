@@ -6,6 +6,82 @@ import ../../src/Console.bend as Console
 def fail(message: String) -> IO(Unit):
   IO.die(Unit, 1, message)
 
+# Closes the database after the live UTF-8 range reaches its end.
+def live.finished(
+  handle: MyLSM.Utf8.Handle,
+  step: MyLSM.Utf8.ScanStep
+) -> IO(Unit):
+  match step:
+    case MyLSM.Utf8ScanEnd{_}:
+      do IO<Unit>:
+        _closed : Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
+          MyLSM.Utf8.close(handle)
+        IO.print("PUBLIC_UTF8_COORDINATOR_CLIENT_PASSED")
+    case _: fail("live UTF-8 scan did not end")
+
+# Reads the terminal marker after the one-key live range.
+def live.advanced(
+  handle: MyLSM.Utf8.Handle,
+  cursor: MyLSM.Utf8.Cursor
+) -> IO(Unit):
+  do IO<Unit>:
+    step : MyLSM.Utf8.ScanStep <- MyLSM.Utf8.scan_next(cursor)
+    live.finished(handle, step)
+
+# Continues only when both UTF-8 fields match the expected range entry.
+def live.item.checked(
+  handle: MyLSM.Utf8.Handle,
+  cursor: MyLSM.Utf8.Cursor,
+  valid: Bool
+) -> IO(Unit):
+  match valid:
+    case True{}: live.advanced(handle, cursor)
+    case False{}: fail("live UTF-8 scan changed its range item")
+
+
+# Validates the only key in the half-open alpha-to-beta range.
+def live.matches(key: String, value: String) -> Bool:
+  String.eq(key, "alpha") && String.eq(value, "uno")
+
+def live.item(
+  handle: MyLSM.Utf8.Handle,
+  step: MyLSM.Utf8.ScanStep
+) -> IO(Unit):
+  match step:
+    case MyLSM.Utf8ScanItem{key, value, cursor}:
+      live.item.checked(handle, cursor, live.matches(key, value))
+    case _: fail("live UTF-8 scan omitted its range item")
+
+
+# Reads one live UTF-8 range item from the owner cursor.
+def live.opened(
+  handle: MyLSM.Utf8.Handle,
+  result: Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Cursor>
+) -> IO(Unit):
+  match result:
+    case Done{cursor}:
+      do IO<Unit>:
+        step : MyLSM.Utf8.ScanStep <- MyLSM.Utf8.scan_next(cursor)
+        live.item(handle, step)
+    case Fail{_}: fail("public live UTF-8 range scan failed to open")
+
+# Preserves the UTF-8 handle after its earlier explicit snapshot is closed.
+def snapshot.released.opened(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Cursor>) -> IO(Unit):
+  match pair:
+    case (next, result): live.opened(next, result)
+
+def snapshot.released(
+  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>
+) -> IO(Unit):
+  match pair:
+    case (handle, Done{Unit{}}):
+      do IO<Unit>:
+        opened : MyLSM.Utf8.Handle &
+          Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Cursor> <-
+            MyLSM.Utf8.scan_range(handle, Some{"alpha"}, Some{"beta"})
+        snapshot.released.opened(opened)
+    case _: fail("explicit UTF-8 snapshot close failed")
+
 # Closes the snapshot and database after the owner cursor is released.
 def closed(
   handle: MyLSM.Utf8.Handle,
@@ -15,11 +91,9 @@ def closed(
   match result:
     case Done{Unit{}}:
       do IO<Unit>:
-        _snapshot : Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
+        snapshot_result : Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
           MyLSM.Utf8.snapshot.close(snapshot)
-        _handle : Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
-          MyLSM.Utf8.close(handle)
-        IO.print("PUBLIC_UTF8_COORDINATOR_CLIENT_PASSED")
+        snapshot.released((handle, snapshot_result))
     case Fail{_}: fail("UTF-8 owner cursor close failed")
 
 def cursor.closed(

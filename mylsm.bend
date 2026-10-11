@@ -20,6 +20,7 @@ import ./src/scan/RangeCursor.bend as ByteRangeCursor
 import ./src/scan/VisibleCursor.bend as VisibleByteCursor
 import ./src/scan/Snapshot.bend as SnapshotPolicy
 import ./src/scan/Utf8CursorPolicy.bend as Utf8CursorPolicy
+import ./src/scan/CursorCleanupPolicy.bend as CursorCleanupPolicy
 import ./src/transfer/Backup.bend as BackupCodec
 import ./src/transfer/BackupIo.bend as BackupIo
 import ./src/transfer/BackupCursorIo.bend as BackupCursorIo
@@ -196,6 +197,8 @@ type Bytes.Cursor is Type:
   ByteCursor{inner: ByteRangeCursor.Cursor, bounds: ByteRangeCursor.Bounds}
   ByteStreamCursor{inner: VisibleByteCursor.Cursor}
   ByteOwnerCursor{session: OwnerClient.Session, snapshot_id: U32, cursor_id: U32}
+  ByteOwnedCursor{snapshot: Bytes.Snapshot, inner: Bytes.Cursor,
+    bounds: ByteRangeCursor.Bounds}
   ByteFailureCursor{error: Bytes.Error}
   ByteClosedCursor{}
 
@@ -1226,6 +1229,58 @@ def Bytes.scan_open.result(
     case (raw, Done{cursor}):
       (ByteHandle{raw}, Done{ByteStreamCursor{cursor}})
 
+def Bytes.scan_open.owned.failed(
+  handle: Bytes.Handle,
+  snapshot: Bytes.Snapshot,
+  error: Bytes.Error
+) -> IO(Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Cursor>):
+  do IO<Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Cursor>>:
+    _closed : Result<&1, &1, Bytes.Error, Unit> <- Bytes.snapshot.close(snapshot)
+    return (handle, Fail{error})
+
+def Bytes.scan_open.owned.cursor(
+  handle: Bytes.Handle,
+  bounds: ByteRangeCursor.Bounds,
+  opened: Bytes.Snapshot & Result<&1, &1, Bytes.Error, Bytes.Cursor>
+) -> IO(Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Cursor>):
+  match opened:
+    case (snapshot, Fail{error}):
+      Bytes.scan_open.owned.failed(handle, snapshot, error)
+    case (snapshot, Done{cursor}):
+      IO.pure(Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Cursor>,
+        (handle, Done{ByteOwnedCursor{snapshot, cursor, bounds}}))
+
+def Bytes.scan_open.owned.bounds(
+  handle: Bytes.Handle,
+  snapshot: Bytes.Snapshot,
+  copies: ByteRangeCursor.Bounds & ByteRangeCursor.Bounds
+) -> IO(Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Cursor>):
+  match copies:
+    case (ByteRangeCursor.Bounds{None{}, None{}, Some{prefix}}, retained):
+      do IO<Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Cursor>>:
+        opened : Bytes.Snapshot & Result<&1, &1, Bytes.Error, Bytes.Cursor> <-
+          Bytes.snapshot.scan_prefix(snapshot, prefix)
+        Bytes.scan_open.owned.cursor(handle, retained, opened)
+    case (ByteRangeCursor.Bounds{lower, upper, _}, retained):
+      do IO<Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Cursor>>:
+        opened : Bytes.Snapshot & Result<&1, &1, Bytes.Error, Bytes.Cursor> <-
+          Bytes.snapshot.scan_range(snapshot, lower, upper)
+        Bytes.scan_open.owned.cursor(handle, retained, opened)
+
+def Bytes.scan_open.owned.snapshot(
+  opened: Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Snapshot>,
+  bounds: Bytes.ScanBounds
+) -> IO(Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Cursor>):
+  match opened:
+    case (handle, Fail{error}):
+      IO.pure(Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Cursor>,
+        (handle, Fail{error}))
+    case (handle, Done{snapshot}):
+      match bounds:
+        case ScanBounds{lower, upper, prefix}:
+          Bytes.scan_open.owned.bounds(handle, snapshot,
+            ByteRangeCursor.bounds.clone(ByteRangeCursor.Bounds{lower, upper, prefix}))
+
 def Bytes.scan_open(
   handle: Bytes.Handle,
   bounds: Bytes.ScanBounds
@@ -1240,8 +1295,11 @@ def Bytes.scan_open(
                 ByteRangeCursor.Bounds{lower, upper, prefix})
             return Bytes.scan_open.result(pair)
     case RemoteByteHandle{session}:
-      IO.pure(Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Cursor>,
-        (RemoteByteHandle{session}, Fail{UnsupportedOperation{}}))
+      do IO<Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Cursor>>:
+        opened : Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Snapshot> <-
+          Bytes.snapshot(RemoteByteHandle{session})
+        Bytes.scan_open.owned.snapshot(opened, bounds)
+
 
 def Bytes.scan(
   handle: Bytes.Handle,
@@ -1329,6 +1387,11 @@ def Bytes.scan_close_io.stream(
 
 def Bytes.scan_close(cursor: Bytes.Cursor) -> IO(Result<&1, &1, Bytes.Error, Unit>):
   match cursor:
+    case ByteOwnedCursor{snapshot, inner, _}:
+      do IO<Result<&1, &1, Bytes.Error, Unit>>:
+        first : Result<&1, &1, Bytes.Error, Unit> <- Bytes.scan_close(inner)
+        second : Result<&1, &1, Bytes.Error, Unit> <- Bytes.snapshot.close(snapshot)
+        return CursorCleanupPolicy.combine(&1, Bytes.Error, first, second)
     case ByteStreamCursor{inner}:
       Bytes.scan_close_io.stream(inner)
     case ByteOwnerCursor{session, _, cursor_id}:
@@ -1402,8 +1465,65 @@ def Bytes.scan_next_io.snapshot(
   IO.pure(Bytes.StreamStep,
     Bytes.snapshot.stream.step(Bytes.snapshot.scan_next(ByteCursor{inner, bounds})))
 
+def Bytes.scan_next.owned.item(
+  snapshot: Bytes.Snapshot,
+  inner: Bytes.Cursor,
+  key: PackedBytes.Bytes,
+  value: PackedBytes.Bytes,
+  bounds: ByteRangeCursor.Bounds,
+  matches: Bool
+) -> Bytes.StreamStep:
+  match matches:
+    case True{}: StreamItem{key, value, ByteOwnedCursor{snapshot, inner, bounds}}
+    case False{}: StreamSkip{ByteOwnedCursor{snapshot, inner, bounds}}
+
+def Bytes.scan_next.owned.checked(
+  snapshot: Bytes.Snapshot,
+  inner: Bytes.Cursor,
+  keys: PackedBytes.Bytes & PackedBytes.Bytes & PackedBytes.Bytes,
+  value: PackedBytes.Bytes,
+  copies: ByteRangeCursor.Bounds & ByteRangeCursor.Bounds
+) -> Bytes.StreamStep:
+  match keys:
+    case (key, (range_key, prefix_key)):
+      match copies:
+        case (checked, retained):
+          Bytes.scan_next.owned.item(snapshot, inner, key, value, retained,
+            ByteRangeCursor.matches.key((range_key, prefix_key), checked))
+
+def Bytes.scan_next.owned.ended(
+  result: Result<&1, &1, Bytes.Error, Unit>
+) -> Bytes.StreamStep:
+  match result:
+    case Done{Unit{}}: StreamEnd{ByteClosedCursor{}}
+    case Fail{error}: StreamFailure{error, ByteClosedCursor{}}
+
+def Bytes.scan_next.owned(
+  snapshot: Bytes.Snapshot,
+  bounds: ByteRangeCursor.Bounds,
+  step: Bytes.StreamStep
+) -> IO(Bytes.StreamStep):
+  match step:
+    case StreamItem{key, value, inner}:
+      IO.pure(Bytes.StreamStep, Bytes.scan_next.owned.checked(snapshot, inner,
+        ByteRangeCursor.key.copies.first(ByteMemTable.bytes.clone(key)), value,
+        ByteRangeCursor.bounds.clone(bounds)))
+    case StreamSkip{inner}:
+      IO.pure(Bytes.StreamStep, StreamSkip{ByteOwnedCursor{snapshot, inner, bounds}})
+    case StreamFailure{error, inner}:
+      IO.pure(Bytes.StreamStep, StreamFailure{error, ByteOwnedCursor{snapshot, inner, bounds}})
+    case StreamEnd{inner}:
+      do IO<Bytes.StreamStep>:
+        closed : Result<&1, &1, Bytes.Error, Unit> <-
+          Bytes.scan_close(ByteOwnedCursor{snapshot, inner, bounds})
+        return Bytes.scan_next.owned.ended(closed)
+
 def Bytes.scan_next(cursor: Bytes.Cursor) -> IO(Bytes.StreamStep):
   match cursor:
+    case ByteOwnedCursor{snapshot, inner, bounds}:
+      do IO<Bytes.StreamStep>:
+        step : Bytes.StreamStep <- Bytes.scan_next(inner)
+        Bytes.scan_next.owned(snapshot, bounds, step)
     case ByteStreamCursor{inner}:
       Bytes.scan_next_io.stream(inner)
     case ByteOwnerCursor{session, snapshot_id, cursor_id}:
@@ -1417,6 +1537,7 @@ def Bytes.scan_next(cursor: Bytes.Cursor) -> IO(Bytes.StreamStep):
 
 def Bytes.scan_next_io(cursor: Bytes.Cursor) -> IO(Bytes.StreamStep):
   Bytes.scan_next(cursor)
+
 
 def Bytes.scan_seek.remote(
   +snapshot_id: U32,
@@ -1443,11 +1564,25 @@ def Bytes.scan_seek.ids(
           OwnerByteClient.snapshot.cursor.seek(session, request_id, lower)
         return Bytes.scan_seek.remote(snapshot_id, cursor_id, pair)
 
+def Bytes.scan_seek.owned(
+  snapshot: Bytes.Snapshot,
+  bounds: ByteRangeCursor.Bounds,
+  pair: Bytes.Cursor & Result<&1, &1, Bytes.Error, Unit>
+) -> Bytes.Cursor & Result<&1, &1, Bytes.Error, Unit>:
+  match pair:
+    case (inner, result): (ByteOwnedCursor{snapshot, inner, bounds}, result)
+
+
 def Bytes.scan_seek(
   cursor: Bytes.Cursor,
   lower: Maybe<&1, PackedBytes.Bytes>
 ) -> IO(Bytes.Cursor & Result<&1, &1, Bytes.Error, Unit>):
   match cursor:
+    case ByteOwnedCursor{snapshot, inner, bounds}:
+      do IO<Bytes.Cursor & Result<&1, &1, Bytes.Error, Unit>>:
+        pair : Bytes.Cursor & Result<&1, &1, Bytes.Error, Unit> <-
+          Bytes.scan_seek(inner, lower)
+        return Bytes.scan_seek.owned(snapshot, bounds, pair)
     case ByteStreamCursor{inner}:
       IO.pure(Bytes.Cursor & Result<&1, &1, Bytes.Error, Unit>,
         (ByteStreamCursor{VisibleByteCursor.seek(inner, lower)}, Done{Unit{}}))

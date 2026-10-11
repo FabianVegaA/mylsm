@@ -90,7 +90,12 @@ After a successful flush, the durable handle drops the published entries from it
 MemTable and retains their visible totals as base stats, so subsequent lookups and
 scans use the SST instead of holding a duplicate full table in memory.
 `scan_seek(cursor, lower)` advances the inclusive lower bound and `scan_close` releases
-the SST reader, returning a typed result. The generation-five SST index stores block
+the SST reader, returning a typed result. When the handle is a coordinated owner client,
+`scan`, `scan_range`, and `scan_prefix` create a retained owner snapshot and remote
+incremental cursor. Reaching `End` closes both resources; explicit `scan_close` releases
+an early cursor and its private snapshot. A stream failure returns its cursor so callers
+can close both resources. Cursors created from an explicit snapshot leave that parent
+snapshot open for the caller. The generation-five SST index stores block
 separators, so a validated cursor can route directly to the selected block. Range bounds are lower-inclusive and
 upper-exclusive; prefix bounds compare exact bytes. The UTF-8 facade provides matching
 operations over String bounds and shares the byte ordering. Its cursor enters terminal
