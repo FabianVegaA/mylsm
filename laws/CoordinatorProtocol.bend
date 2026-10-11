@@ -187,3 +187,25 @@ law unknown_response_status_is_rejected:
   {Protocol.decode_response(Protocol.encode(Protocol.Request{1, 7, 20, 7,
     Bytes.concat([Protocol.u32.bytes(99), Bytes.new(0)])}), 16n) ==
     Protocol.UnknownResponseStatus{} : Protocol.ResponseDecision}
+
+# Preserves each copy of an arbitrary natural without numeric traversal.
+law natural_pair_preserves_input:
+  for +value: Nat
+  {Protocol.nat.duplicate.pair(value) == (value, value) : Nat & Nat}
+
+# Preserves each copy of an arbitrary fixed-width protocol word.
+law word_triple_preserves_input:
+  for +value: U32
+  {Protocol.u32.duplicate.triple(value) == (value, value, value) : U32 & U32 & U32}
+
+# Rejects the largest declared payload using only its fixed header.
+law maximum_declared_payload_is_rejected:
+  {Protocol.decode(Bytes.set.u32be(
+    Protocol.encode(Protocol.Request{1, 7, 19, 2, Bytes.new(0)}),
+    20, 4294967295), 16n) == Protocol.FrameTooLarge{} : Protocol.FrameDecision}
+
+# Rejects the largest operation tag without traversing its numeric value.
+law maximum_operation_tag_is_rejected:
+  {Protocol.decode(Protocol.encode(
+    Protocol.Request{1, 7, 19, 4294967295, Bytes.new(0)}), 16n) ==
+    Protocol.UnknownOperation{} : Protocol.FrameDecision}

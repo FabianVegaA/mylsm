@@ -215,32 +215,13 @@ def decode.sized(
       decode.complete.classified(input, version, generation, request_id,
         operation, payload_length, exact, short)
 
-def nat.duplicate.pair.step(pair: Nat & Nat) -> Nat & Nat:
-  match pair:
-    case (left, right): (Nat.add(1n, left), Nat.add(1n, right))
+# Copies a natural directly without recursion on its numeric value.
+def nat.duplicate.pair(+value: Nat) -> Nat & Nat:
+  (value, value)
 
-def nat.duplicate.pair(value: Nat) -> Nat & Nat:
-  match value:
-    case 0n: (0n, 0n)
-    case 1n+rest: nat.duplicate.pair.step(nat.duplicate.pair(rest))
-
-def nat.duplicate.triple.step(pair: Nat & Nat & Nat) -> Nat & Nat & Nat:
-  match pair:
-    case (first, second, third):
-      (Nat.add(1n, first), Nat.add(1n, second), Nat.add(1n, third))
-
-def nat.duplicate.triple(value: Nat) -> Nat & Nat & Nat:
-  match value:
-    case 0n: (0n, 0n, 0n)
-    case 1n+rest: nat.duplicate.triple.step(nat.duplicate.triple(rest))
-
-def u32.duplicate.triple.result(pair: Nat & Nat & Nat) -> U32 & U32 & U32:
-  match pair:
-    case (first, second, third):
-      (U32.from_nat(first), U32.from_nat(second), U32.from_nat(third))
-
-def u32.duplicate.triple(value: U32) -> U32 & U32 & U32:
-  u32.duplicate.triple.result(nat.duplicate.triple(U32.to_nat(value)))
+# Copies a fixed-width protocol word without converting it to unary recursion.
+def u32.duplicate.triple(+value: U32) -> U32 & U32 & U32:
+  (value, value, value)
 
 def decode.words.payload_length.size.copies(
   input: Bytes.Bytes,
@@ -293,6 +274,25 @@ def decode.words.payload_length.expected(
     generation, request_id, operation, payload_length, nat.duplicate.pair(expected),
     within_limit)
 
+# Rejects oversized declarations before computing or comparing frame offsets.
+def decode.words.payload_length.admitted(
+  input: Bytes.Bytes,
+  +size: U32,
+  +version: U32,
+  +generation: U32,
+  +request_id: U32,
+  +operation: U32,
+  +payload_length: U32,
+  exact_length: U32,
+  within_limit: Bool
+) -> FrameDecision:
+  match within_limit:
+    case False{}: FrameTooLarge{}
+    case True{}:
+      decode.words.payload_length.expected(input, size, version, generation,
+        request_id, operation, payload_length,
+        Nat.add(24n, U32.to_nat(exact_length)), True{})
+
 def decode.words.payload_length.copies(
   input: Bytes.Bytes,
   +size: U32,
@@ -305,8 +305,8 @@ def decode.words.payload_length.copies(
 ) -> FrameDecision:
   match copies:
     case (frame_length, exact_length, bounded_length):
-      decode.words.payload_length.expected(input, size, version, generation,
-        request_id, operation, frame_length, Nat.add(24n, U32.to_nat(exact_length)),
+      decode.words.payload_length.admitted(input, size, version, generation,
+        request_id, operation, frame_length, exact_length,
         U32.is_le(bounded_length, U32.from_nat(max_payload_bytes)))
 
 def decode.words.payload_length(

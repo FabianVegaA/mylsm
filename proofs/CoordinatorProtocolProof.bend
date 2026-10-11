@@ -78,3 +78,15 @@ def Laws.already_exists_response_decodes():
 
 def Laws.unknown_response_status_is_rejected():
   {==}
+
+def Laws.natural_pair_preserves_input(_value):
+  {==}
+
+def Laws.word_triple_preserves_input(_value):
+  {==}
+
+def Laws.maximum_declared_payload_is_rejected():
+  {==}
+
+def Laws.maximum_operation_tag_is_rejected():
+  {==}
