@@ -1,7 +1,6 @@
 import Base
 import ../../src/Console.bend as Console
 import ../../src/coordinator/Client.bend as Client
-import ../../src/coordinator/Operation.bend as Operation
 import ../../src/coordinator/Protocol.bend as Protocol
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
@@ -44,31 +43,36 @@ def get.response(
             case _: fail("coordinator owner did not find the byte key")
 
 # Sends one read request through the public coordinator client transport.
-def get.request(endpoint: String) -> IO(Unit):
-  do IO<Unit>:
-    result : Result<&1, &1, Client.Error, Protocol.Response> <-
-      Client.call(endpoint,
-        Protocol.Request{1, 1, 42, 1, bytes.from_hex("00ff")}, 1)
-    get.response(result)
+def get.request.result(
+  pair: Client.Session & Result<&1, &1, Client.Error, Protocol.Response>
+) -> IO(Unit):
+  match pair:
+    case (_, result): get.response(result)
 
-def put.response.empty(
-  endpoint: String,
+def get.request(session: Client.Session) -> IO(Unit):
+  do IO<Unit>:
+    pair : Client.Session & Result<&1, &1, Client.Error, Protocol.Response> <-
+      Client.session.get(session, bytes.from_hex("00ff"))
+    get.request.result(pair)
+
+def put.response.session.empty(
+  session: Client.Session,
   is_empty: Bool
 ) -> IO(Unit):
   match is_empty:
-    case True{}: get.request(endpoint)
+    case True{}: get.request(session)
     case False{}: fail("coordinator put response carried data")
 
-def put.response.length(
-  endpoint: String,
+# Checks that the owner acknowledged the byte put with an empty payload.
+def put.response.session.length(
+  session: Client.Session,
   measured: Bytes.Bytes & U32
 ) -> IO(Unit):
   match measured:
-    case (_, length): put.response.empty(endpoint, U32.is_eq(length, 0))
+    case (_, length): put.response.session.empty(session, U32.is_eq(length, 0))
 
-# Checks that the owner acknowledged the byte put with an empty payload.
 def put.response(
-  endpoint: String,
+  session: Client.Session,
   result: Result<&1, &1, Client.Error, Protocol.Response>
 ) -> IO(Unit):
   match result:
@@ -78,34 +82,25 @@ def put.response(
         case Protocol.Response{_, _, _, status, payload}:
           match status:
             case Protocol.Success{}:
-              put.response.length(endpoint, Bytes.length(payload))
+              put.response.session.length(session, Bytes.length(payload))
             case _: fail("coordinator owner rejected the byte put")
 
 # Sends a binary mutation through the public coordinator client transport.
-def put.request(paths: String & String) -> IO(Unit):
-  match paths:
-    case (put_endpoint, get_endpoint):
-      do IO<Unit>:
-        result : Result<&1, &1, Client.Error, Protocol.Response> <-
-          Client.call(put_endpoint,
-            Protocol.Request{1, 1, 41, 2,
-              Operation.encode.put(bytes.from_hex("00ff"),
-                bytes.from_hex("80ff00"))}, 1)
-        put.response(get_endpoint, result)
+def put.request.result(
+  pair: Client.Session & Result<&1, &1, Client.Error, Protocol.Response>
+) -> IO(Unit):
+  match pair:
+    case (session, result): put.response(session, result)
 
-# Makes two independently owned endpoint paths for sequential requests.
-def path.clone.pair.go(path: String, left: String, right: String) -> String & String:
-  match path:
-    case SNil{}: (String.reverse(left), String.reverse(right))
-    case SCon{+character, rest}:
-      path.clone.pair.go(rest, SCon{character, left}, SCon{character, right})
-
-# Returns the endpoint pair used for put followed by get.
-def path.clone.pair(path: String) -> String & String:
-  path.clone.pair.go(path, SNil{}, SNil{})
+def put.request(endpoint: String) -> IO(Unit):
+  do IO<Unit>:
+    pair : Client.Session & Result<&1, &1, Client.Error, Protocol.Response> <-
+      Client.session.put(Client.session.open(endpoint, 1),
+        bytes.from_hex("00ff"), bytes.from_hex("80ff00"))
+    put.request.result(pair)
 
 # Exercises a serialized binary put and read through independent IPC calls.
 def main() -> IO(Unit):
   do IO<Unit>:
     endpoint : String <- IO.try(String, Console.get_env("MYLSM_OWNER_ENDPOINT"))
-    put.request(path.clone.pair(endpoint))
+    put.request(endpoint)

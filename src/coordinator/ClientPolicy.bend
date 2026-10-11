@@ -19,6 +19,16 @@ type Decision is Data:
   ClientProtocolFailure{}
   ClientReject{}
 
+# Tracks request identifiers without allowing U32 wraparound reuse.
+type RequestSequence is Data:
+  RequestAvailable{id: U32}
+  RequestExhausted{}
+
+# Assigns one identifier and returns the next sequence state.
+type RequestDecision is Type:
+  RequestAssigned{id: U32, next: RequestSequence}
+  RequestIdsExhausted{}
+
 def response.generation.result(
   generation: Nat,
   generation_matches: Bool
@@ -72,6 +82,31 @@ def operation.is_mutation(operation: U32) -> Bool:
 # Enforces the encoded IPC payload ceiling before client socket allocation.
 def request.within_payload_limit(payload_bytes: U32) -> Bool:
   Protocol.payload.admitted(payload_bytes)
+
+def request_id.take.available(
+  ids: U32 & U32,
+  is_final: Bool
+) -> RequestDecision:
+  match ids:
+    case (id, next_id):
+      match is_final:
+        case True{}: RequestAssigned{id, RequestExhausted{}}
+        case False{}: RequestAssigned{id, RequestAvailable{(next_id + 1 : U32)}}
+
+def request_id.take.ready(
+  copies: U32 & U32 & U32
+) -> RequestDecision:
+  match copies:
+    case (final_check, (id, next_id)):
+      request_id.take.available((id, next_id),
+        U32.is_eq(final_check, 4294967295))
+
+# Assigns each request ID once and makes exhaustion terminal.
+def request_id.take(sequence: RequestSequence) -> RequestDecision:
+  match sequence:
+    case RequestAvailable{id}:
+      request_id.take.ready(Protocol.u32.duplicate.triple(id))
+    case RequestExhausted{}: RequestIdsExhausted{}
 
 # Marks a ready request as dispatched exactly once.
 def dispatch(state: State, mutation: Bool) -> Decision:

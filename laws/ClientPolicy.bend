@@ -84,3 +84,18 @@ law request_payload_at_limit_is_admitted:
 # Rejects a payload one byte beyond the encoded frame limit.
 law request_payload_over_limit_is_rejected:
   {ClientPolicy.request.within_payload_limit(1073741825) == False{} : Bool}
+
+# Assigns the current request identifier and advances the sequence.
+law request_id_sequence_advances_without_reuse:
+  {ClientPolicy.request_id.take(ClientPolicy.RequestAvailable{41}) ==
+    ClientPolicy.RequestAssigned{41, ClientPolicy.RequestAvailable{42}} : ClientPolicy.RequestDecision}
+
+# Uses the final representable ID once and then becomes exhausted.
+law final_request_id_is_not_reused_after_wraparound:
+  {ClientPolicy.request_id.take.available((41, 42), True{}) ==
+    ClientPolicy.RequestAssigned{41, ClientPolicy.RequestExhausted{}} : ClientPolicy.RequestDecision}
+
+# Keeps request ID exhaustion terminal.
+law exhausted_request_sequence_rejects_every_call:
+  {ClientPolicy.request_id.take(ClientPolicy.RequestExhausted{}) ==
+    ClientPolicy.RequestIdsExhausted{} : ClientPolicy.RequestDecision}

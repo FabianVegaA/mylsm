@@ -52,3 +52,12 @@ def Laws.request_payload_at_limit_is_admitted():
 
 def Laws.request_payload_over_limit_is_rejected():
   {==}
+
+def Laws.request_id_sequence_advances_without_reuse():
+  {==}
+
+def Laws.final_request_id_is_not_reused_after_wraparound():
+  {==}
+
+def Laws.exhausted_request_sequence_rejects_every_call():
+  {==}

@@ -2,6 +2,7 @@ import Base
 import ../ByteMemTable.bend as ByteMemTable
 import ./ClientPolicy.bend as Policy
 import ./Io.bend as Io
+import ./Operation.bend as Operation
 import ./Protocol.bend as Protocol
 import ./UnixSocketIo.bend as UnixSocket
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
@@ -14,6 +15,12 @@ type Error is Type:
   FrameTooLarge{}
   StaleOwner{}
   CorrelationMismatch{}
+  RequestIdsExhausted{}
+
+# Keeps one canonical endpoint, owner generation, and request sequence.
+type Session is Type:
+  Session{endpoint: String, generation: U32,
+    requests: Policy.RequestSequence}
 
 def u32.clone.pair.from(triple: U32 & U32 & U32) -> U32 & U32:
   match triple:
@@ -337,3 +344,107 @@ def call(
       call.request.size(endpoint,
         (version, (request_generation, (request_id,
           u32.clone.pair(operation)))), generation, Bytes.length(payload))
+
+def string.clone.pair.go(
+  value: String,
+  left: String,
+  right: String
+) -> String & String:
+  match value:
+    case SNil{}: (String.reverse(left), String.reverse(right))
+    case SCon{+character, rest}:
+      string.clone.pair.go(rest, SCon{character, left}, SCon{character, right})
+
+def string.clone.pair(value: String) -> String & String:
+  string.clone.pair.go(value, SNil{}, SNil{})
+
+# Starts one client session with its first request identifier.
+def session.open(endpoint: String, generation: U32) -> Session:
+  Session{endpoint, generation, Policy.RequestAvailable{1}}
+
+def session.call.ready(
+  endpoints: String & String,
+  generations: U32 & U32 & U32,
+  request_id: U32,
+  operation: U32,
+  next: Policy.RequestSequence,
+  payload: Bytes.Bytes
+) -> IO(Session & Result<&1, &1, Error, Protocol.Response>):
+  match endpoints:
+    case (call_endpoint, retained_endpoint):
+      match generations:
+        case (request_generation, (active_generation, retained_generation)):
+          do IO<Session & Result<&1, &1, Error, Protocol.Response>>:
+            response : Result<&1, &1, Error, Protocol.Response> <-
+              call(call_endpoint,
+                Protocol.Request{1, request_generation, request_id,
+                  operation, payload}, active_generation)
+            return (Session{retained_endpoint, retained_generation, next},
+              response)
+
+def session.call.decision(
+  endpoint: String,
+  generation: U32,
+  operation: U32,
+  payload: Bytes.Bytes,
+  decision: Policy.RequestDecision
+) -> IO(Session & Result<&1, &1, Error, Protocol.Response>):
+  match decision:
+    case Policy.RequestAssigned{id, next}:
+      session.call.ready(string.clone.pair(endpoint),
+        Protocol.u32.duplicate.triple(generation), id, operation, next, payload)
+    case Policy.RequestIdsExhausted{}:
+      IO.pure(Session & Result<&1, &1, Error, Protocol.Response>,
+        (Session{endpoint, generation, Policy.RequestExhausted{}},
+          Fail{RequestIdsExhausted{}}))
+
+# Sends one operation with the next unique ID and retains the updated session.
+def session.call(
+  session: Session,
+  operation: U32,
+  payload: Bytes.Bytes
+) -> IO(Session & Result<&1, &1, Error, Protocol.Response>):
+  match session:
+    case Session{endpoint, generation, requests}:
+      session.call.decision(endpoint, generation, operation, payload,
+        Policy.request_id.take(requests))
+
+# Sends a byte get and retains the next request sequence.
+def session.get(
+  session: Session,
+  key: Bytes.Bytes
+) -> IO(Session & Result<&1, &1, Error, Protocol.Response>):
+  session.call(session, 1, key)
+
+# Sends a byte put and retains the next request sequence.
+def session.put(
+  session: Session,
+  key: Bytes.Bytes,
+  value: Bytes.Bytes
+) -> IO(Session & Result<&1, &1, Error, Protocol.Response>):
+  session.call(session, 2, Operation.encode.put(key, value))
+
+# Sends a byte delete and retains the next request sequence.
+def session.delete(
+  session: Session,
+  key: Bytes.Bytes
+) -> IO(Session & Result<&1, &1, Error, Protocol.Response>):
+  session.call(session, 3, key)
+
+# Sends a flush operation and retains the next request sequence.
+def session.flush(
+  session: Session
+) -> IO(Session & Result<&1, &1, Error, Protocol.Response>):
+  session.call(session, 4, Bytes.new(0))
+
+# Sends a compaction operation and retains the next request sequence.
+def session.compact(
+  session: Session
+) -> IO(Session & Result<&1, &1, Error, Protocol.Response>):
+  session.call(session, 5, Bytes.new(0))
+
+# Sends a stats operation and retains the next request sequence.
+def session.stats(
+  session: Session
+) -> IO(Session & Result<&1, &1, Error, Protocol.Response>):
+  session.call(session, 6, Bytes.new(0))
