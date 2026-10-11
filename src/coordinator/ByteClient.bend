@@ -4,11 +4,22 @@ import ./ClientPolicy.bend as Policy
 import ./Protocol.bend as Protocol
 import ./CursorCodec.bend as CursorCodec
 import ./OwnerCursorCodec.bend as OwnerCursorCodec
+import ./CursorCountPolicy.bend as CursorCountPolicy
 import ./CursorOpenCodec.bend as CursorOpenCodec
 import ./StatsCodec.bend as StatsCodec
 import ../ByteWal.bend as ByteWal
 import ../Wal.bend as Wal
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
+
+# Carries a bounded remote cursor count across incremental owner reads.
+type SnapshotCountState is Type:
+  SnapshotCountNeed{session: Client.Session, cursor_ids: U32 & U32,
+    count: U32}
+  SnapshotCountFrame{pair:
+    Client.Session & Result<&1, &1, Client.Error, CursorCodec.Frame>,
+    cursor_id: U32, count: U32}
+  SnapshotCountItem{session: Client.Session, cursor_id: U32,
+    decision: CursorCountPolicy.Decision}
 
 def result.failure(
   error: Client.Error
@@ -457,3 +468,92 @@ def snapshot.cursor.close(
     pair : Client.Session & Result<&1, &1, Client.Error, Protocol.Response> <-
       Client.session.call(session, 14, Protocol.snapshot.id.bytes(cursor_id))
     return snapshot.cursor.close.result(pair)
+
+def snapshot.cursor.count.close.result(
+  pair: Client.Session & Result<&1, &1, Client.Error, Unit>,
+  error: Client.Error
+) -> Client.Session & Result<&1, &1, Client.Error, U32>:
+  match pair:
+    case (session, _): (session, Fail{error})
+
+def snapshot.cursor.count.close.resource(
+  session: Client.Session,
+  cursor_id: U32,
+  error: Client.Error
+) -> IO(Client.Session & Result<&1, &1, Client.Error, U32>):
+  do IO<Client.Session & Result<&1, &1, Client.Error, U32>>:
+    closed : Client.Session & Result<&1, &1, Client.Error, Unit> <-
+      snapshot.cursor.close(session, cursor_id)
+    return snapshot.cursor.count.close.result(closed, error)
+
+def snapshot.cursor.count.close.pair(
+  pair: Client.Session & Result<&1, &1, Client.Error, CursorCodec.Frame>,
+  cursor_id: U32,
+  error: Client.Error
+) -> IO(Client.Session & Result<&1, &1, Client.Error, U32>):
+  match pair:
+    case (session, _):
+      snapshot.cursor.count.close.resource(session, cursor_id, error)
+
+def snapshot.cursor.count.close.state(
+  state: SnapshotCountState,
+  error: Client.Error
+) -> IO(Client.Session & Result<&1, &1, Client.Error, U32>):
+  match state:
+    case SnapshotCountNeed{session, cursor_ids, _}:
+      match cursor_ids:
+        case (cursor_id, _):
+          snapshot.cursor.count.close.resource(session, cursor_id, error)
+    case SnapshotCountFrame{pair, cursor_id, _}:
+      snapshot.cursor.count.close.pair(pair, cursor_id, error)
+    case SnapshotCountItem{session, cursor_id, _}:
+      snapshot.cursor.count.close.resource(session, cursor_id, error)
+
+def snapshot.cursor.count.loop(
+  fuel: Nat,
+  state: SnapshotCountState
+) -> IO(Client.Session & Result<&1, &1, Client.Error, U32>):
+  match fuel:
+    case 0n:
+      snapshot.cursor.count.close.state(state,
+        Client.OwnerRejected{Protocol.ResponseResourceLimit{}})
+    case 1n+rest:
+      match state:
+        case SnapshotCountFrame{pair, cursor_id, count}:
+          match pair:
+            case (session, Fail{error}):
+              snapshot.cursor.count.close.resource(session, cursor_id, error)
+            case (session, Done{CursorCodec.CursorEnd{}}):
+              IO.pure(Client.Session & Result<&1, &1, Client.Error, U32>,
+                (session, Done{count}))
+            case (session, Done{CursorCodec.CursorItem{_, _}}):
+              snapshot.cursor.count.loop(rest, SnapshotCountItem{session,
+                cursor_id, CursorCountPolicy.next(count)})
+        case SnapshotCountItem{session, cursor_id, decision}:
+          match decision:
+            case CursorCountPolicy.CountLimit{}:
+              snapshot.cursor.count.close.resource(session, cursor_id,
+                Client.OwnerRejected{Protocol.ResponseResourceLimit{}})
+            case CursorCountPolicy.CountContinue{next_count}:
+              snapshot.cursor.count.loop(rest,
+                SnapshotCountNeed{session,
+                  CursorCountPolicy.u32.pair(cursor_id), next_count})
+        case SnapshotCountNeed{session, cursor_ids, count}:
+          match cursor_ids:
+            case (wire_id, retained_id):
+              do IO<Client.Session &
+                Result<&1, &1, Client.Error, U32>>:
+                next : Client.Session &
+                  Result<&1, &1, Client.Error, CursorCodec.Frame> <-
+                    snapshot.cursor.next(session, wire_id)
+                snapshot.cursor.count.loop(rest,
+                  SnapshotCountFrame{next, retained_id, count})
+
+# Counts one retained owner cursor without materializing its records.
+def snapshot.cursor.count(
+  session: Client.Session,
+  cursor_id: U32
+) -> IO(Client.Session & Result<&1, &1, Client.Error, U32>):
+  snapshot.cursor.count.loop(
+    Nat.mul(3n, Nat.add(4294967295n, 1n)),
+    SnapshotCountNeed{session, CursorCountPolicy.u32.pair(cursor_id), 0})

@@ -23,6 +23,7 @@ import ./src/scan/Utf8CursorPolicy.bend as Utf8CursorPolicy
 import ./src/transfer/Backup.bend as BackupCodec
 import ./src/transfer/BackupIo.bend as BackupIo
 import ./src/transfer/BackupCursorIo.bend as BackupCursorIo
+import ./src/transfer/BackupOwnerCursorIo.bend as BackupOwnerCursorIo
 import ./src/transfer/RestoreIo.bend as RestoreIo
 import ./src/transfer/FormatInspect.bend as FormatInspect
 import ./src/transfer/FormatInspectIo.bend as FormatInspectIo
@@ -983,6 +984,154 @@ def Bytes.backup_to.statsed(
       Bytes.backup_to.budgeted(path, entries,
         RawByteDb.scan.work_budget(raw))
 
+def Bytes.backup_to.remote.failed(
+  handle_session: OwnerClient.Session,
+  snapshot_id: U32,
+  session: OwnerClient.Session,
+  error: OwnerClient.Error
+) -> IO(Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>):
+  do IO<Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>>:
+    _closed : OwnerClient.Session &
+      Result<&1, &1, OwnerClient.Error, Unit> <-
+        OwnerByteClient.snapshot.close(session, snapshot_id)
+    return (RemoteByteHandle{handle_session}, Fail{Bytes.owner.error(error)})
+
+def Bytes.backup_to.remote.exported(
+  handle_session: OwnerClient.Session,
+  result: Result<&1, &1, BackupIo.Error, Unit>
+) -> IO(Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>):
+  IO.pure(Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>,
+    Bytes.backup_to.result(RemoteByteHandle{handle_session}, result))
+
+def Bytes.backup_to.remote.export.ready(
+  path: String,
+  handle_session: OwnerClient.Session,
+  source: BackupOwnerCursorIo.OwnerSource,
+  counts: U32 & U32
+) -> IO(Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>):
+  match counts:
+    case (entries, fuel_entries):
+      do IO<Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>>:
+        result : Result<&1, &1, BackupIo.Error, Unit> <-
+          BackupOwnerCursorIo.export(path, source, U32.to_nat(entries),
+            Nat.add(32n, Nat.mul(8n, U32.to_nat(fuel_entries))))
+        Bytes.backup_to.remote.exported(handle_session, result)
+
+def Bytes.backup_to.remote.export.ready.copies(
+  path: String,
+  handle_session: OwnerClient.Session,
+  source: BackupOwnerCursorIo.OwnerSource,
+  counts: U32 & U32 & U32
+) -> IO(Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>):
+  match counts:
+    case (entries, (fuel_entries, _)):
+      Bytes.backup_to.remote.export.ready(path, handle_session, source,
+        (entries, fuel_entries))
+
+def Bytes.backup_to.remote.export.opened(
+  path: String,
+  handle_session: OwnerClient.Session,
+  snapshot_id: U32,
+  entry_count: U32,
+  opened: OwnerClient.Session & Result<&1, &1, OwnerClient.Error, U32>
+) -> IO(Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>):
+  match opened:
+    case (session, Fail{error}):
+      Bytes.backup_to.remote.failed(handle_session, snapshot_id,
+        session, error)
+    case (session, Done{cursor_id}):
+      Bytes.backup_to.remote.export.ready.copies(path, handle_session,
+        BackupOwnerCursorIo.OwnerSource{session, snapshot_id,
+          cursor_id, True{}},
+        CoordinatorProtocol.u32.duplicate.triple(entry_count))
+
+def Bytes.backup_to.remote.cursor.counted.result.copied(
+  path: String,
+  handle_session: OwnerClient.Session,
+  snapshot_ids: U32 & U32 & U32,
+  pair: OwnerClient.Session & Result<&1, &1, OwnerClient.Error, U32>
+) -> IO(Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>):
+  match snapshot_ids:
+    case (failure_id, (open_id, export_id)):
+      match pair:
+        case (session, Fail{error}):
+          Bytes.backup_to.remote.failed(handle_session, failure_id,
+            session, error)
+        case (session, Done{entry_count}):
+          do IO<Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>>:
+            opened : OwnerClient.Session &
+              Result<&1, &1, OwnerClient.Error, U32> <-
+                OwnerByteClient.snapshot.cursor.open(session, open_id)
+            Bytes.backup_to.remote.export.opened(path, handle_session,
+              export_id, entry_count, opened)
+
+def Bytes.backup_to.remote.cursor.counted.result(
+  path: String,
+  handle_session: OwnerClient.Session,
+  snapshot_id: U32,
+  pair: OwnerClient.Session & Result<&1, &1, OwnerClient.Error, U32>
+) -> IO(Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>):
+  Bytes.backup_to.remote.cursor.counted.result.copied(path,
+    handle_session,
+    CoordinatorProtocol.u32.duplicate.triple(snapshot_id), pair)
+
+def Bytes.backup_to.remote.cursor.counted(
+  path: String,
+  handle_session: OwnerClient.Session,
+  snapshot_id: U32,
+  opened: OwnerClient.Session & Result<&1, &1, OwnerClient.Error, U32>
+) -> IO(Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>):
+  match opened:
+    case (session, Fail{error}):
+      Bytes.backup_to.remote.failed(handle_session, snapshot_id,
+        session, error)
+    case (session, Done{cursor_id}):
+      do IO<Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>>:
+        counted : OwnerClient.Session &
+          Result<&1, &1, OwnerClient.Error, U32> <-
+            OwnerByteClient.snapshot.cursor.count(session, cursor_id)
+        Bytes.backup_to.remote.cursor.counted.result(path, handle_session,
+          snapshot_id, counted)
+
+def Bytes.backup_to.remote.snapshot.cloned(
+  path: String,
+  sessions: OwnerClient.Session & OwnerClient.Session,
+  snapshot_ids: U32 & U32 & U32
+) -> IO(Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>):
+  match sessions:
+    case (handle_session, owner_session):
+      match snapshot_ids:
+        case (count_id, (export_id, _)):
+          do IO<Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>>:
+            opened_cursor : OwnerClient.Session &
+              Result<&1, &1, OwnerClient.Error, U32> <-
+                OwnerByteClient.snapshot.cursor.open(owner_session, count_id)
+            Bytes.backup_to.remote.cursor.counted(path, handle_session,
+              export_id, opened_cursor)
+
+def Bytes.backup_to.remote.snapshot.opened(
+  path: String,
+  opened: OwnerClient.Session & Result<&1, &1, OwnerClient.Error, U32>
+) -> IO(Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>):
+  match opened:
+    case (session, Fail{error}):
+      IO.pure(Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>,
+        (RemoteByteHandle{session}, Fail{Bytes.owner.error(error)}))
+    case (session, Done{snapshot_id}):
+      Bytes.backup_to.remote.snapshot.cloned(path,
+        OwnerClient.session.clone(session),
+        CoordinatorProtocol.u32.duplicate.triple(snapshot_id))
+
+def Bytes.backup_to.remote(
+  path: String,
+  session: OwnerClient.Session
+) -> IO(Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>):
+  do IO<Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>>:
+    opened : OwnerClient.Session &
+      Result<&1, &1, OwnerClient.Error, U32> <-
+        OwnerByteClient.snapshot.open(session)
+    Bytes.backup_to.remote.snapshot.opened(path, opened)
+
 # Publishes one consistent byte snapshot as a checksummed backup bundle.
 def Bytes.backup_to(
   path: String,
@@ -992,8 +1141,7 @@ def Bytes.backup_to(
     case ByteHandle{raw}:
       Bytes.backup_to.statsed(path, RawByteDb.stats(raw))
     case RemoteByteHandle{session}:
-      IO.pure(Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>,
-        (RemoteByteHandle{session}, Fail{UnsupportedOperation{}}))
+      Bytes.backup_to.remote(path, session)
 
 def Bytes.restore.error(error: RestoreIo.Error) -> Bytes.Error:
   match error:

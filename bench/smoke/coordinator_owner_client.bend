@@ -359,14 +359,75 @@ def snapshot.open.checked.id(
       snapshot.open.checked.id.value(session, snapshot_id,
         U32.is_eq(check_id, 0))
 
+def snapshot.count.checked(
+  session: Client.Session,
+  snapshot_id: U32,
+  matches: Bool
+) -> IO(Unit):
+  match matches:
+    case True{}: snapshot.open.checked.id.copied(session,
+      token.duplicate(snapshot_id))
+    case False{}: fail("owner snapshot cursor count was incorrect")
+
+def snapshot.count.result(
+  session: Client.Session,
+  snapshot_id: U32,
+  result: Result<&1, &1, Client.Error, U32>
+) -> IO(Unit):
+  match result:
+    case Fail{_}: fail("owner snapshot cursor count failed")
+    case Done{count}: snapshot.count.checked(session, snapshot_id,
+      Nat.is_eq(U32.to_nat(count), 3n))
+
+def snapshot.count.finished(
+  pair: Client.Session & Result<&1, &1, Client.Error, U32>,
+  snapshot_id: U32
+) -> IO(Unit):
+  match pair:
+    case (session, result):
+      snapshot.count.result(session, snapshot_id, result)
+
+def snapshot.count.opened(
+  session: Client.Session,
+  snapshot_id: U32,
+  opened: Result<&1, &1, Client.Error, U32>
+) -> IO(Unit):
+  match opened:
+    case Fail{_}: fail("owner snapshot count cursor open failed")
+    case Done{cursor_id}:
+      do IO<Unit>:
+        result : Client.Session & Result<&1, &1, Client.Error, U32> <-
+          ByteClient.snapshot.cursor.count(session, cursor_id)
+        snapshot.count.finished(result, snapshot_id)
+
+def snapshot.count.open.pair(
+  pair: Client.Session & Result<&1, &1, Client.Error, U32>,
+  snapshot_id: U32
+) -> IO(Unit):
+  match pair:
+    case (session, opened): snapshot.count.opened(session, snapshot_id, opened)
+
+def snapshot.count.open.copied(
+  session: Client.Session,
+  snapshot_ids: U32 & U32
+) -> IO(Unit):
+  match snapshot_ids:
+    case (wire_id, retained_id):
+      do IO<Unit>:
+        opened : Client.Session & Result<&1, &1, Client.Error, U32> <-
+          ByteClient.snapshot.cursor.open(session, wire_id)
+        snapshot.count.open.pair(opened, retained_id)
+
+def snapshot.count.open(session: Client.Session, snapshot_id: U32) -> IO(Unit):
+  snapshot.count.open.copied(session, token.duplicate(snapshot_id))
+
 # Continues after an owner token was allocated with a nonzero ID.
 def snapshot.open.checked(
   pair: Client.Session & Result<&1, &1, Client.Error, U32>
 ) -> IO(Unit):
   match pair:
     case (session, Done{snapshot_id}):
-      snapshot.open.checked.id(session,
-        Protocol.u32.duplicate.triple(snapshot_id))
+      snapshot.count.open(session, snapshot_id)
     case (_, Fail{_}): fail("coordinator client snapshot open failed")
 
 # Opens and checks one owner-managed snapshot through the wire protocol.

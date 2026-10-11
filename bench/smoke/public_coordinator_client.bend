@@ -371,6 +371,30 @@ def snapshot.opened(
         snapshot.read(handle, read)
     case (_, Fail{_}): fail("public owner snapshot could not open")
 
+def backup.exported(
+  pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, Unit>
+) -> IO(Unit):
+  match pair:
+    case (handle, Done{Unit{}}):
+      do IO<Unit>:
+        closed : Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
+          MyLSM.Bytes.close(handle)
+        finish.closed(closed)
+    case (_, Fail{_}): fail("public owner backup failed")
+
+def backup.opened(
+  path: String,
+  result: Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Handle>
+) -> IO(Unit):
+  match result:
+    case Done{handle}:
+      do IO<Unit>:
+        exported : MyLSM.Bytes.Handle &
+          Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
+            MyLSM.Bytes.backup_to(path, handle)
+        backup.exported(exported)
+    case Fail{_}: fail("public owner backup could not open owner")
+
 # Opens through the public facade while the owner holds the database lock.
 def opened(result: Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Handle>) -> IO(Unit):
   match result:
@@ -382,9 +406,22 @@ def opened(result: Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Handle>) -> IO(
         snapshot.opened(snapshot)
     case Fail{_}: fail("public coordinator client could not open owner")
 
+def if.owner.action.result(
+  backup_mode: Bool,
+  backup_path: String,
+  result: Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Handle>
+) -> IO(Unit):
+  match backup_mode:
+    case True{}: backup.opened(backup_path, result)
+    case False{}: opened(result)
+
 def main() -> IO(Unit):
   do IO<Unit>:
     path : String <- IO.try(String, Console.get_env("MYLSM_DB_PATH"))
+    action : String <- IO.try(String, Console.get_env("MYLSM_OWNER_ACTION"))
+    backup_path : String <- IO.try(String,
+      Console.get_env("MYLSM_BACKUP_PATH"))
+    backup_mode : Bool = String.eq(action, "backup")
     result : Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Handle> <-
       MyLSM.Bytes.open_existing_wait(path, 1000, 10)
-    opened(result)
+    if.owner.action.result(backup_mode, backup_path, result)
