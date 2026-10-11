@@ -7,6 +7,7 @@ import ./CoordinatorPolicy.bend as Policy
 import ./OwnerGeneration.bend as Generation
 import ./Io.bend as Io
 import ./UnixSocketIo.bend as UnixSocket
+import ./OwnerSnapshotStore.bend as SnapshotStore
 import ../Fs.bend as Fs
 import ../CrashPoint.bend as CrashPoint
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
@@ -19,7 +20,7 @@ type ReplyContext is Type:
 # Owns the listening socket, durable handle, endpoint, and lifecycle state.
 type ServiceState is Type:
   Serving{server: File, handle: ByteDb.Handle, endpoint: String,
-    generation: U32}
+    generation: U32, snapshots: SnapshotStore.Store}
   Stopping{server: File, handle: ByteDb.Handle, endpoint: String,
     reason: String}
 
@@ -308,25 +309,27 @@ def serve.accepted.connection(
   connection: File,
   handle: ByteDb.Handle,
   endpoint: String,
-  generations: U32 & U32 & U32
+  generations: U32 & U32 & U32,
+  snapshots: SnapshotStore.Store
 ) -> IO(ServiceState):
   match generations:
     case (request_generation, (state_generation, _)):
       do IO<ServiceState>:
         updated : ByteDb.Handle <- serve.once(handle, connection,
           request_generation)
-        return Serving{server, updated, endpoint, state_generation}
+        return Serving{server, updated, endpoint, state_generation, snapshots}
 
 def serve.accepted(
   pair: File & Result<&1, &1, UnixSocket.Error, File>,
   handle: ByteDb.Handle,
   endpoint: String,
-  generation: U32
+  generation: U32,
+  snapshots: SnapshotStore.Store
 ) -> IO(ServiceState):
   match pair:
     case (server, Done{connection}):
       serve.accepted.connection(server, connection, handle, endpoint,
-        Protocol.u32.duplicate.triple(generation))
+        Protocol.u32.duplicate.triple(generation), snapshots)
     case (server, Fail{UnixSocket.UnsupportedPlatform{}}):
       IO.pure(ServiceState, Stopping{server, handle, endpoint,
         "socket accept is unsupported on this platform"})
@@ -367,19 +370,19 @@ def serve.loop(fuel: Nat, state: ServiceState) -> IO(Unit):
   match fuel:
     case 0n:
       match state:
-        case Serving{server, handle, endpoint, _}:
+        case Serving{server, handle, endpoint, _, _}:
           serve.stop(server, handle, endpoint,
             "owner request budget exhausted")
         case Stopping{server, handle, endpoint, reason}:
           serve.stop(server, handle, endpoint, reason)
     case 1n+rest:
       match state:
-        case Serving{server, handle, endpoint, generation}:
+        case Serving{server, handle, endpoint, generation, snapshots}:
           do IO<Unit>:
             accepted : File & Result<&1, &1, UnixSocket.Error, File> <-
               UnixSocket.accept(server)
             next : ServiceState <- serve.accepted(accepted, handle, endpoint,
-              generation)
+              generation, snapshots)
             serve.loop(rest, next)
         case Stopping{server, handle, endpoint, reason}:
           serve.stop(server, handle, endpoint, reason)

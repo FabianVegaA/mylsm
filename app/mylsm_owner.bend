@@ -6,6 +6,7 @@ import ../src/DbLock.bend as DbLock
 import ../src/Fs.bend as Fs
 import ../src/coordinator/EndpointPath.bend as EndpointPath
 import ../src/coordinator/Owner.bend as Owner
+import ../src/coordinator/OwnerSnapshotStore.bend as OwnerSnapshots
 import ../src/coordinator/OwnerGenerationIo.bend as OwnerGenerationIo
 import ../src/coordinator/UnixSocketIo.bend as UnixSocket
 import ../src/scan/VisibleStats.bend as VisibleStats
@@ -34,7 +35,8 @@ def start.listening(
   match result:
     case (server, Done{Unit{}}):
       Owner.serve.loop(4294967295n,
-        Owner.Serving{server, handle, endpoint, generation})
+        Owner.Serving{server, handle, endpoint, generation,
+          OwnerSnapshots.empty()})
     case (server, Fail{_}):
       do IO<Unit>:
         _closed : Unit <- File.close(server)
