@@ -5,6 +5,7 @@ import ../ByteWal.bend as ByteWal
 import ../CrashPoint.bend as CrashPoint
 import ../Fs.bend as Fs
 import ./Restore.bend as Restore
+import ./PublicationPolicy.bend as PublicationPolicy
 import ./RestorePolicy.bend as RestorePolicy
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
@@ -253,18 +254,50 @@ def verified(
     case Done{handle}: verified.stats(path, expected, Db.stats(handle))
 
 # Validates an exchange, builds a sibling database, verifies it, then publishes it.
+def publish.parent.sync.failed(
+  disposition: PublicationPolicy.Failure,
+  error: U32 & String
+) -> IO(Result<&1, &1, Error, Unit>):
+  match disposition:
+    case PublicationPolicy.CommitUnknown{}:
+      match error:
+        case (code, message):
+          IO.pure(Result<&1, &1, Error, Unit>,
+            Fail{CommitUnknown{code, "parent directory sync failed: " ++ message}})
+    case PublicationPolicy.KnownFailure{}:
+      match error:
+        case (code, message):
+          IO.pure(Result<&1, &1, Error, Unit>, Fail{Io{code, message}})
+
 def publish.parent.synced(
   result: Result<&1, &1, U32 & String, Unit>
 ) -> IO(Result<&1, &1, Error, Unit>):
   match result:
-    case Fail{(code, message)}:
-      IO.pure(Result<&1, &1, Error, Unit>,
-        Fail{CommitUnknown{code, "parent directory sync failed: " ++ message}})
+    case Fail{error}:
+      publish.parent.sync.failed(
+        PublicationPolicy.failure(PublicationPolicy.AfterRename{}), error)
     case Done{Unit{}}:
       do IO<Result<&1, &1, Error, Unit>>:
         _checkpoint : Result<&1, &1, U32 & String, Unit> <-
           CrashPoint.hit("restore.parent_synced")
         return Done{Unit{}}
+
+def publish.rename.failed(
+  +temporary: String,
+  disposition: PublicationPolicy.Failure,
+  error: U32 & String
+) -> IO(Result<&1, &1, Error, Unit>):
+  match disposition:
+    case PublicationPolicy.KnownFailure{}:
+      match error:
+        case (code, message):
+          do IO<Result<&1, &1, Error, Unit>>:
+            cleanup.directory(temporary)
+            return Fail{Io{code, "exclusive rename failed: " ++ message}}
+    case PublicationPolicy.CommitUnknown{}:
+      match error:
+        case (code, message):
+          IO.pure(Result<&1, &1, Error, Unit>, Fail{CommitUnknown{code, message}})
 
 def publish.renamed(
   +destination: String,
@@ -272,10 +305,9 @@ def publish.renamed(
   result: Result<&1, &1, U32 & String, Unit>
 ) -> IO(Result<&1, &1, Error, Unit>):
   match result:
-    case Fail{(code, message)}:
-      do IO<Result<&1, &1, Error, Unit>>:
-        cleanup.directory(temporary)
-        return Fail{Io{code, "exclusive rename failed: " ++ message}}
+    case Fail{error}:
+      publish.rename.failed(temporary,
+        PublicationPolicy.failure(PublicationPolicy.BeforeRename{}), error)
     case Done{Unit{}}:
       do IO<Result<&1, &1, Error, Unit>>:
         _checkpoint : Result<&1, &1, U32 & String, Unit> <-
