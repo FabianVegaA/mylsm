@@ -7,6 +7,7 @@ import ./CoordinatorPolicy.bend as Policy
 import ./Io.bend as Io
 import ./UnixSocketIo.bend as UnixSocket
 import ../Fs.bend as Fs
+import ../CrashPoint.bend as CrashPoint
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # Retains request identifiers while the owner prepares a response.
@@ -70,12 +71,16 @@ def error.status(error: ByteDb.Error) -> Protocol.ResponseStatus:
 def write.response(
   pair: ByteDb.Handle & Result<&1, &1, ByteDb.Error, Unit>,
   context: ReplyContext
-) -> ByteDb.Handle & Protocol.Response:
+) -> IO(ByteDb.Handle & Protocol.Response):
   match pair:
     case (handle, Done{Unit{}}):
-      (handle, reply.response(context, Protocol.Success{}, Bytes.new(0)))
+      do IO<ByteDb.Handle & Protocol.Response>:
+        _checkpoint : Result<&1, &1, U32 & String, Unit> <-
+          CrashPoint.hit("owner.after_mutation.before_response")
+        return (handle, reply.response(context, Protocol.Success{}, Bytes.new(0)))
     case (handle, Fail{error}):
-      (handle, reply.response(context, error.status(error), Bytes.new(0)))
+      IO.pure(ByteDb.Handle & Protocol.Response,
+        (handle, reply.response(context, error.status(error), Bytes.new(0))))
 
 def get.response(
   pair: ByteDb.Handle & Result<&1, &1, ByteDb.Error, Maybe<&1, Bytes.Bytes>>,
@@ -136,27 +141,27 @@ def dispatch.operation(
       do IO<ByteDb.Handle & Protocol.Response>:
         pair : ByteDb.Handle & Result<&1, &1, ByteDb.Error, Unit> <-
           ByteDb.put(handle, key, value)
-        return write.response(pair, context)
+        write.response(pair, context)
     case Operation.Delete{key}:
       do IO<ByteDb.Handle & Protocol.Response>:
         pair : ByteDb.Handle & Result<&1, &1, ByteDb.Error, Unit> <-
           ByteDb.delete(handle, key)
-        return write.response(pair, context)
+        write.response(pair, context)
     case Operation.WriteBatch{mutations}:
       do IO<ByteDb.Handle & Protocol.Response>:
         pair : ByteDb.Handle & Result<&1, &1, ByteDb.Error, Unit> <-
           ByteDb.write_batch(handle, mutations)
-        return write.response(pair, context)
+        write.response(pair, context)
     case Operation.Flush{}:
       do IO<ByteDb.Handle & Protocol.Response>:
         pair : ByteDb.Handle & Result<&1, &1, ByteDb.Error, Unit> <-
           ByteDb.flush(handle)
-        return write.response(pair, context)
+        write.response(pair, context)
     case Operation.Compact{}:
       do IO<ByteDb.Handle & Protocol.Response>:
         pair : ByteDb.Handle & Result<&1, &1, ByteDb.Error, Unit> <-
           ByteDb.compact(handle)
-        return write.response(pair, context)
+        write.response(pair, context)
     case Operation.Stats{}:
       dispatch.stats(ByteDb.stats(handle), context)
 
