@@ -2,6 +2,7 @@ import Base
 import ./Client.bend as Client
 import ./ClientPolicy.bend as Policy
 import ./Protocol.bend as Protocol
+import ./StatsCodec.bend as StatsCodec
 import ../ByteWal.bend as ByteWal
 import ../Wal.bend as Wal
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
@@ -150,3 +151,41 @@ def write_batch(
   mutations: List<&1, ByteWal.Mutation>
 ) -> IO(Client.Session & Result<&1, &1, Client.Error, Unit>):
   write_batch.encoded(session, ByteWal.encode(ByteWal.Batch{mutations}))
+
+def stats.payload(
+  decision: StatsCodec.Decision
+) -> Result<&1, &1, Client.Error, StatsCodec.Stats>:
+  match decision:
+    case StatsCodec.Parsed{stats}: Done{stats}
+    case StatsCodec.Malformed{}: Fail{Client.MalformedResponse{}}
+
+def stats.status(
+  status: Protocol.ResponseStatus,
+  payload: Bytes.Bytes
+) -> Result<&1, &1, Client.Error, StatsCodec.Stats>:
+  match status:
+    case Protocol.Success{}: stats.payload(StatsCodec.parse(payload))
+    case _: Fail{Client.OwnerRejected{status}}
+
+def stats.response(
+  response: Protocol.Response
+) -> Result<&1, &1, Client.Error, StatsCodec.Stats>:
+  match response:
+    case Protocol.Response{_, _, _, status, payload}:
+      stats.status(status, payload)
+
+def stats.result(
+  pair: Client.Session & Result<&1, &1, Client.Error, Protocol.Response>
+) -> Client.Session & Result<&1, &1, Client.Error, StatsCodec.Stats>:
+  match pair:
+    case (session, Fail{error}): (session, Fail{error})
+    case (session, Done{response}): (session, stats.response(response))
+
+# Reads owner entry and payload counters from a typed statistics response.
+def stats(
+  session: Client.Session
+) -> IO(Client.Session & Result<&1, &1, Client.Error, StatsCodec.Stats>):
+  do IO<Client.Session & Result<&1, &1, Client.Error, StatsCodec.Stats>>:
+    pair : Client.Session & Result<&1, &1, Client.Error, Protocol.Response> <-
+      Client.session.stats(session)
+    return stats.result(pair)

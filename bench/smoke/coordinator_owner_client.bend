@@ -2,6 +2,7 @@ import Base
 import ../../src/Console.bend as Console
 import ../../src/coordinator/Client.bend as Client
 import ../../src/coordinator/ByteClient.bend as ByteClient
+import ../../src/coordinator/StatsCodec.bend as StatsCodec
 import ../../src/coordinator/Io.bend as ClientIo
 import ../../src/coordinator/Protocol.bend as Protocol
 import ../../src/coordinator/UnixSocketIo.bend as UnixSocket
@@ -83,13 +84,34 @@ def get.missing(session: Client.Session) -> IO(Unit):
       ByteClient.get(session, bytes.from_hex("0102"))
     get.missing.result(pair)
 
+def stats.checked(session: Client.Session, counters_match: Bool) -> IO(Unit):
+  match counters_match:
+    case True{}: get.missing(session)
+    case False{}: fail("coordinator client stats returned wrong counters")
+
+def stats.result(
+  pair: Client.Session & Result<&1, &1, Client.Error, StatsCodec.Stats>
+) -> IO(Unit):
+  match pair:
+    case (_, Fail{_}): fail("coordinator client stats failed")
+    case (session, Done{StatsCodec.ByteStats{entries, payload_bytes}}):
+      stats.checked(session,
+        Nat.is_eq(entries, 3n) && Nat.is_eq(payload_bytes, 13n))
+
+def stats.request(session: Client.Session) -> IO(Unit):
+  do IO<Unit>:
+    pair : Client.Session & Result<&1, &1, Client.Error,
+      StatsCodec.Stats> <-
+      ByteClient.stats(session)
+    stats.result(pair)
+
 def batch.second.value.equal(
   pair: Client.Session & (Bytes.Bytes & Bytes.Bytes & Bool)
 ) -> IO(Unit):
   match pair:
     case (session, (_, (_, equal))):
       match equal:
-        case True{}: get.missing(session)
+        case True{}: stats.request(session)
         case False{}: fail("coordinator batch omitted its second mutation")
 
 def batch.second.result(
