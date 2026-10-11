@@ -68,6 +68,10 @@ def operation.is_mutation(operation: U32) -> Bool:
     case 5: True{}
     case _: False{}
 
+# Enforces the encoded IPC payload ceiling before client socket allocation.
+def request.within_payload_limit(payload_bytes: U32) -> Bool:
+  Nat.is_le(U32.to_nat(payload_bytes), 1048576n)
+
 # Marks a ready request as dispatched exactly once.
 def dispatch(state: State, mutation: Bool) -> Decision:
   match state:

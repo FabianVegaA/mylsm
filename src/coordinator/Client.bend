@@ -11,6 +11,7 @@ type Error is Type:
   ConnectFailure{error: UnixSocket.Error}
   RetryRead{error: Io.Error}
   CommitUnknown{error: Io.Error}
+  FrameTooLarge{}
   StaleOwner{}
   CorrelationMismatch{}
 
@@ -290,20 +291,39 @@ def created(
       IO.pure(Result<&1, &1, Error, Protocol.Response>,
         result.failure(ConnectFailure{error}))
 
-def call.requests(
+def call.admitted(
   endpoint: String,
-  requests: Protocol.Request & Protocol.Request,
-  generation: U32
+  request: Protocol.Request,
+  generation: U32,
+  mutation: Bool,
+  admitted: Bool
 ) -> IO(Result<&1, &1, Error, Protocol.Response>):
-  match requests:
-    case (request_metadata, request):
-      match request_metadata:
-        case Protocol.Request{operation, _, _, _, _}:
-          do IO<Result<&1, &1, Error, Protocol.Response>>:
-            client : Result<&1, &1, UnixSocket.Error, File> <-
-              UnixSocket.create()
-            created(client, endpoint, request, generation,
-              Policy.operation.is_mutation(operation))
+  match admitted:
+    case False{}:
+      IO.pure(Result<&1, &1, Error, Protocol.Response>,
+        result.failure(FrameTooLarge{}))
+    case True{}:
+      do IO<Result<&1, &1, Error, Protocol.Response>>:
+        client : Result<&1, &1, UnixSocket.Error, File> <-
+          UnixSocket.create()
+        created(client, endpoint, request, generation, mutation)
+
+def call.request.size(
+  endpoint: String,
+  fields: U32 & U32 & U32 & U32 & U32,
+  generation: U32,
+  measured_payload: Bytes.Bytes & U32
+) -> IO(Result<&1, &1, Error, Protocol.Response>):
+  match fields:
+    case (version, (request_generation, (request_id,
+        (policy_operation, wire_operation)))):
+      match measured_payload:
+        case (payload, length):
+          call.admitted(endpoint,
+            Protocol.Request{version, request_generation, request_id,
+              wire_operation, payload}, generation,
+            Policy.operation.is_mutation(policy_operation),
+            Policy.request.within_payload_limit(length))
 
 # Sends one bounded owner request and never retries it implicitly.
 def call(
@@ -311,4 +331,9 @@ def call(
   request: Protocol.Request,
   generation: U32
 ) -> IO(Result<&1, &1, Error, Protocol.Response>):
-  call.requests(endpoint, request.clone.pair(request), generation)
+  match request:
+    case Protocol.Request{version, request_generation, request_id, operation,
+        payload}:
+      call.request.size(endpoint,
+        (version, (request_generation, (request_id,
+          u32.clone.pair(operation)))), generation, Bytes.length(payload))

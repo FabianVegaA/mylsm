@@ -46,3 +46,9 @@ def Laws.current_generation_and_correlation_confirm(generation):
   match generation:
     case 0n: {==}
     case 1n+rest: {==}
+
+def Laws.request_payload_at_limit_is_admitted():
+  {==}
+
+def Laws.request_payload_over_limit_is_rejected():
+  {==}

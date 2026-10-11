@@ -76,3 +76,11 @@ law current_generation_and_correlation_confirm:
   for generation: Nat
   {ClientPolicy.response.validate(generation, True{}, True{}) ==
     ClientPolicy.ClientConfirmed{ClientPolicy.RequestCompleted{generation}} : ClientPolicy.Decision}
+
+# Admits a payload exactly at the encoded frame limit.
+law request_payload_at_limit_is_admitted:
+  {ClientPolicy.request.within_payload_limit(1048576) == True{} : Bool}
+
+# Rejects a payload one byte beyond the encoded frame limit.
+law request_payload_over_limit_is_rejected:
+  {ClientPolicy.request.within_payload_limit(1048577) == False{} : Bool}
