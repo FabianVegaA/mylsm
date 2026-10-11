@@ -4,10 +4,11 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 DB=$(mktemp -d "${TMPDIR:-/tmp}/mylsm-legacy-sst.XXXXXX")
 DEST="$DB-migrated"
+CORRUPT_MIGRATION_DEST="$DB-corrupt-migrated"
 CONFLICT_DEST="$DB-conflict"
 CONFLICT_BUNDLE="$CONFLICT_DEST.migrate-060.bundle"
 AGGREGATE_DEST="$DB-aggregate-migrated"
-trap 'rm -rf "$DB" "$DEST" "$DEST.migrate-060.bundle" "$DEST.migrate-060.bundle.backup-060.tmp" "$DEST.restore-060.tmp" "$CONFLICT_DEST" "$CONFLICT_BUNDLE" "$CONFLICT_BUNDLE.backup-060.tmp" "$CONFLICT_DEST.restore-060.tmp" "$DB-aggregate" "$AGGREGATE_DEST" "$AGGREGATE_DEST.migrate-060.bundle" "$AGGREGATE_DEST.migrate-060.bundle.backup-060.tmp" "$AGGREGATE_DEST.restore-060.tmp"' EXIT
+trap 'rm -rf "$DB" "$DEST" "$DEST.migrate-060.bundle" "$DEST.migrate-060.bundle.backup-060.tmp" "$DEST.restore-060.tmp" "$CONFLICT_DEST" "$CONFLICT_BUNDLE" "$CONFLICT_BUNDLE.backup-060.tmp" "$CONFLICT_DEST.restore-060.tmp" "$DB-aggregate" "$AGGREGATE_DEST" "$AGGREGATE_DEST.migrate-060.bundle" "$AGGREGATE_DEST.migrate-060.bundle.backup-060.tmp" "$AGGREGATE_DEST.restore-060.tmp" "$DB-corrupt" "$CORRUPT_MIGRATION_DEST" "$CORRUPT_MIGRATION_DEST.migrate-060.bundle" "$CORRUPT_MIGRATION_DEST.migrate-060.bundle.backup-060.tmp" "$CORRUPT_MIGRATION_DEST.restore-060.tmp"' EXIT
 rmdir "$DB"
 
 MYLSM_DB_PATH="$DB" bend "$ROOT/bench/smoke/legacy_sst_io.bend"
@@ -43,9 +44,16 @@ test "$CORRUPT_WAL_BEFORE" = "$CORRUPT_WAL_AFTER"
 cp -R "$DB" "$DB-corrupt"
 printf '\001' | dd of="$DB-corrupt/l0/0.tbl" bs=1 seek=0 conv=notrunc 2>/dev/null
 CORRUPT_BEFORE=$(cksum "$DB-corrupt/LOCK" "$DB-corrupt/MANIFEST" "$DB-corrupt/l0/0.tbl")
+CORRUPT_MIGRATION_BEFORE=$(find "$DB-corrupt" -type f -exec cksum {} \; | sort)
 MYLSM_DB_PATH="$DB-corrupt" bend "$ROOT/bench/smoke/legacy_sst_reject.bend"
 CORRUPT_AFTER=$(cksum "$DB-corrupt/LOCK" "$DB-corrupt/MANIFEST" "$DB-corrupt/l0/0.tbl")
 test "$CORRUPT_BEFORE" = "$CORRUPT_AFTER"
+MYLSM_DB_PATH="$DB-corrupt" MYLSM_MIGRATE_DEST="$CORRUPT_MIGRATION_DEST" \
+  bend "$ROOT/bench/smoke/legacy_migration_corrupt.bend"
+test ! -e "$CORRUPT_MIGRATION_DEST"
+test ! -e "$CORRUPT_MIGRATION_DEST.migrate-060.bundle"
+test ! -e "$CORRUPT_MIGRATION_DEST.migrate-060.bundle.backup-060.tmp"
+test "$CORRUPT_MIGRATION_BEFORE" = "$(find "$DB-corrupt" -type f -exec cksum {} \; | sort)"
 cp -R "$DB" "$DB-aggregate"
 MYLSM_DB_PATH="$DB-aggregate" bend "$ROOT/bench/smoke/legacy_sst_multi_manifest.bend"
 truncate -s 67108864 "$DB-aggregate/l0/1.tbl"
