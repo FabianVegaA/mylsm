@@ -27,6 +27,7 @@ been run.
 | JavaScript host boundaries | `db_lock_js_unsupported.sh`, `rename_noreplace_js_unsupported.sh`, `owner_spawn_js.sh` | All pass under Node.js; this does not exercise Bun FFI |
 | WAL commit recovery | `bash bench/crash/durable_commit.sh` | Pass |
 | Owner response-loss matrix | `bash bench/crash/coordinator_commit_unknown.sh` outside the sandbox | Six crash boundaries pass; each recovery matches the expected absent/present commit state |
+| Coordinated backup/restore | `bash bench/smoke/coordinator_owner_socket.sh` outside the sandbox | Pass; owner snapshot is streamed into a checksummed bundle, restored, binary bytes verified, owner stopped, and lock reacquired |
 | Backup publication matrix | `bash bench/crash/backup_publish.sh` | Pass at pre-rename, post-rename, and post-parent-sync boundaries |
 | Migration publication matrix | `bash bench/crash/migration_publish.sh` | Pass at bundle and destination publication boundaries; source checksums remain stable |
 
