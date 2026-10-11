@@ -1,7 +1,10 @@
 import Base
 import ../ByteMemTable.bend as ByteMemTable
+import ../MemTable.bend as MemTable
+import ../StorageBytes.bend as StorageBytes
 import ../coordinator/QueuePolicy.bend as QueuePolicy
 import ./FormatInspect.bend as FormatInspect
+import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # Reports the result of verifying all legacy WAL and SST files.
 type SourceValidation is Data:
@@ -37,8 +40,130 @@ type PublicationDecision is Data:
   PublicationAdvanced{state: Publication}
   PublicationRejected{}
 
+# Carries legacy record conversion across bounded state-machine steps.
+type LegacyApplyState is Type:
+  LegacyApplyNeed{entries: List<&2, MemTable.Entry>, table: ByteMemTable.Table}
+  LegacyApplyConverted{tail: List<&2, MemTable.Entry>, table: ByteMemTable.Table,
+    result: Result<&1, &1, U32 & String, ByteMemTable.Entry>}
+
+def legacy.string.clone.go(value: String, left: String, right: String) -> String & String:
+  match value:
+    case SNil{}: (String.reverse(left), String.reverse(right))
+    case SCon{+character, rest}:
+      legacy.string.clone.go(rest, SCon{character, left}, SCon{character, right})
+
+def legacy.string.clone(value: String) -> String & String:
+  legacy.string.clone.go(value, SNil{}, SNil{})
+
 def canonical.entries(table: ByteMemTable.Table) -> List<&1, ByteMemTable.Entry>:
   ByteMemTable.compact.live(ByteMemTable.ordered_entries(table))
+
+def legacy.value.bytes.result(
+  result: Result<&1, &1, U32 & String, Bytes.Bytes>
+) -> Result<&1, &1, U32 & String, Maybe<&1, Bytes.Bytes>>:
+  match result:
+    case Fail{error}: Fail{error}
+    case Done{bytes}: Done{Some{bytes}}
+
+def legacy.value.bytes(
+  value: Maybe<&2, String>
+) -> Result<&1, &1, U32 & String, Maybe<&1, Bytes.Bytes>>:
+  match value:
+    case None{}: Done{None{}}
+    case Some{text}: legacy.value.bytes.result(StorageBytes.from_string(text))
+
+def legacy.entry.bytes.value(
+  key: Bytes.Bytes,
+  result: Result<&1, &1, U32 & String, Maybe<&1, Bytes.Bytes>>
+) -> Result<&1, &1, U32 & String, ByteMemTable.Entry>:
+  match result:
+    case Fail{error}: Fail{error}
+    case Done{value}: Done{ByteMemTable.Entry{key, value}}
+
+def legacy.entry.bytes.key(
+  value: Maybe<&2, String>,
+  pair: String & Result<&1, &1, U32 & String, Bytes.Bytes>
+) -> Result<&1, &1, U32 & String, ByteMemTable.Entry>:
+  match pair:
+    case (_, Fail{error}): Fail{error}
+    case (_, Done{key_bytes}):
+      legacy.entry.bytes.value(key_bytes, legacy.value.bytes(value))
+
+def legacy.entry.bytes.start(
+  value: Maybe<&2, String>,
+  pair: String & String
+) -> Result<&1, &1, U32 & String, ByteMemTable.Entry>:
+  match pair:
+    case (source, retained):
+      legacy.entry.bytes.key(value,
+        (retained, StorageBytes.from_string(source)))
+
+def legacy.entry.bytes(
+  entry: MemTable.Entry
+) -> Result<&1, &1, U32 & String, ByteMemTable.Entry>:
+  match entry:
+    case MemTable.Entry{key, value}:
+      legacy.entry.bytes.start(value, legacy.string.clone(key))
+
+def legacy.apply.loop(
+  fuel: Nat,
+  state: LegacyApplyState
+) -> Result<&1, &1, U32 & String, ByteMemTable.Table>:
+  match fuel:
+    case 0n:
+      match state:
+        case LegacyApplyNeed{_, table}: Done{table}
+        case LegacyApplyConverted{_, _, Fail{error}}: Fail{error}
+        case LegacyApplyConverted{_, table, Done{_}}: Done{table}
+    case 1n+rest:
+      match state:
+        case LegacyApplyNeed{entries, table}:
+          match entries:
+            case Nil{}: Done{table}
+            case Con{entry, tail}:
+              legacy.apply.loop(rest, LegacyApplyConverted{tail, table,
+                legacy.entry.bytes(entry)})
+        case LegacyApplyConverted{tail, table, result}:
+          match result:
+            case Fail{error}: Fail{error}
+            case Done{ByteMemTable.Entry{key, value}}:
+              match value:
+                case None{}:
+                  legacy.apply.loop(rest, LegacyApplyNeed{tail,
+                    ByteMemTable.del(table, key)})
+                case Some{bytes}:
+                  legacy.apply.loop(rest, LegacyApplyNeed{tail,
+                    ByteMemTable.put(table, key, bytes)})
+
+def legacy.entries.measure.go(
+  entries: List<&2, MemTable.Entry>,
+  reversed: List<&2, MemTable.Entry>,
+  count: Nat
+) -> List<&2, MemTable.Entry> & Nat:
+  match entries:
+    case Nil{}: (List.reverse(&2, MemTable.Entry, reversed), count)
+    case Con{entry, tail}:
+      legacy.entries.measure.go(tail, Con{entry, reversed}, Nat.add(count, 1n))
+
+def legacy.entries.measure(
+  entries: List<&2, MemTable.Entry>
+) -> List<&2, MemTable.Entry> & Nat:
+  legacy.entries.measure.go(entries, Nil{}, 0n)
+
+def legacy.apply.measured(
+  pair: List<&2, MemTable.Entry> & Nat,
+  table: ByteMemTable.Table
+) -> Result<&1, &1, U32 & String, ByteMemTable.Table>:
+  match pair:
+    case (entries, count):
+      legacy.apply.loop(Nat.add(Nat.mul(2n, count), 1n),
+        LegacyApplyNeed{entries, table})
+
+def legacy.apply.chronological(
+  entries: List<&2, MemTable.Entry>,
+  table: ByteMemTable.Table
+) -> Result<&1, &1, U32 & String, ByteMemTable.Table>:
+  legacy.apply.measured(legacy.entries.measure(entries), table)
 
 # Begins publication only for a source admitted by the migration plan.
 def begin(decision: Decision) -> PublicationDecision:
