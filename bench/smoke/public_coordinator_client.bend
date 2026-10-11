@@ -53,7 +53,7 @@ def stats.checked(handle: MyLSM.Bytes.Handle, valid: Bool) -> IO(Unit):
 
 def stats.result(pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Stats>) -> IO(Unit):
   match pair:
-    case (handle, Done{MyLSM.ByteStats{entries, payload_bytes}}):
+    case (handle, Done{MyLSM.ByteStats{entries, payload_bytes, _, _, _}}):
       stats.checked(handle, stats.valid(entries, payload_bytes))
     case (handle, Fail{_}):
       do IO<Unit>:
@@ -122,6 +122,56 @@ def scan.step(frame: MyLSM.Bytes.StreamStep) -> MyLSM.Bytes.ScanStep:
     case MyLSM.StreamEnd{cursor}: MyLSM.ScanEnd{cursor}
     case MyLSM.StreamFailure{error, cursor}: MyLSM.ScanFailure{error, cursor}
 
+def snapshot.stats.valid(
+  entries: Nat,
+  payload_bytes: Nat,
+  snapshots: Nat,
+  retained_bytes: Nat,
+  cursors: Nat
+) -> Bool:
+  Nat.is_eq(entries, 3n) && Nat.is_eq(payload_bytes, 13n) &&
+    Nat.is_eq(snapshots, 1n) && Nat.is_lt(0n, retained_bytes) &&
+    Nat.is_eq(cursors, 1n)
+
+def snapshot.released.stats.valid(
+  entries: Nat,
+  payload_bytes: Nat,
+  snapshots: Nat,
+  retained_bytes: Nat,
+  cursors: Nat
+) -> Bool:
+  Nat.is_eq(entries, 3n) && Nat.is_eq(payload_bytes, 13n) &&
+    Nat.is_eq(snapshots, 0n) && Nat.is_eq(retained_bytes, 0n) &&
+    Nat.is_eq(cursors, 0n)
+
+
+def snapshot.released.stats.checked(
+  handle: MyLSM.Bytes.Handle,
+  valid: Bool
+) -> IO(Unit):
+  match valid:
+    case True{}: put.start(handle)
+    case False{}: fail("owner stats retained closed snapshot resources")
+
+
+def snapshot.released.stats(
+  pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Stats>
+) -> IO(Unit):
+  match pair:
+    case (handle, Done{MyLSM.ByteStats{entries, payload_bytes,
+        snapshots, retained_bytes, cursors}}):
+      snapshot.released.stats.checked(handle,
+        snapshot.released.stats.valid(entries, payload_bytes, snapshots,
+          retained_bytes, cursors))
+    case _: fail("owner stats failed after snapshot release")
+
+
+def snapshot.released.check(handle: MyLSM.Bytes.Handle) -> IO(Unit):
+  do IO<Unit>:
+    pair : MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error,
+      MyLSM.Bytes.Stats> <- MyLSM.Bytes.stats(handle)
+    snapshot.released.stats(pair)
+
 def snapshot.cursor.second.checked(
   handle: MyLSM.Bytes.Handle,
   snapshot: MyLSM.Bytes.Snapshot,
@@ -135,7 +185,7 @@ def snapshot.cursor.second.checked(
           MyLSM.Bytes.scan_close(cursor)
         _snapshot : Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
           MyLSM.Bytes.snapshot.close(snapshot)
-        put.start(handle)
+        snapshot.released.check(handle)
     case False{}: fail("remote snapshot cursor changed its second item")
 
 def snapshot.cursor.second.read(
@@ -175,7 +225,8 @@ def snapshot.cursor.first.cloned(
           MyLSM.Bytes.snapshot.close(for_close)
         snapshot.cursor.second(handle, for_continue, cursor, closed)
 
-def snapshot.cursor.first.checked(
+
+def snapshot.cursor.first.stats.checked(
   handle: MyLSM.Bytes.Handle,
   snapshot: MyLSM.Bytes.Snapshot,
   cursor: MyLSM.Bytes.Cursor,
@@ -185,6 +236,41 @@ def snapshot.cursor.first.checked(
     case True{}:
       snapshot.cursor.first.cloned(handle, cursor,
         MyLSM.Bytes.snapshot.clone(snapshot))
+    case False{}: fail("owner stats did not report live snapshot retention")
+
+
+def snapshot.cursor.first.stats(
+  snapshot: MyLSM.Bytes.Snapshot,
+  cursor: MyLSM.Bytes.Cursor,
+  pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Stats>
+) -> IO(Unit):
+  match pair:
+    case (next_handle, Done{MyLSM.ByteStats{entries, payload_bytes,
+        snapshots, retained_bytes, cursors}}):
+      snapshot.cursor.first.stats.checked(next_handle, snapshot, cursor,
+        snapshot.stats.valid(entries, payload_bytes, snapshots,
+          retained_bytes, cursors))
+    case _: fail("owner stats failed while a snapshot cursor was open")
+
+
+def snapshot.cursor.first.stats.open(
+  handle: MyLSM.Bytes.Handle,
+  snapshot: MyLSM.Bytes.Snapshot,
+  cursor: MyLSM.Bytes.Cursor
+) -> IO(Unit):
+  do IO<Unit>:
+    pair : MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error,
+      MyLSM.Bytes.Stats> <- MyLSM.Bytes.stats(handle)
+    snapshot.cursor.first.stats(snapshot, cursor, pair)
+
+def snapshot.cursor.first.checked(
+  handle: MyLSM.Bytes.Handle,
+  snapshot: MyLSM.Bytes.Snapshot,
+  cursor: MyLSM.Bytes.Cursor,
+  valid: Bool
+) -> IO(Unit):
+  match valid:
+    case True{}: snapshot.cursor.first.stats.open(handle, snapshot, cursor)
     case False{}: fail("remote snapshot cursor changed its first item")
 
 def snapshot.cursor.first(

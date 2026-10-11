@@ -76,7 +76,7 @@ type Bytes.Error is Data:
   CommitUnknown{code: U32, message: String}
 
 type Bytes.Stats is Data:
-  ByteStats{entries: Nat, payload_bytes: Nat}
+  ByteStats{entries: Nat, payload_bytes: Nat, snapshots: Nat, retained_bytes: Nat, cursors: Nat}
 
 type Bytes.Snapshot is Type:
   ByteSnapshot{entries: List<&1, ByteMemTable.Entry>}
@@ -558,7 +558,7 @@ def Bytes.stats.local(
 ) -> Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Stats>:
   match pair:
     case (raw, RawByteDb.Stats{entries, payload_bytes}):
-      (ByteHandle{raw}, Done{ByteStats{entries, payload_bytes}})
+      (ByteHandle{raw}, Done{ByteStats{entries, payload_bytes, 0n, 0n, 0n}})
 
 def Bytes.stats.remote(
   pair:
@@ -568,8 +568,8 @@ def Bytes.stats.remote(
   match pair:
     case (session, Fail{error}):
       (RemoteByteHandle{session}, Fail{Bytes.owner.error(error)})
-    case (session, Done{OwnerStatsCodec.ByteStats{entries, payload_bytes}}):
-      (RemoteByteHandle{session}, Done{ByteStats{entries, payload_bytes}})
+    case (session, Done{OwnerStatsCodec.ByteStats{entries, payload_bytes, snapshots, retained_bytes, cursors}}):
+      (RemoteByteHandle{session}, Done{ByteStats{entries, payload_bytes, snapshots, retained_bytes, cursors}})
 
 def Bytes.stats(handle: Bytes.Handle) -> IO(Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Stats>):
   match handle:

@@ -142,7 +142,56 @@ def stats.response(
     case ByteDb.Stats{entries, payload_bytes}:
       stats.response.encoded(handle, context,
         StorageBytes.from_string(Nat.show(entries) ++ ":" ++
-          Nat.show(payload_bytes)))
+          Nat.show(payload_bytes) ++ ":0:0:0"))
+
+def stats.response.owner.result(
+  pair: ByteDb.Handle & Protocol.Response,
+  snapshots: SnapshotStore.Store,
+  cursors: CursorStore.Store
+) -> DispatchResult:
+  match pair:
+    case (handle, response): DispatchResult{handle, snapshots, cursors, response}
+
+def stats.response.owner.metrics(
+  handle: ByteDb.Handle,
+  context: ReplyContext,
+  entries: Nat,
+  payload_bytes: Nat,
+  snapshot_metrics: SnapshotStore.Metrics,
+  cursor_metrics: CursorStore.Metrics
+) -> DispatchResult:
+  match snapshot_metrics:
+    case SnapshotStore.Metrics{snapshots, retained_bytes, snapshot_store}:
+      match cursor_metrics:
+        case CursorStore.Metrics{cursors, cursor_store}:
+          stats.response.owner.result(
+            stats.response.encoded(handle, context,
+              StorageBytes.from_string(Nat.show(entries) ++ ":" ++
+                Nat.show(payload_bytes) ++ ":" ++ Nat.show(snapshots) ++
+                ":" ++ Nat.show(retained_bytes) ++ ":" ++ Nat.show(cursors))),
+            snapshot_store, cursor_store)
+
+def stats.response.owner(
+  pair: ByteDb.Handle & ByteDb.Stats,
+  snapshots: SnapshotStore.Store,
+  cursors: CursorStore.Store,
+  context: ReplyContext
+) -> DispatchResult:
+  match pair:
+    case (handle, stats):
+      match stats:
+        case ByteDb.Stats{entries, payload_bytes}:
+          stats.response.owner.metrics(handle, context, entries, payload_bytes,
+            SnapshotStore.metrics(snapshots), CursorStore.metrics(cursors))
+
+def dispatch.stats.state(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  cursors: CursorStore.Store,
+  context: ReplyContext
+) -> IO(DispatchResult):
+  IO.pure(DispatchResult,
+    stats.response.owner(ByteDb.stats(handle), snapshots, cursors, context))
 
 def dispatch.stats(
   pair: ByteDb.Handle & ByteDb.Stats,
@@ -765,6 +814,8 @@ def dispatch.decoded.state(
   decision: Operation.Decision
 ) -> IO(DispatchResult):
   match decision:
+    case Operation.Decoded{Operation.Stats{}}:
+      dispatch.stats.state(handle, snapshots, cursors, context)
     case Operation.Decoded{Operation.SnapshotOpen{}}:
       snapshot.open(handle, snapshots, context, cursors)
     case Operation.Decoded{Operation.SnapshotGet{snapshot_id, key}}:

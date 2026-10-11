@@ -7,6 +7,10 @@ type Store is Type:
   Store{registry: Snapshot.OwnerRegistry, ids: List<&2, U32>,
     roots: List<&1, ByteDb.SnapshotRoot>}
 
+# Returns logical retention totals together with the preserved snapshot roots.
+type Metrics is Type:
+  Metrics{snapshots: Nat, retained_bytes: Nat, store: Store}
+
 # Returns owner registration alongside the opaque identifier or rejection.
 type OpenResult is Type:
   RootStored{store: Store, snapshot_id: U32}
@@ -358,6 +362,46 @@ def retained.bytes(store: Store) -> Nat:
         case Snapshot.OwnerRegistry{_, reservations, _, _}:
           match reservations:
             case Snapshot.Registry{_, retained}: retained
+
+def metrics.values(
+  allocator: Snapshot.ResourceIdAllocator,
+  snapshots: List<&2, Snapshot.SnapshotResource>,
+  cursors: List<&2, Snapshot.CursorResource>,
+  ids: List<&2, U32>,
+  roots: List<&1, ByteDb.SnapshotRoot>,
+  counts: Nat & Nat,
+  byte_counts: Nat & Nat
+) -> Metrics:
+  match counts:
+    case (reported_count, stored_count):
+      match byte_counts:
+        case (reported_bytes, stored_bytes):
+          Metrics{reported_count, reported_bytes,
+            Store{Snapshot.OwnerRegistry{allocator,
+              Snapshot.Registry{stored_count, stored_bytes}, snapshots,
+              cursors}, ids, roots}}
+
+def metrics.reservations(
+  allocator: Snapshot.ResourceIdAllocator,
+  reservations: Snapshot.Registry,
+  snapshots: List<&2, Snapshot.SnapshotResource>,
+  cursors: List<&2, Snapshot.CursorResource>,
+  ids: List<&2, U32>,
+  roots: List<&1, ByteDb.SnapshotRoot>
+) -> Metrics:
+  match reservations:
+    case Snapshot.Registry{count, retained}:
+      metrics.values(allocator, snapshots, cursors, ids, roots,
+        Snapshot.nat.duplicate(count), Snapshot.nat.duplicate(retained))
+
+# Reads reservation counters while returning all owner-held snapshot state.
+def metrics(store: Store) -> Metrics:
+  match store:
+    case Store{registry, ids, roots}:
+      match registry:
+        case Snapshot.OwnerRegistry{allocator, reservations, snapshots, cursors}:
+          metrics.reservations(allocator, reservations, snapshots, cursors,
+            ids, roots)
 
 def root.count(store: Store) -> Nat:
   match store:

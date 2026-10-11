@@ -6,6 +6,10 @@ import ./CursorCodec.bend as CursorCodec
 type Store is Type:
   Store{ids: List<&2, U32>, cursors: List<&1, VisibleCursor.Cursor>}
 
+# Returns the current cursor count together with the untouched reader store.
+type Metrics is Type:
+  Metrics{count: Nat, store: Store}
+
 # Carries a removed cursor and the aligned prefix and suffix for restoration.
 type Removed is Type:
   Removed{prefix_ids: List<&2, U32>,
@@ -43,6 +47,32 @@ def ids.count(ids: List<&2, U32>) -> Nat:
   match ids:
     case Nil{}: 0n
     case Con{_, tail}: Nat.add(1n, ids.count(tail))
+
+def ids.count.keep.go(
+  ids: List<&2, U32>,
+  reversed: List<&2, U32>,
+  count: Nat
+) -> List<&2, U32> & Nat:
+  match ids:
+    case Nil{}: (List.reverse(&2, U32, reversed), count)
+    case Con{id, tail}:
+      ids.count.keep.go(tail, Con{id, reversed}, Nat.add(count, 1n))
+
+def ids.count.keep(ids: List<&2, U32>) -> List<&2, U32> & Nat:
+  ids.count.keep.go(ids, Nil{}, 0n)
+
+def metrics.counted(
+  counted: List<&2, U32> & Nat,
+  cursors: List<&1, VisibleCursor.Cursor>
+) -> Metrics:
+  match counted:
+    case (ids, count): Metrics{count, Store{ids, cursors}}
+
+# Counts cursor IDs while rebuilding the aligned store for its caller.
+def metrics(store: Store) -> Metrics:
+  match store:
+    case Store{ids, cursors}:
+      metrics.counted(ids.count.keep(ids), cursors)
 
 def ids.clone.tail(
   head: U32 & U32,

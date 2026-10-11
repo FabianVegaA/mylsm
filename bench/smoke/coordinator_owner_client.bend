@@ -386,7 +386,7 @@ def stats.result(
 ) -> IO(Unit):
   match pair:
     case (_, Fail{_}): fail("coordinator client stats failed")
-    case (session, Done{StatsCodec.ByteStats{entries, payload_bytes}}):
+    case (session, Done{StatsCodec.ByteStats{entries, payload_bytes, _, _, _}}):
       stats.checked(session,
         Nat.is_eq(entries, 3n) && Nat.is_eq(payload_bytes, 13n))
 

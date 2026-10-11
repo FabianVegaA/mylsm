@@ -57,7 +57,7 @@ def already_exists(result: Result<&1, &1, MyLsm.Bytes.Error, Unit>) -> Bool:
 
 def count.one(pair: MyLsm.Bytes.Handle & MyLsm.Bytes.Stats) -> Bool:
   match pair:
-    case (_, MyLsm.ByteStats{entries, _}): Nat.is_eq(entries, 1n)
+    case (_, MyLsm.ByteStats{entries, _, _, _, _}): Nat.is_eq(entries, 1n)
 
 def bytes.equal(pair: Bytes.Bytes & Bytes.Bytes & Bool) -> Bool:
   match pair:
@@ -102,7 +102,7 @@ def finish.value(
 
 def finish.stats(pair: MyLsm.Bytes.Handle & Result<&1, &1, MyLsm.Bytes.Error, MyLsm.Bytes.Stats>) -> IO(Unit):
   match pair:
-    case (handle, Done{MyLsm.ByteStats{entries, _}}):
+    case (handle, Done{MyLsm.ByteStats{entries, _, _, _, _}}):
       do IO<Unit>:
         require(Nat.is_eq(entries, 1n), "restored database entry count differs")
         pair : MyLsm.Bytes.Handle & Result<&1, &1, MyLsm.Bytes.Error, Maybe<&1, Bytes.Bytes>> <-

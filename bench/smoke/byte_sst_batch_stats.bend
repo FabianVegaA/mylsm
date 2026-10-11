@@ -27,7 +27,7 @@ def closed(handle: MyLSM.Bytes.Handle, valid: Bool) -> IO(Unit):
 
 def checked.stats.result(pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Stats>) -> IO(Unit):
   match pair:
-    case (handle, Done{MyLSM.ByteStats{entries, payload_bytes}}):
+    case (handle, Done{MyLSM.ByteStats{entries, payload_bytes, _, _, _}}):
       closed(handle, Nat.is_eq(entries, 2n) && Nat.is_eq(payload_bytes, 8n))
     case (handle, Fail{_}): closed(handle, False{})
 
@@ -61,7 +61,7 @@ def checked.initial(handle: MyLSM.Bytes.Handle, valid: Bool) -> IO(Unit):
 
 def initial.stats.result(pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Stats>) -> IO(Unit):
   match pair:
-    case (handle, Done{MyLSM.ByteStats{entries, payload_bytes}}):
+    case (handle, Done{MyLSM.ByteStats{entries, payload_bytes, _, _, _}}):
       checked.initial(handle,
         Nat.is_eq(entries, 3n) && Nat.is_eq(payload_bytes, 15n))
     case (handle, Fail{_}): closed(handle, False{})

@@ -47,7 +47,7 @@ def stats.valid(handle: MyLSM.Utf8.Handle, valid: Bool) -> IO(Unit):
 
 def stats.result(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Stats>) -> IO(Unit):
   match pair:
-    case (handle, Done{MyLSM.Utf8Stats{MyLSM.ByteStats{entries, _}}}):
+    case (handle, Done{MyLSM.Utf8Stats{MyLSM.ByteStats{entries, _, _, _, _}}}):
       stats.valid(handle, Nat.is_eq(entries, 1n))
     case (handle, Fail{_}): stats.valid(handle, False{})
 

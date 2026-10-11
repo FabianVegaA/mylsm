@@ -45,7 +45,7 @@ def checked.deleted.stats.result(
       Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Stats>
 ) -> IO(Unit):
   match pair:
-    case (handle, Done{MyLSM.ByteStats{entries, payload_bytes}}):
+    case (handle, Done{MyLSM.ByteStats{entries, payload_bytes, _, _, _}}):
       checked.entries(handle, Bool.and(Nat.is_eq(entries, 2n),
         Nat.is_eq(payload_bytes, 4n)))
     case (handle, Fail{_}): checked.entries(handle, False{})
@@ -79,7 +79,7 @@ def checked.replaced.stats.result(
       Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Stats>
 ) -> IO(Unit):
   match pair:
-    case (handle, Done{MyLSM.ByteStats{entries, payload_bytes}}):
+    case (handle, Done{MyLSM.ByteStats{entries, payload_bytes, _, _, _}}):
       checked.replaced.count(handle, Bool.and(Nat.is_eq(entries, 3n),
         Nat.is_eq(payload_bytes, 600005n)))
     case (handle, Fail{_}): checked.entries(handle, False{})
@@ -113,7 +113,7 @@ def checked.after.write.result(
       Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Stats>
 ) -> IO(Unit):
   match pair:
-    case (handle, Done{MyLSM.ByteStats{entries, _}}):
+    case (handle, Done{MyLSM.ByteStats{entries, _, _, _, _}}):
       checked.after.write.count(handle, Nat.is_eq(entries, 3n))
     case (handle, Fail{_}): checked.entries(handle, False{})
 
@@ -146,7 +146,7 @@ def checked.after.read.result(
       Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Stats>
 ) -> IO(Unit):
   match pair:
-    case (handle, Done{MyLSM.ByteStats{entries, _}}):
+    case (handle, Done{MyLSM.ByteStats{entries, _, _, _, _}}):
       checked.after.read.start(handle, Nat.is_eq(entries, 2n))
     case (handle, Fail{_}): checked.entries(handle, False{})
 
@@ -177,7 +177,7 @@ def checked.count(handle: MyLSM.Bytes.Handle, valid: Bool) -> IO(Unit):
 # Checks the canonical entry count produced by blockwise recovery.
 def checked.result(pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Stats>) -> IO(Unit):
   match pair:
-    case (handle, Done{MyLSM.ByteStats{entries, _}}):
+    case (handle, Done{MyLSM.ByteStats{entries, _, _, _, _}}):
       checked.count(handle, Nat.is_eq(entries, 2n))
     case (handle, Fail{_}): checked.entries(handle, False{})
 

@@ -30,6 +30,14 @@ def cursor.closed(
   match pair:
     case (cursor, Done{Unit{}}):
       closed(handle, snapshot, Done{Unit{}})
+    case (_, Fail{MyLSM.Utf8Failure{MyLSM.Busy{}}}):
+      fail("UTF-8 cursor close returned Busy")
+    case (_, Fail{MyLSM.Utf8Failure{MyLSM.InvalidArgument{}}}):
+      fail("UTF-8 cursor close returned InvalidArgument")
+    case (_, Fail{MyLSM.Utf8Failure{MyLSM.Corruption{message}}}):
+      fail("UTF-8 cursor close corruption: " ++ message)
+    case (_, Fail{MyLSM.Utf8Failure{MyLSM.Io{_, message}}}):
+      fail("UTF-8 cursor close IO: " ++ message)
     case _: fail("UTF-8 owner cursor close failed")
 
 def item.checked(

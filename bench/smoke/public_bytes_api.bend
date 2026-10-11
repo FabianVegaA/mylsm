@@ -98,7 +98,7 @@ def checked.stats.valid(handle: MyLSM.Bytes.Handle, valid: Bool) -> IO(Unit):
 
 def checked.stats.result(pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Stats>) -> IO(Unit):
   match pair:
-    case (handle, Done{MyLSM.ByteStats{entries, payload_bytes}}):
+    case (handle, Done{MyLSM.ByteStats{entries, payload_bytes, _, _, _}}):
       checked.stats.valid(handle, Nat.is_eq(entries, 3n) && Nat.is_eq(payload_bytes, 15n))
     case (handle, Fail{_}): checked.stats.valid(handle, False{})
 
