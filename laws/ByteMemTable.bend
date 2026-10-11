@@ -118,3 +118,24 @@ law probe_finds_live_value:
   {probe.value(ByteMemTable.probe(ByteMemTable.put(ByteMemTable.empty(),
     bytes.fixture(Bytes.from_hex("61")), bytes.fixture(Bytes.from_hex("80"))),
     bytes.fixture(Bytes.from_hex("61")))) == True{} : Bool}
+
+# Identical neighboring keys are rejected by the strict export-order check.
+law strict_order_rejects_duplicate_keys:
+  {ByteMemTable.ordered.strict([ByteMemTable.Entry{bytes.fixture(Bytes.from_hex("61")),
+    Some{bytes.fixture(Bytes.from_hex("31"))}},
+    ByteMemTable.Entry{bytes.fixture(Bytes.from_hex("61")),
+      Some{bytes.fixture(Bytes.from_hex("32"))}}]) == False{} : Bool}
+
+# Descending neighboring keys are rejected before backup or restore publication.
+law strict_order_rejects_descending_keys:
+  {ByteMemTable.ordered.strict([ByteMemTable.Entry{bytes.fixture(Bytes.from_hex("62")),
+    Some{bytes.fixture(Bytes.from_hex("31"))}},
+    ByteMemTable.Entry{bytes.fixture(Bytes.from_hex("61")),
+      Some{bytes.fixture(Bytes.from_hex("32"))}}]) == False{} : Bool}
+
+# A prefix followed by its extension is a valid strict byte order.
+law strict_order_accepts_prefix_extension:
+  {ByteMemTable.ordered.strict([ByteMemTable.Entry{bytes.fixture(Bytes.from_hex("61")),
+    Some{bytes.fixture(Bytes.from_hex("31"))}},
+    ByteMemTable.Entry{bytes.fixture(Bytes.from_hex("6100")),
+      Some{bytes.fixture(Bytes.from_hex("32"))}}]) == True{} : Bool}

@@ -38,3 +38,12 @@ def Laws.probe_distinguishes_absence():
 
 def Laws.probe_finds_live_value():
   {==}
+
+def Laws.strict_order_rejects_duplicate_keys():
+  {==}
+
+def Laws.strict_order_rejects_descending_keys():
+  {==}
+
+def Laws.strict_order_accepts_prefix_extension():
+  {==}
