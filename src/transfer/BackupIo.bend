@@ -9,6 +9,7 @@ import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 # Distinguishes pre-publication IO failures from an uncertain durable commit.
 type Error is Data:
   AlreadyExists{}
+  UnsupportedPlatform{}
   ResourceLimit{}
   Io{code: U32, message: String}
   CommitUnknown{code: U32, message: String}

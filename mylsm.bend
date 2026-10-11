@@ -844,6 +844,7 @@ def Bytes.snapshot.close(snapshot: Bytes.Snapshot) -> IO(Result<&1, &1, Bytes.Er
 
 def Bytes.backup.error(error: BackupCodec.Error) -> Bytes.Error:
   match error:
+    case BackupCodec.UnsupportedPlatform{}: UnsupportedPlatform{}
     case BackupCodec.InvalidOrder{}: InvalidArgument{}
     case BackupCodec.ResourceLimit{}: ResourceLimit{}
     case BackupCodec.CodecFailure{}: Corruption{"backup encoder rejected the snapshot"}
@@ -897,6 +898,7 @@ def Bytes.backup_next(stream: Bytes.BackupStream) -> Result<&1, &1, Bytes.Error,
 def Bytes.backup_to.error(error: BackupIo.Error) -> Bytes.Error:
   match error:
     case BackupIo.AlreadyExists{}: AlreadyExists{}
+    case BackupIo.UnsupportedPlatform{}: UnsupportedPlatform{}
     case BackupIo.ResourceLimit{}: ResourceLimit{}
     case BackupIo.Io{code, message}: Io{code, message}
     case BackupIo.CommitUnknown{code, message}: CommitUnknown{code, message}

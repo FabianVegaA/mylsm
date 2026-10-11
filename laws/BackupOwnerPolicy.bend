@@ -10,8 +10,13 @@ law owner_connect_host_error_is_preserved:
 # Maps unsupported owner sockets to a stable transport failure category.
 law owner_unsupported_socket_is_not_a_resource_limit:
   {Policy.source.error(Policy.ReadUnsupported{}) ==
-    Backup.SourceFailure{95, "owner snapshot cursor transport is unsupported"} :
+    Backup.UnsupportedPlatform{} :
     Backup.Error}
+
+# Preserves the platform capability boundary as a typed backup failure.
+law owner_unsupported_platform_remains_typed:
+  {Policy.source.error(Policy.UnsupportedPlatform{}) ==
+    Backup.UnsupportedPlatform{} : Backup.Error}
 
 # Preserves stale-generation classification in the exported backup result.
 law stale_owner_cursor_is_reported_as_stale:

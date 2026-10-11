@@ -20,6 +20,8 @@ def path.clone(path: String) -> String:
 
 def error.host(error: Backup.Error) -> U32 & String:
   match error:
+    case Backup.UnsupportedPlatform{}:
+      (95, "backup source transport is unsupported")
     case Backup.SourceFailure{code, message}: (code, message)
     case Backup.ResourceLimit{}: (7, "backup cursor exceeded its bounded policy")
     case Backup.InvalidOrder{}: (22, "backup cursor rejected noncanonical order")
@@ -30,7 +32,9 @@ def error.io.copied(pair: U32 & String) -> BackupIo.Error:
     case (code, message): BackupIo.Io{code, message}
 
 def error.io(error: Backup.Error) -> BackupIo.Error:
-  error.io.copied(error.host(error))
+  match error:
+    case Backup.UnsupportedPlatform{}: BackupIo.UnsupportedPlatform{}
+    case _: error.io.copied(error.host(error))
 
 # Removes the known staging file and directory after failed publication.
 # Removes the known staging file and directory after failed publication.
@@ -99,6 +103,26 @@ def close.resource.stream(
     case BackupCursor.Stream{_, cursor, _, _, _, _, _, _, _}:
       close.resource(file, directory, cursor)
 
+# Closes backup resources and preserves an unsupported source platform error.
+def close.unsupported(
+  file: File,
+  +directory: String,
+  cursor: Maybe<&1, VisibleCursor.Cursor>
+) -> IO(Result<&1, &1, BackupIo.Error, Unit>):
+  match cursor:
+    case Some{reader}:
+      do IO<Result<&1, &1, BackupIo.Error, Unit>>:
+        _closed_cursor : Result<&1, &1, U32 & String, Unit> <-
+          VisibleCursor.close(reader)
+        _closed_file : Unit <- File.close(file)
+        cleanup(directory)
+        return Fail{BackupIo.UnsupportedPlatform{}}
+    case None{}:
+      do IO<Result<&1, &1, BackupIo.Error, Unit>>:
+        _closed_file : Unit <- File.close(file)
+        cleanup(directory)
+        return Fail{BackupIo.UnsupportedPlatform{}}
+
 def close.error.host(
   file: File,
   +directory: String,
@@ -116,6 +140,8 @@ def close.error(
 ) -> IO(Result<&1, &1, BackupIo.Error, Unit>):
   match error:
     case Backup.ResourceLimit{}: close.resource(file, directory, cursor)
+    case Backup.UnsupportedPlatform{}:
+      close.unsupported(file, directory, cursor)
     case _: close.error.host(file, directory, cursor, error.host(error))
 
 def close.cursor(cursor: Maybe<&1, VisibleCursor.Cursor>) -> IO(Unit):

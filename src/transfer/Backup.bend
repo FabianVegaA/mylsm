@@ -8,6 +8,7 @@ import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # Reports invalid ordering, configured block limits, and encoding failures.
 type Error is Data:
+  UnsupportedPlatform{}
   InvalidOrder{}
   ResourceLimit{}
   CodecFailure{}

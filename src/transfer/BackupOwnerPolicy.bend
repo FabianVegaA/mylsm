@@ -16,6 +16,7 @@ type OwnerError is Data:
   MalformedResponse{}
   RequestIdsExhausted{}
   OwnerRejected{}
+  UnsupportedPlatform{}
 
 # Maps every remote cursor failure into the backup source error domain.
 def source.error(error: OwnerError) -> Backup.Error:
@@ -23,11 +24,11 @@ def source.error(error: OwnerError) -> Backup.Error:
     case ConnectHost{code, message}:
       Backup.SourceFailure{code, message}
     case ConnectUnsupported{}:
-      Backup.SourceFailure{95, "owner snapshot cursor transport is unsupported"}
+      Backup.UnsupportedPlatform{}
     case ReadHost{code, message}:
       Backup.SourceFailure{code, message}
     case ReadUnsupported{}:
-      Backup.SourceFailure{95, "owner snapshot cursor transport is unsupported"}
+      Backup.UnsupportedPlatform{}
     case ReadFailure{}:
       Backup.SourceFailure{5, "owner snapshot cursor read failed"}
     case CommitHost{code, message}:
@@ -46,3 +47,4 @@ def source.error(error: OwnerError) -> Backup.Error:
       Backup.SourceFailure{75, "owner cursor request ids exhausted"}
     case OwnerRejected{}:
       Backup.SourceFailure{5, "owner rejected snapshot cursor read"}
+    case UnsupportedPlatform{}: Backup.UnsupportedPlatform{}
