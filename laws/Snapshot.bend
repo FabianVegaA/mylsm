@@ -238,3 +238,31 @@ law exhausted_resource_identifier_is_rejected:
     4294967295, True{}}) == Snapshot.ResourceIdExhausted{
       Snapshot.ResourceIdAllocator{4294967295, True{}}} :
     Snapshot.ResourceIdDecision}
+
+# Admits a snapshot with one owner-issued ID and an aggregate byte reservation.
+law owner_snapshot_admission_records_resource:
+  {Snapshot.owner.snapshot.open(Snapshot.OwnerRegistry{
+    Snapshot.ResourceIdAllocator{1, False{}}, Snapshot.Registry{0n, 0n},
+    Nil{}}, 3n, 64n, (2n, 128n)) == Snapshot.OwnerSnapshotOpened{
+      Snapshot.OwnerRegistry{Snapshot.ResourceIdAllocator{2, False{}},
+        Snapshot.Registry{1n, 64n},
+        [Snapshot.SnapshotResource{1, 3n, 64n, 0n}]}, 1} :
+    Snapshot.OwnerOpenDecision}
+
+# Rejects an over-budget snapshot while preserving IDs, counters, and resources.
+law owner_snapshot_rejection_preserves_registry:
+  {Snapshot.owner.snapshot.open(Snapshot.OwnerRegistry{
+    Snapshot.ResourceIdAllocator{4, False{}}, Snapshot.Registry{1n, 80n},
+    [Snapshot.SnapshotResource{3, 2n, 80n, 0n}]}, 5n, 64n, (4n, 128n)) ==
+    Snapshot.OwnerSnapshotRejected{Snapshot.OwnerRegistry{
+      Snapshot.ResourceIdAllocator{4, False{}}, Snapshot.Registry{1n, 80n},
+      [Snapshot.SnapshotResource{3, 2n, 80n, 0n}]}} :
+    Snapshot.OwnerOpenDecision}
+
+# Rejects exhausted owner IDs without charging an otherwise admissible snapshot.
+law owner_snapshot_id_exhaustion_preserves_registry:
+  {Snapshot.owner.snapshot.open(Snapshot.OwnerRegistry{
+    Snapshot.ResourceIdAllocator{4294967295, True{}}, Snapshot.Registry{0n, 0n},
+    Nil{}}, 5n, 64n, (4n, 128n)) == Snapshot.OwnerSnapshotRejected{
+      Snapshot.OwnerRegistry{Snapshot.ResourceIdAllocator{4294967295, True{}},
+        Snapshot.Registry{0n, 0n}, Nil{}}} : Snapshot.OwnerOpenDecision}

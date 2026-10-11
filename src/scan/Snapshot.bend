@@ -92,6 +92,21 @@ type ResourceIdDecision is Data:
   ResourceIdAllocated{id: U32, allocator: ResourceIdAllocator}
   ResourceIdExhausted{allocator: ResourceIdAllocator}
 
+# Associates each owner-managed snapshot identifier with its generation and children.
+type SnapshotResource is Data:
+  SnapshotResource{id: U32, generation: Nat, retained_bytes: Nat,
+    cursor_count: Nat}
+
+# Holds aggregate snapshot reservations and their owner-issued identifiers.
+type OwnerRegistry is Data:
+  OwnerRegistry{allocator: ResourceIdAllocator, reservations: Registry,
+    snapshots: List<&2, SnapshotResource>}
+
+# Reports an admitted owner snapshot or the exact registry after rejection.
+type OwnerOpenDecision is Data:
+  OwnerSnapshotOpened{registry: OwnerRegistry, snapshot_id: U32}
+  OwnerSnapshotRejected{registry: OwnerRegistry}
+
 def nat.duplicate.step(pair: Nat & Nat) -> Nat & Nat:
   match pair:
     case (left, right): (Nat.add(1n, left), Nat.add(1n, right))
@@ -326,6 +341,111 @@ def registry.release(registry: Registry, released_bytes: Nat) -> RegistryRelease
     case Registry{snapshot_count, retained_bytes}:
       registry.release.count(nat.duplicate(snapshot_count), retained_bytes,
         released_bytes)
+
+def owner.snapshot.open.release(
+  allocator: ResourceIdAllocator,
+  snapshots: List<&2, SnapshotResource>,
+  decision: RegistryReleaseDecision
+) -> OwnerOpenDecision:
+  match decision:
+    case Released{reservations}:
+      OwnerSnapshotRejected{OwnerRegistry{allocator, reservations, snapshots}}
+    case InvalidRelease{reservations}:
+      OwnerSnapshotRejected{OwnerRegistry{allocator, reservations, snapshots}}
+
+def owner.snapshot.open.created(
+  ids: U32 & U32,
+  allocator: ResourceIdAllocator,
+  reservations: Registry,
+  snapshots: List<&2, SnapshotResource>,
+  generation: Nat,
+  retained_bytes: Nat
+) -> OwnerOpenDecision:
+  match ids:
+    case (snapshot_id, entry_id):
+      OwnerSnapshotOpened{OwnerRegistry{allocator, reservations,
+        Con{SnapshotResource{entry_id, generation, retained_bytes, 0n}, snapshots}},
+        snapshot_id}
+
+def owner.snapshot.open.id(
+  allocation: ResourceIdDecision,
+  reservations: Registry,
+  snapshots: List<&2, SnapshotResource>,
+  generation: Nat,
+  retained_bytes: Nat
+) -> OwnerOpenDecision:
+  match allocation:
+    case ResourceIdAllocated{id, allocator}:
+      owner.snapshot.open.created(u32.duplicate(id), allocator, reservations,
+        snapshots, generation, retained_bytes)
+    case ResourceIdExhausted{allocator}:
+      owner.snapshot.open.release(allocator, snapshots,
+        registry.release(reservations, retained_bytes))
+
+def owner.snapshot.open.reserved(
+  allocator: ResourceIdAllocator,
+  snapshots: List<&2, SnapshotResource>,
+  generation: Nat,
+  requests: Nat & Nat,
+  decision: RegistryDecision
+) -> OwnerOpenDecision:
+  match requests:
+    case (retained_bytes, release_bytes):
+      match decision:
+        case Admitted{reservations}:
+          owner.snapshot.open.id(allocate_resource_id(allocator), reservations,
+            snapshots, generation, release_bytes)
+        case Rejected{reservations}:
+          OwnerSnapshotRejected{OwnerRegistry{allocator, reservations, snapshots}}
+
+def owner.snapshot.open.budget(
+  allocator: ResourceIdAllocator,
+  snapshots: List<&2, SnapshotResource>,
+  generation: Nat,
+  requested_bytes: Nat & Nat,
+  release_bytes: Nat,
+  limits: Nat & Nat,
+  reservations: Registry
+) -> OwnerOpenDecision:
+  match requested_bytes:
+    case (retained_for_entry, retained_for_admission):
+      match limits:
+        case (max_snapshots, max_retained_bytes):
+          owner.snapshot.open.reserved(allocator, snapshots, generation,
+            (retained_for_entry, release_bytes),
+            registry.reserve(reservations, retained_for_admission,
+              max_snapshots, max_retained_bytes))
+
+def owner.snapshot.open.available(
+  allocator: ResourceIdAllocator,
+  reservations: Registry,
+  snapshots: List<&2, SnapshotResource>,
+  generation: Nat,
+  requests: Nat & Nat,
+  limits: Nat & Nat
+) -> OwnerOpenDecision:
+  match allocator:
+    case ResourceIdAllocator{next_id, exhausted}:
+      match exhausted:
+        case True{}:
+          OwnerSnapshotRejected{OwnerRegistry{allocator, reservations, snapshots}}
+        case False{}:
+          match requests:
+            case (requested_bytes, release_bytes):
+              owner.snapshot.open.budget(allocator, snapshots, generation,
+                nat.duplicate(requested_bytes), release_bytes, limits,
+                reservations)
+
+def owner.snapshot.open(
+  owner: OwnerRegistry,
+  generation: Nat,
+  requested_bytes: Nat,
+  limits: Nat & Nat
+) -> OwnerOpenDecision:
+  match owner:
+    case OwnerRegistry{allocator, reservations, snapshots}:
+      owner.snapshot.open.available(allocator, reservations, snapshots,
+        generation, nat.duplicate(requested_bytes), limits)
 
 # Maps a valid registry release to successful snapshot closure.
 def snapshot.close.registry(decision: RegistryReleaseDecision) -> SnapshotCloseDecision:

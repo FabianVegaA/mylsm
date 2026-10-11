@@ -133,3 +133,12 @@ def Laws.maximum_resource_identifier_does_not_wrap():
 
 def Laws.exhausted_resource_identifier_is_rejected():
   {==}
+
+def Laws.owner_snapshot_admission_records_resource():
+  {==}
+
+def Laws.owner_snapshot_rejection_preserves_registry():
+  {==}
+
+def Laws.owner_snapshot_id_exhaustion_preserves_registry():
+  {==}
