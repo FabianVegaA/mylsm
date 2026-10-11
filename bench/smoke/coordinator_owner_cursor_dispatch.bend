@@ -1,7 +1,9 @@
 import Base
 import ../../src/ByteDurableDb.bend as ByteDb
+import ../../src/ByteWal.bend as ByteWal
 import ../../src/Console.bend as Console
 import ../../src/coordinator/CursorCodec.bend as CursorCodec
+import ../../src/coordinator/CursorOpenCodec.bend as CursorOpenCodec
 import ../../src/coordinator/Owner.bend as Owner
 import ../../src/coordinator/OwnerCursorStore.bend as CursorStore
 import ../../src/coordinator/OwnerSnapshotStore.bend as SnapshotStore
@@ -101,6 +103,49 @@ def cursor.close.request(
   cursor.close.request.ids(handle, snapshots, cursors,
     Protocol.u32.duplicate.triple(snapshot_id), cursor_id)
 
+# Validates prefix filtering before explicitly closing the live cursor.
+def cursor.close.read.checked(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  cursors: CursorStore.Store,
+  snapshot_id: U32,
+  cursor_id: U32,
+  matches: Bool
+) -> IO(Unit):
+  match matches:
+    case True{}:
+      cursor.close.request(handle, snapshots, cursors, snapshot_id, cursor_id)
+    case False{}: fail.close(handle, "prefix cursor returned unexpected bytes")
+
+# Checks the first item returned by the prefix cursor.
+def cursor.close.read.result(
+  result: Owner.DispatchResult,
+  snapshot_id: U32,
+  cursor_id: U32
+) -> IO(Unit):
+  match result:
+    case Owner.DispatchResult{handle, snapshots, cursors,
+        Protocol.Response{_, _, _, Protocol.Success{}, payload}}:
+      cursor.close.read.checked(handle, snapshots, cursors, snapshot_id,
+        cursor_id, bytes.equal(Bytes.eq(payload, CursorCodec.encode(
+          CursorCodec.CursorItem{bytes("00fd"), bytes("aa")}))))
+    case Owner.DispatchResult{handle, _, _, _}:
+      fail.close(handle, "prefix cursor read failed")
+
+# Reads one prefix item while retaining the cursor token for early close.
+def cursor.close.read(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  cursors: CursorStore.Store,
+  snapshot_id: U32,
+  +cursor_id: U32
+) -> IO(Unit):
+  do IO<Unit>:
+    result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
+      snapshots, cursors, Protocol.Request{1, 1, 8, 13,
+        Protocol.snapshot.id.bytes(cursor_id)}, 1)
+    cursor.close.read.result(result, snapshot_id, cursor_id)
+
 # Parses the cursor token returned by the second cursor-open request.
 def cursor.close.token(
   handle: ByteDb.Handle,
@@ -111,7 +156,7 @@ def cursor.close.token(
 ) -> IO(Unit):
   match parsed:
     case Some{cursor_id}:
-      cursor.close.request(handle, snapshots, cursors, snapshot_id, cursor_id)
+      cursor.close.read(handle, snapshots, cursors, snapshot_id, cursor_id)
     case None{}: fail.close(handle, "explicit-close cursor token was malformed")
 
 # Continues after a second block-backed cursor has been opened.
@@ -127,7 +172,7 @@ def cursor.close.opened(
     case Owner.DispatchResult{handle, _, _, _}:
       fail.close(handle, "owner rejected second cursor open")
 
-# Opens a second cursor so the smoke covers explicit early closure.
+# Opens a prefix cursor so the smoke covers explicit early closure.
 def cursor.close.open.ids(
   handle: ByteDb.Handle,
   snapshots: SnapshotStore.Store,
@@ -139,7 +184,7 @@ def cursor.close.open.ids(
       do IO<Unit>:
         result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
           snapshots, cursors, Protocol.Request{1, 1, 6, 12,
-            Protocol.snapshot.id.bytes(wire_id)}, 1)
+            CursorOpenCodec.encode.prefix(wire_id, bytes("00"))}, 1)
         cursor.close.opened(result, snapshot_id)
 
 # Opens an extra cursor after the first cursor's terminal End frame.
@@ -280,7 +325,7 @@ def cursor.open.result(
     case Owner.DispatchResult{handle, _, _, _}:
       fail.close(handle, "owner snapshot cursor open failed")
 
-# Opens a full-range cursor over the retained owner snapshot.
+# Opens a lower-bounded range cursor over the retained owner snapshot.
 def cursor.open.ids(
   handle: ByteDb.Handle,
   snapshots: SnapshotStore.Store,
@@ -292,7 +337,8 @@ def cursor.open.ids(
       do IO<Unit>:
         result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
           snapshots, cursors, Protocol.Request{1, 1, 3, 12,
-            Protocol.snapshot.id.bytes(wire_id)}, 1)
+            CursorOpenCodec.encode.range(wire_id,
+              Some{bytes("00fe")}, Some{bytes("01")})}, 1)
         cursor.open.result(result, snapshot_id)
 
 def snapshot.open.token(
@@ -325,10 +371,20 @@ def snapshot.open(handle: ByteDb.Handle) -> IO(Unit):
       Protocol.Request{1, 1, 2, 9, Bytes.new(0)}, 1)
     snapshot.open.result(result)
 
-# Persists one binary key/value pair before exercising remote snapshot scans.
-def written(pair: ByteDb.Handle & Result<&1, &1, ByteDb.Error, Unit>) -> IO(Unit):
+# Starts snapshot dispatch after the fixture entries reach an SST.
+def flushed(pair: ByteDb.Handle & Result<&1, &1, ByteDb.Error, Unit>) -> IO(Unit):
   match pair:
     case (handle, Done{Unit{}}): snapshot.open(handle)
+    case (handle, Fail{_}): fail.close(handle, "cursor fixture flush failed")
+
+# Persists the binary fixture before exercising snapshot scans over its SST.
+def written(pair: ByteDb.Handle & Result<&1, &1, ByteDb.Error, Unit>) -> IO(Unit):
+  match pair:
+    case (handle, Done{Unit{}}):
+      do IO<Unit>:
+        result : ByteDb.Handle & Result<&1, &1, ByteDb.Error, Unit> <-
+          ByteDb.flush(handle)
+        flushed(result)
     case (handle, Fail{_}): fail.close(handle, "cursor fixture put failed")
 
 # Seeds the fixture database before dispatching snapshot and cursor operations.
@@ -337,7 +393,10 @@ def created(result: Result<&1, &1, ByteDb.Error, ByteDb.Handle>) -> IO(Unit):
     case Done{handle}:
       do IO<Unit>:
         pair : ByteDb.Handle & Result<&1, &1, ByteDb.Error, Unit> <-
-          ByteDb.put(handle, bytes("00ff"), bytes("80ff00"))
+          ByteDb.write_batch(handle, [
+            ByteWal.Put{bytes("00fd"), bytes("aa")},
+            ByteWal.Put{bytes("00ff"), bytes("80ff00")},
+            ByteWal.Put{bytes("01"), bytes("bb")}])
         written(pair)
     case Fail{_}: IO.die(Unit, 1, "cursor fixture database creation failed")
 

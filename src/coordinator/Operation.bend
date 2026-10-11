@@ -3,6 +3,8 @@ import ../ByteMemTable.bend as ByteMemTable
 import ../ByteWal.bend as ByteWal
 import ../Wal.bend as Wal
 import ./Protocol.bend as Protocol
+import ./CursorOpenCodec.bend as CursorOpenCodec
+import ../scan/RangeCursor.bend as RangeCursor
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # Represents a decoded byte-oriented owner database operation.
@@ -17,7 +19,7 @@ type Operation is Type:
   SnapshotOpen{}
   SnapshotGet{snapshot_id: U32, key: Bytes.Bytes}
   SnapshotClose{snapshot_id: U32}
-  SnapshotCursorOpen{snapshot_id: U32}
+  SnapshotCursorOpen{snapshot_id: U32, bounds: RangeCursor.Bounds}
   SnapshotCursorNext{cursor_id: U32}
   SnapshotCursorClose{cursor_id: U32}
 
@@ -217,15 +219,18 @@ def snapshot.close.decision(parsed: Maybe<&2, U32>) -> Decision:
 def snapshot.close.decode(payload: Bytes.Bytes) -> Decision:
   snapshot.close.decision(Protocol.snapshot.id.read(payload))
 
-# Decodes a full-range cursor request for one retained snapshot.
-def snapshot.cursor.open.parsed(parsed: Maybe<&2, U32>) -> Decision:
-  match parsed:
-    case Some{snapshot_id}: Decoded{SnapshotCursorOpen{snapshot_id}}
-    case None{}: MalformedArguments{}
+# Converts one pure cursor-open codec decision to an owner operation.
+def snapshot.cursor.open.decision(
+  decision: CursorOpenCodec.Decision
+) -> Decision:
+  match decision:
+    case CursorOpenCodec.Decoded{CursorOpenCodec.Request{snapshot_id, bounds}}:
+      Decoded{SnapshotCursorOpen{snapshot_id, bounds}}
+    case CursorOpenCodec.Malformed{}: MalformedArguments{}
 
-# Decodes the exact four-byte snapshot token for cursor opening.
+# Decodes exact range and prefix fields for cursor opening.
 def snapshot.cursor.open.decode(payload: Bytes.Bytes) -> Decision:
-  snapshot.cursor.open.parsed(Protocol.snapshot.id.read(payload))
+  snapshot.cursor.open.decision(CursorOpenCodec.decode(payload))
 
 # Decodes the owner-issued cursor token used for one incremental read.
 def snapshot.cursor.next.parsed(parsed: Maybe<&2, U32>) -> Decision:

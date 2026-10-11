@@ -349,6 +349,7 @@ def snapshot.cursor.open.admitted(
   cursors: CursorStore.Store,
   context: ReplyContext,
   root: ByteDb.SnapshotRoot,
+  bounds: RangeCursor.Bounds,
   decision: SnapshotStore.CursorOpenResult
 ) -> IO(DispatchResult):
   match decision:
@@ -358,8 +359,7 @@ def snapshot.cursor.open.admitted(
     case SnapshotStore.CursorStored{store, cursor_id}:
       do IO<DispatchResult>:
         opened : Result<&1, &1, ByteDb.Error, VisibleCursor.Cursor> <-
-          ByteDb.snapshot.root.cursor.open(root,
-            RangeCursor.Bounds{None{}, None{}, None{}})
+          ByteDb.snapshot.root.cursor.open(root, bounds)
         dispatched : DispatchResult <-
           snapshot.cursor.opened(handle, store, cursors, context, cursor_id,
             opened)
@@ -370,11 +370,12 @@ def snapshot.cursor.open.lookup(
   cursors: CursorStore.Store,
   context: ReplyContext,
   snapshot_id: U32,
+  bounds: RangeCursor.Bounds,
   lookup: SnapshotStore.LookupResult
 ) -> IO(DispatchResult):
   match lookup:
     case SnapshotStore.RootFound{store, root}:
-      snapshot.cursor.open.admitted(handle, cursors, context, root,
+      snapshot.cursor.open.admitted(handle, cursors, context, root, bounds,
         SnapshotStore.cursor.open(store, snapshot_id, 64n))
     case SnapshotStore.RootMissing{store}:
       IO.pure(DispatchResult, DispatchResult{handle, store, cursors,
@@ -385,11 +386,12 @@ def snapshot.cursor.open.ids(
   snapshots: SnapshotStore.Store,
   cursors: CursorStore.Store,
   context: ReplyContext,
+  bounds: RangeCursor.Bounds,
   ids: U32 & U32 & U32
 ) -> IO(DispatchResult):
   match ids:
     case (lookup_id, (retained_id, _)):
-      snapshot.cursor.open.lookup(handle, cursors, context, retained_id,
+      snapshot.cursor.open.lookup(handle, cursors, context, retained_id, bounds,
         SnapshotStore.lookup.root(snapshots, lookup_id))
 
 def snapshot.cursor.open(
@@ -397,9 +399,10 @@ def snapshot.cursor.open(
   snapshots: SnapshotStore.Store,
   cursors: CursorStore.Store,
   context: ReplyContext,
-  snapshot_id: U32
+  snapshot_id: U32,
+  bounds: RangeCursor.Bounds
 ) -> IO(DispatchResult):
-  snapshot.cursor.open.ids(handle, snapshots, cursors, context,
+  snapshot.cursor.open.ids(handle, snapshots, cursors, context, bounds,
     Protocol.u32.duplicate.triple(snapshot_id))
 
 def snapshot.cursor.next.response(
@@ -696,7 +699,7 @@ def dispatch.operation(
     case Operation.SnapshotClose{_}:
       IO.pure(ByteDb.Handle & Protocol.Response,
         (handle, reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))))
-    case Operation.SnapshotCursorOpen{_}:
+    case Operation.SnapshotCursorOpen{_, _}:
       IO.pure(ByteDb.Handle & Protocol.Response,
         (handle, reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))))
     case Operation.SnapshotCursorNext{_}:
@@ -720,8 +723,9 @@ def dispatch.decoded.state(
       snapshot.get(handle, snapshots, cursors, context, snapshot_id, key)
     case Operation.Decoded{Operation.SnapshotClose{snapshot_id}}:
       snapshot.close(handle, snapshots, cursors, context, snapshot_id)
-    case Operation.Decoded{Operation.SnapshotCursorOpen{snapshot_id}}:
-      snapshot.cursor.open(handle, snapshots, cursors, context, snapshot_id)
+    case Operation.Decoded{Operation.SnapshotCursorOpen{snapshot_id, bounds}}:
+      snapshot.cursor.open(handle, snapshots, cursors, context, snapshot_id,
+        bounds)
     case Operation.Decoded{Operation.SnapshotCursorNext{cursor_id}}:
       snapshot.cursor.next(handle, snapshots, cursors, context, cursor_id)
     case Operation.Decoded{Operation.SnapshotCursorClose{cursor_id}}:

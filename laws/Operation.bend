@@ -1,5 +1,7 @@
 import Base
 import ../src/coordinator/Operation.bend as Operation
+import ../src/coordinator/CursorOpenCodec.bend as CursorOpenCodec
+import ../src/scan/RangeCursor.bend as RangeCursor
 import ../src/ByteWal.bend as ByteWal
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
@@ -121,8 +123,10 @@ law snapshot_close_rejects_short_token:
 
 # Decodes cursor opening against an exact owner snapshot token.
 law snapshot_cursor_open_decodes_token:
-  {Operation.decode.payload(12, Operation.u32.bytes(7)) ==
-    Operation.Decoded{Operation.SnapshotCursorOpen{7}} : Operation.Decision}
+  {Operation.decode.payload(12,
+    CursorOpenCodec.encode.range(7, None{}, None{})) ==
+    Operation.Decoded{Operation.SnapshotCursorOpen{7,
+      RangeCursor.Bounds{None{}, None{}, None{}}}} : Operation.Decision}
 
 # Decodes one incremental read against an exact cursor token.
 law snapshot_cursor_next_decodes_token:

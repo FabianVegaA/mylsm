@@ -4,6 +4,7 @@ import ./ClientPolicy.bend as Policy
 import ./Protocol.bend as Protocol
 import ./CursorCodec.bend as CursorCodec
 import ./OwnerCursorCodec.bend as OwnerCursorCodec
+import ./CursorOpenCodec.bend as CursorOpenCodec
 import ./StatsCodec.bend as StatsCodec
 import ../ByteWal.bend as ByteWal
 import ../Wal.bend as Wal
@@ -292,15 +293,40 @@ def snapshot.cursor.open.result(
   match pair:
     case (session, result): (session, snapshot.cursor.open.response(result))
 
-# Opens a full-range cursor over an owner-retained snapshot.
+def snapshot.cursor.open.request(
+  session: Client.Session,
+  payload: Bytes.Bytes
+) -> IO(Client.Session & Result<&1, &1, Client.Error, U32>):
+  do IO<Client.Session & Result<&1, &1, Client.Error, U32>>:
+    pair : Client.Session & Result<&1, &1, Client.Error, Protocol.Response> <-
+      Client.session.call(session, 12, payload)
+    return snapshot.cursor.open.result(pair)
+
+# Opens an owner cursor over one half-open byte range.
+def snapshot.cursor.open.range(
+  session: Client.Session,
+  snapshot_id: U32,
+  lower: Maybe<&1, Bytes.Bytes>,
+  upper: Maybe<&1, Bytes.Bytes>
+) -> IO(Client.Session & Result<&1, &1, Client.Error, U32>):
+  snapshot.cursor.open.request(session,
+    CursorOpenCodec.encode.range(snapshot_id, lower, upper))
+
+# Opens an owner cursor over one exact raw-byte prefix.
+def snapshot.cursor.open.prefix(
+  session: Client.Session,
+  snapshot_id: U32,
+  prefix: Bytes.Bytes
+) -> IO(Client.Session & Result<&1, &1, Client.Error, U32>):
+  snapshot.cursor.open.request(session,
+    CursorOpenCodec.encode.prefix(snapshot_id, prefix))
+
+# Opens a full-range owner cursor over a retained snapshot.
 def snapshot.cursor.open(
   session: Client.Session,
   snapshot_id: U32
 ) -> IO(Client.Session & Result<&1, &1, Client.Error, U32>):
-  do IO<Client.Session & Result<&1, &1, Client.Error, U32>>:
-    pair : Client.Session & Result<&1, &1, Client.Error, Protocol.Response> <-
-      Client.session.call(session, 12, Protocol.snapshot.id.bytes(snapshot_id))
-    return snapshot.cursor.open.result(pair)
+  snapshot.cursor.open.range(session, snapshot_id, None{}, None{})
 
 # Maps one pure next-response decision into a client result.
 def snapshot.cursor.next.decision(
