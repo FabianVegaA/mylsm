@@ -18,7 +18,7 @@ been run.
 
 | Gate | Command | Result |
 | --- | --- | --- |
-| Formal laws and witnesses | `bash proofs/run.sh` | `PASS=80 FAIL=0 TIMEOUT=0 TOTAL=80` |
+| Formal laws and witnesses | `bash proofs/run.sh` | `PASS=81 FAIL=0 TIMEOUT=0 TOTAL=81` |
 | Bolt lint | `../bolt/bin/bolt.bin 2>&1 | grep -v ' S002: ' | grep -E 'error:|warning:'` | No findings printed; `grep` returns 1 when the result is empty |
 | Source width | Repository command from `AGENT.md` | No lines over 200 columns |
 | Patch whitespace | `git diff --check` | Pass |
@@ -49,6 +49,8 @@ not asymptotic memory behavior by themselves.
   configured buffer/queue peaks.
 - Storage-generation pin/unpin and deferred SST reclamation; old generations
   remain on disk after the last snapshot closes.
+- End-to-end verification of the pure generation-reclamation decision against
+  compaction and the owner snapshot lifecycle.
 - True filesystem-full migration behavior; current file-size-limit tests are
   not equivalent to ENOSPC.
 

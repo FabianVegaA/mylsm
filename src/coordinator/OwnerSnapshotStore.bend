@@ -1,6 +1,7 @@
 import Base
 import ../ByteDurableDb.bend as ByteDb
 import ../scan/Snapshot.bend as Snapshot
+import ./GenerationRetentionPolicy.bend as GenerationRetention
 
 # Keeps logical owner accounting and retained roots in one persistent value.
 type Store is Type:
@@ -84,6 +85,30 @@ type RootFindState is Type:
 def empty() -> Store:
   Store{Snapshot.OwnerRegistry{Snapshot.ResourceIdAllocator{1, False{}},
     Snapshot.Registry{0n, 0n}, Nil{}, Nil{}}, Nil{}, Nil{}}
+
+def generation.references(
+  roots: List<&1, ByteDb.SnapshotRoot>,
+  references: List<&2, U32>
+) -> List<&2, U32>:
+  match roots:
+    case Nil{}: references
+    case Con{root, tail}:
+      match root:
+        case ByteDb.SnapshotRoot{_, sst_generation, _, _}:
+          match sst_generation:
+            case None{}: generation.references(tail, references)
+            case Some{value}:
+              generation.references(tail, Con{value, references})
+
+def generation.can.reclaim(
+  store: Store,
+  candidate: U32,
+  published: Maybe<&1, U32>
+) -> Bool:
+  match store:
+    case Store{_, _, roots}:
+      GenerationRetention.can_reclaim(candidate, published,
+        generation.references(roots, Nil{}))
 
 def open.root.allocated(
   registry: Snapshot.OwnerRegistry,
