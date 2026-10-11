@@ -338,6 +338,9 @@ def operation.valid(code: U32) -> Bool:
     case 9: True{}
     case 10: True{}
     case 11: True{}
+    case 12: True{}
+    case 13: True{}
+    case 14: True{}
     case _: False{}
 
 def operation.request.valid(code: U32) -> Bool:
@@ -352,6 +355,9 @@ def operation.request.valid(code: U32) -> Bool:
     case 9: True{}
     case 10: True{}
     case 11: True{}
+    case 12: True{}
+    case 13: True{}
+    case 14: True{}
     case _: False{}
 
 def decode.words.operation.validated(

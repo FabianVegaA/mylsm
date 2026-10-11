@@ -51,3 +51,15 @@ def Laws.snapshot_close_decodes_exact_token():
 
 def Laws.snapshot_close_rejects_short_token():
   {==}
+
+def Laws.snapshot_cursor_open_decodes_token():
+  {==}
+
+def Laws.snapshot_cursor_next_decodes_token():
+  {==}
+
+def Laws.snapshot_cursor_close_decodes_token():
+  {==}
+
+def Laws.snapshot_cursor_operations_reject_short_tokens():
+  {==}

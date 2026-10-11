@@ -318,6 +318,15 @@ def dispatch.operation(
     case Operation.SnapshotClose{_}:
       IO.pure(ByteDb.Handle & Protocol.Response,
         (handle, reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))))
+    case Operation.SnapshotCursorOpen{_}:
+      IO.pure(ByteDb.Handle & Protocol.Response,
+        (handle, reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))))
+    case Operation.SnapshotCursorNext{_}:
+      IO.pure(ByteDb.Handle & Protocol.Response,
+        (handle, reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))))
+    case Operation.SnapshotCursorClose{_}:
+      IO.pure(ByteDb.Handle & Protocol.Response,
+        (handle, reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))))
 
 def dispatch.decoded.state(
   handle: ByteDb.Handle,

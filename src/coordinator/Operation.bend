@@ -17,6 +17,9 @@ type Operation is Type:
   SnapshotOpen{}
   SnapshotGet{snapshot_id: U32, key: Bytes.Bytes}
   SnapshotClose{snapshot_id: U32}
+  SnapshotCursorOpen{snapshot_id: U32}
+  SnapshotCursorNext{cursor_id: U32}
+  SnapshotCursorClose{cursor_id: U32}
 
 # Reports decoded arguments or a malformed/unsupported operation.
 type Decision is Type:
@@ -214,6 +217,36 @@ def snapshot.close.decision(parsed: Maybe<&2, U32>) -> Decision:
 def snapshot.close.decode(payload: Bytes.Bytes) -> Decision:
   snapshot.close.decision(Protocol.snapshot.id.read(payload))
 
+# Decodes a full-range cursor request for one retained snapshot.
+def snapshot.cursor.open.parsed(parsed: Maybe<&2, U32>) -> Decision:
+  match parsed:
+    case Some{snapshot_id}: Decoded{SnapshotCursorOpen{snapshot_id}}
+    case None{}: MalformedArguments{}
+
+# Decodes the exact four-byte snapshot token for cursor opening.
+def snapshot.cursor.open.decode(payload: Bytes.Bytes) -> Decision:
+  snapshot.cursor.open.parsed(Protocol.snapshot.id.read(payload))
+
+# Decodes the owner-issued cursor token used for one incremental read.
+def snapshot.cursor.next.parsed(parsed: Maybe<&2, U32>) -> Decision:
+  match parsed:
+    case Some{cursor_id}: Decoded{SnapshotCursorNext{cursor_id}}
+    case None{}: MalformedArguments{}
+
+# Decodes the exact four-byte cursor token for one incremental read.
+def snapshot.cursor.next.decode(payload: Bytes.Bytes) -> Decision:
+  snapshot.cursor.next.parsed(Protocol.snapshot.id.read(payload))
+
+# Decodes the owner-issued cursor token used for explicit closure.
+def snapshot.cursor.close.parsed(parsed: Maybe<&2, U32>) -> Decision:
+  match parsed:
+    case Some{cursor_id}: Decoded{SnapshotCursorClose{cursor_id}}
+    case None{}: MalformedArguments{}
+
+# Decodes the exact four-byte cursor token for explicit closure.
+def snapshot.cursor.close.decode(payload: Bytes.Bytes) -> Decision:
+  snapshot.cursor.close.parsed(Protocol.snapshot.id.read(payload))
+
 def decode.payload(
   operation_code: U32,
   payload: Bytes.Bytes
@@ -229,6 +262,9 @@ def decode.payload(
     case 9: empty.operation(Bytes.length(payload), SnapshotOpen{})
     case 10: snapshot.get.decode(payload)
     case 11: snapshot.close.decode(payload)
+    case 12: snapshot.cursor.open.decode(payload)
+    case 13: snapshot.cursor.next.decode(payload)
+    case 14: snapshot.cursor.close.decode(payload)
     case _: UnsupportedOperation{}
 
 # Decodes the tagged operation payload without interpreting keys as text.

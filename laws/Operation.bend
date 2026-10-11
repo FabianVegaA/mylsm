@@ -118,3 +118,40 @@ law snapshot_close_decodes_exact_token:
 law snapshot_close_rejects_short_token:
   {Operation.decode.payload(11, Bytes.new(3)) ==
     Operation.MalformedArguments{} : Operation.Decision}
+
+# Decodes cursor opening against an exact owner snapshot token.
+law snapshot_cursor_open_decodes_token:
+  {Operation.decode.payload(12, Operation.u32.bytes(7)) ==
+    Operation.Decoded{Operation.SnapshotCursorOpen{7}} : Operation.Decision}
+
+# Decodes one incremental read against an exact cursor token.
+law snapshot_cursor_next_decodes_token:
+  {Operation.decode.payload(13, Operation.u32.bytes(8)) ==
+    Operation.Decoded{Operation.SnapshotCursorNext{8}} : Operation.Decision}
+
+# Decodes explicit cursor closure against an exact cursor token.
+law snapshot_cursor_close_decodes_token:
+  {Operation.decode.payload(14, Operation.u32.bytes(8)) ==
+    Operation.Decoded{Operation.SnapshotCursorClose{8}} : Operation.Decision}
+
+# Checks that each cursor operation classifies a short token as malformed.
+def cursor.short.tokens.malformed(
+  open_decision: Operation.Decision,
+  next_decision: Operation.Decision,
+  close_decision: Operation.Decision
+) -> Bool:
+  match open_decision:
+    case Operation.MalformedArguments{}:
+      match next_decision:
+        case Operation.MalformedArguments{}:
+          match close_decision:
+            case Operation.MalformedArguments{}: True{}
+            case _: False{}
+        case _: False{}
+    case _: False{}
+
+# Rejects cursor resource operations with a truncated token.
+law snapshot_cursor_operations_reject_short_tokens:
+  {cursor.short.tokens.malformed(Operation.decode.payload(12, Bytes.new(3)),
+    Operation.decode.payload(13, Bytes.new(3)),
+    Operation.decode.payload(14, Bytes.new(3))) == True{} : Bool}
