@@ -48,6 +48,10 @@ type Handle is Type:
   Handle{path: String, lock: DbLock.Lock, table: ByteMemTable.Table,
     state: HandleState, base_stats: VisibleStats.Stats}
 
+# Retains one immutable SST generation and an owned copy of the active delta.
+type SnapshotRoot is Type:
+  SnapshotRoot{sst_path: Maybe<&1, String>, delta: List<&1, ByteMemTable.Entry>}
+
 # Reports canonical byte entry count and payload size.
 type Stats is Data:
   Stats{entries: Nat, payload_bytes: Nat}
@@ -2287,6 +2291,182 @@ def snapshot_limited(
       snapshot.limited.retained(
         Handle{path, lock, ByteMemTable.empty(), state, base_stats},
         ByteMemTable.retained_bytes.keep(table), max_bytes)
+
+def snapshot.root.manifest.result(
+  read_path: String,
+  handle: Handle,
+  delta: List<&1, ByteMemTable.Entry>,
+  result: Result<&1, &1, ByteManifestIo.Error, ByteManifest.ManifestValue>
+) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
+  match result:
+    case Fail{ByteManifestIo.Invalid{_}}:
+      IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
+        (handle, Fail{Corruption{"byte manifest validation failed"}}))
+    case Fail{ByteManifestIo.Host{code, message}}:
+      IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
+        (handle, Fail{Io{code, message}}))
+    case Done{ByteManifest.Empty{}}:
+      IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
+        (handle, Done{SnapshotRoot{None{}, delta}}))
+    case Done{ByteManifest.GenerationEmpty{}}:
+      IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
+        (handle, Done{SnapshotRoot{None{}, delta}}))
+    case Done{ByteManifest.HasSst{}}:
+      IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
+        (handle, Done{SnapshotRoot{Some{read_path ++ "/SST"}, delta}}))
+    case Done{ByteManifest.GenerationSst{file_id}}:
+      IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
+        (handle, Done{SnapshotRoot{Some{
+          ByteManifest.sst.generation.path(read_path, file_id)}, delta}}))
+
+def snapshot.root.manifest(
+  paths: String & String,
+  handle: Handle,
+  delta: List<&1, ByteMemTable.Entry>
+) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
+  match paths:
+    case (manifest_path, read_path):
+      do IO<Handle & Result<&1, &1, Error, SnapshotRoot>>:
+        manifest : Result<&1, &1, ByteManifestIo.Error,
+          ByteManifest.ManifestValue> <-
+            ByteManifestIo.read(manifest_path ++ "/MANIFEST")
+        snapshot.root.manifest.result(read_path, handle, delta, manifest)
+
+def snapshot.root.snapshot.paths(
+  paths: String & String & String,
+  lock: DbLock.Lock,
+  table: ByteMemTable.Table,
+  state: HandleState,
+  base_stats: VisibleStats.Stats,
+  delta: List<&1, ByteMemTable.Entry>
+) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
+  match paths:
+    case (manifest_path, (read_path, retained_path)):
+      snapshot.root.manifest((manifest_path, read_path),
+        Handle{retained_path, lock, table, state, base_stats}, delta)
+
+def snapshot.root.snapshot.delta(
+  handle: Handle,
+  copied: List<&1, ByteMemTable.Entry>,
+  decision: SnapshotPolicy.Decision
+) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
+  match handle:
+    case Handle{path, lock, table, state, base_stats}:
+      match decision:
+        case SnapshotPolicy.ResourceLimit{}:
+          IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
+            (Handle{path, lock, table, state, base_stats}, Fail{ResourceLimit{}}))
+        case SnapshotPolicy.Retained{_, _}:
+          snapshot.root.snapshot.paths(path.clone.triple(path), lock, table,
+            state, base_stats,
+            ByteMemTable.ordered_entries(ByteMemTable.Table{copied}))
+
+def snapshot.root.preflight.estimated(
+  handle: Handle,
+  stats: VisibleStats.Stats,
+  copied: List<&1, ByteMemTable.Entry>,
+  delta_bytes: Nat,
+  max_bytes: Nat
+) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
+  snapshot.root.snapshot.delta(handle, copied,
+    SnapshotPolicy.reserve(0n, 0n,
+      snapshot.estimate(stats, delta_bytes), 1n, max_bytes))
+
+def snapshot.root.preflight.ready(
+  +path: String,
+  lock: DbLock.Lock,
+  state: HandleState,
+  stats: VisibleStats.Stats & VisibleStats.Stats,
+  entries: List<&1, ByteMemTable.Entry> & List<&1, ByteMemTable.Entry>,
+  delta_bytes: Nat,
+  max_bytes: Nat
+) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
+  match stats:
+    case (for_handle, for_estimate):
+      match entries:
+        case (live_entries, copied_entries):
+          snapshot.root.preflight.estimated(
+            Handle{path, lock, ByteMemTable.Table{live_entries}, state,
+              for_handle}, for_estimate, copied_entries, delta_bytes, max_bytes)
+
+def snapshot.root.preflight(
+  handle: Handle,
+  delta_bytes: Nat,
+  max_bytes: Nat
+) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
+  match handle:
+    case Handle{path, lock, table, state, base_stats}:
+      match table:
+        case ByteMemTable.Table{entries}:
+          snapshot.root.preflight.ready(path, lock, state,
+            VisibleStats.clone(base_stats), ByteMemTable.entries.clone(entries),
+            delta_bytes, max_bytes)
+
+def snapshot.root.retained(
+  +path: String,
+  lock: DbLock.Lock,
+  state: HandleState,
+  base_stats: VisibleStats.Stats,
+  retained: ByteMemTable.Table & Nat,
+  max_bytes: Nat
+) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
+  match retained:
+    case (table, delta_bytes):
+      snapshot.root.preflight(Handle{path, lock, table, state, base_stats},
+        delta_bytes, max_bytes)
+
+# Captures the active delta and immutable SST path within the retained-byte limit.
+def snapshot_root_limited(
+  max_bytes: Nat,
+  handle: Handle
+) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
+  match handle:
+    case Handle{path, lock, table, state, base_stats}:
+      snapshot.root.retained(path, lock, state, base_stats,
+        ByteMemTable.retained_bytes.keep(table), max_bytes)
+
+def snapshot.root.sst.bounds(bounds: RangeCursor.Bounds) -> SstCursor.Bounds:
+  match bounds:
+    case RangeCursor.Bounds{lower, upper, prefix}:
+      SstCursor.Bounds{lower, upper, prefix}
+
+def snapshot.root.cursor.opened(
+  delta: List<&1, ByteMemTable.Entry>,
+  bounds: RangeCursor.Bounds,
+  opened: Result<&1, &1, U32 & String, SstCursor.Cursor>
+) -> IO(Result<&1, &1, Error, VisibleCursor.Cursor>):
+  match opened:
+    case Fail{(code, message)}:
+      IO.pure(Result<&1, &1, Error, VisibleCursor.Cursor>,
+        Fail{recovery.error(code, message)})
+    case Done{base}:
+      IO.pure(Result<&1, &1, Error, VisibleCursor.Cursor>,
+        Done{VisibleCursor.open(Some{base}, delta, bounds)})
+
+def snapshot.root.cursor.open.copied(
+  bounds: RangeCursor.Bounds & RangeCursor.Bounds,
+  root: SnapshotRoot
+) -> IO(Result<&1, &1, Error, VisibleCursor.Cursor>):
+  match bounds:
+    case (visible_bounds, sst_bounds):
+      match root:
+        case SnapshotRoot{sst_path, delta}:
+          match sst_path:
+            case None{}:
+              IO.pure(Result<&1, &1, Error, VisibleCursor.Cursor>,
+                Done{VisibleCursor.open(None{}, delta, visible_bounds)})
+            case Some{path}:
+              do IO<Result<&1, &1, Error, VisibleCursor.Cursor>>:
+                opened : Result<&1, &1, U32 & String, SstCursor.Cursor> <-
+                  SstCursor.open.trusted(path,
+                    snapshot.root.sst.bounds(sst_bounds))
+                snapshot.root.cursor.opened(delta, visible_bounds, opened)
+
+def snapshot.root.cursor.open(
+  root: SnapshotRoot,
+  bounds: RangeCursor.Bounds
+) -> IO(Result<&1, &1, Error, VisibleCursor.Cursor>):
+  snapshot.root.cursor.open.copied(RangeCursor.bounds.clone(bounds), root)
 
 # Restores a read handle after byte lookup.
 def close.released(
