@@ -160,13 +160,22 @@ def fixture.root(
           ByteDurableDb.close(handle)
         IO.die(Unit, 1, "snapshot root preflight failed")
     case (handle, Done{root}):
-      do IO<Unit>:
-        changed : ByteDurableDb.Handle &
-          Result<&1, &1, ByteDurableDb.Error, Unit> <-
-            ByteDurableDb.put(handle,
-              fixture.bytes(Bytes.from_hex("61")),
-              fixture.bytes(Bytes.from_hex("78")))
-        fixture.changed.root(root, changed)
+      match root:
+        case ByteDurableDb.SnapshotRoot{_, sst_bytes, _}:
+          match sst_bytes:
+            case 1n+rest:
+              do IO<Unit>:
+                changed : ByteDurableDb.Handle &
+                  Result<&1, &1, ByteDurableDb.Error, Unit> <-
+                    ByteDurableDb.put(handle,
+                      fixture.bytes(Bytes.from_hex("61")),
+                      fixture.bytes(Bytes.from_hex("78")))
+                fixture.changed.root(root, changed)
+            case 0n:
+              do IO<Unit>:
+                _handle_close : Result<&1, &1, ByteDurableDb.Error, Unit> <-
+                  ByteDurableDb.close(handle)
+                IO.die(Unit, 1, "snapshot root did not track SST bytes")
 
 # Flushes the seed entry before capturing an SST-backed root.
 def fixture.flushed(

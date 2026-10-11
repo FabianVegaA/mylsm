@@ -50,7 +50,8 @@ type Handle is Type:
 
 # Retains one immutable SST generation and an owned copy of the active delta.
 type SnapshotRoot is Type:
-  SnapshotRoot{sst_path: Maybe<&1, String>, delta: List<&1, ByteMemTable.Entry>}
+  SnapshotRoot{sst_path: Maybe<&1, String>, sst_bytes: Nat,
+    delta: List<&1, ByteMemTable.Entry>}
 
 # Reports canonical byte entry count and payload size.
 type Stats is Data:
@@ -2292,6 +2293,31 @@ def snapshot_limited(
         Handle{path, lock, ByteMemTable.empty(), state, base_stats},
         ByteMemTable.retained_bytes.keep(table), max_bytes)
 
+def snapshot.root.file.size.result(
+  handle: Handle,
+  path: String,
+  delta: List<&1, ByteMemTable.Entry>,
+  result: Result<&1, &1, U32 & String, Nat>
+) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
+  match result:
+    case Fail{(code, message)}:
+      IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
+        (handle, Fail{Io{code, message}}))
+    case Done{size}:
+      IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
+        (handle, Done{SnapshotRoot{Some{path}, size, delta}}))
+
+def snapshot.root.file.size(
+  handle: Handle,
+  paths: String & String,
+  delta: List<&1, ByteMemTable.Entry>
+) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
+  match paths:
+    case (file_path, retained_path):
+      do IO<Handle & Result<&1, &1, Error, SnapshotRoot>>:
+        size : Result<&1, &1, U32 & String, Nat> <- Fs.file_size(file_path)
+        snapshot.root.file.size.result(handle, retained_path, delta, size)
+
 def snapshot.root.manifest.result(
   read_path: String,
   handle: Handle,
@@ -2307,17 +2333,17 @@ def snapshot.root.manifest.result(
         (handle, Fail{Io{code, message}}))
     case Done{ByteManifest.Empty{}}:
       IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
-        (handle, Done{SnapshotRoot{None{}, delta}}))
+        (handle, Done{SnapshotRoot{None{}, 0n, delta}}))
     case Done{ByteManifest.GenerationEmpty{}}:
       IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
-        (handle, Done{SnapshotRoot{None{}, delta}}))
+        (handle, Done{SnapshotRoot{None{}, 0n, delta}}))
     case Done{ByteManifest.HasSst{}}:
-      IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
-        (handle, Done{SnapshotRoot{Some{read_path ++ "/SST"}, delta}}))
+      snapshot.root.file.size(handle,
+        path.clone.pair(read_path ++ "/SST"), delta)
     case Done{ByteManifest.GenerationSst{file_id}}:
-      IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
-        (handle, Done{SnapshotRoot{Some{
-          ByteManifest.sst.generation.path(read_path, file_id)}, delta}}))
+      snapshot.root.file.size(handle,
+        path.clone.pair(ByteManifest.sst.generation.path(read_path, file_id)),
+        delta)
 
 def snapshot.root.manifest(
   paths: String & String,
@@ -2450,7 +2476,7 @@ def snapshot.root.cursor.open.copied(
   match bounds:
     case (visible_bounds, sst_bounds):
       match root:
-        case SnapshotRoot{sst_path, delta}:
+        case SnapshotRoot{sst_path, _, delta}:
           match sst_path:
             case None{}:
               IO.pure(Result<&1, &1, Error, VisibleCursor.Cursor>,
