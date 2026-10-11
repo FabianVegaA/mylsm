@@ -1,5 +1,6 @@
 import Base
 import ./QueuePolicy.bend as QueuePolicy
+import ./Protocol.bend as Protocol
 
 # Represents whether one request is ready, dispatched, complete, or stale.
 type State is Data:
@@ -70,7 +71,7 @@ def operation.is_mutation(operation: U32) -> Bool:
 
 # Enforces the encoded IPC payload ceiling before client socket allocation.
 def request.within_payload_limit(payload_bytes: U32) -> Bool:
-  Nat.is_le(U32.to_nat(payload_bytes), 1048576n)
+  Protocol.payload.admitted(payload_bytes)
 
 # Marks a ready request as dispatched exactly once.
 def dispatch(state: State, mutation: Bool) -> Decision:

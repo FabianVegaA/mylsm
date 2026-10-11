@@ -79,8 +79,8 @@ law current_generation_and_correlation_confirm:
 
 # Admits a payload exactly at the encoded frame limit.
 law request_payload_at_limit_is_admitted:
-  {ClientPolicy.request.within_payload_limit(1048576) == True{} : Bool}
+  {ClientPolicy.request.within_payload_limit(1073741824) == True{} : Bool}
 
 # Rejects a payload one byte beyond the encoded frame limit.
 law request_payload_over_limit_is_rejected:
-  {ClientPolicy.request.within_payload_limit(1048577) == False{} : Bool}
+  {ClientPolicy.request.within_payload_limit(1073741825) == False{} : Bool}
