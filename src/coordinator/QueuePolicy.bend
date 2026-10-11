@@ -6,6 +6,20 @@ type Decision is Data:
   QueueFull{}
   RequestTooLarge{}
 
+# Stores the current queued request count and encoded byte total.
+type State is Data:
+  Occupancy{count: Nat, bytes: Nat}
+
+# Distinguishes temporary occupancy from a request exceeding all capacity.
+type Rejection is Data:
+  Saturated{}
+  Oversized{}
+
+# Returns changed occupancy on acceptance and exact prior state on rejection.
+type Admission is Data:
+  Enqueued{state: State}
+  Rejected{state: State, reason: Rejection}
+
 def nat.clone.pair(+value: Nat) -> Nat & Nat:
   (value, value)
 
@@ -99,3 +113,35 @@ def admit(
   max_queue_bytes: Nat
 ) -> Decision:
   admit.counted(nat.clone.pair(count), queued_bytes, request_bytes, max_count, max_queue_bytes)
+
+def admit.state.result(original: State, decision: Decision) -> Admission:
+  match decision:
+    case Accepted{count, bytes}: Enqueued{Occupancy{count, bytes}}
+    case QueueFull{}: Rejected{original, Saturated{}}
+    case RequestTooLarge{}: Rejected{original, Oversized{}}
+
+def admit.state.copies(
+  count_copies: Nat & Nat,
+  byte_copies: Nat & Nat,
+  request_bytes: Nat,
+  max_count: Nat,
+  max_queue_bytes: Nat
+) -> Admission:
+  match count_copies:
+    case (checked_count, retained_count):
+      match byte_copies:
+        case (checked_bytes, retained_bytes):
+          admit.state.result(Occupancy{retained_count, retained_bytes},
+            admit(checked_count, checked_bytes, request_bytes,
+              max_count, max_queue_bytes))
+
+def admit.state(
+  original: State,
+  request_bytes: Nat,
+  max_count: Nat,
+  max_queue_bytes: Nat
+) -> Admission:
+  match original:
+    case Occupancy{count, bytes}:
+      admit.state.copies(nat.clone.pair(count), nat.clone.pair(bytes),
+        request_bytes, max_count, max_queue_bytes)
