@@ -8,6 +8,7 @@ import ../MemTable.bend as MemTable
 import ../Recover.bend as Recover
 import ../Sstable.bend as Sstable
 import ../SstStreamIo.bend as SstStreamIo
+import ../Wal.bend as Wal
 import ./LegacyWal.bend as LegacyWal
 import ../SstReadPolicy.bend as SstReadPolicy
 import ../coordinator/QueuePolicy.bend as QueuePolicy
@@ -25,36 +26,45 @@ type Error is Data:
 # Holds source ownership until read-only validation finishes.
 type TableValidation is Type:
   TableValidation{lock: DbLock.Lock, path: String,
-    result: Result<&1, &1, Error, Nat & Nat>}
+    result: Result<&1, &1, Error, Nat & Nat>,
+    records: List<&2, MemTable.Entry>, batches: List<&2, Wal.Batch>}
 
 # Reports the SST record and legacy WAL frame counts from one locked view.
 type SourceCounts is Data:
   LegacySourceCounts{sst_entries: Nat, wal_frames: Nat, encoded_bytes: Nat}
 
+# Carries the verified SST and replayed WAL records from one locked view.
+type SourceSnapshot is Data:
+  LegacySourceSnapshot{sst_records: List<&2, MemTable.Entry>,
+    wal_batches: List<&2, Wal.Batch>, sst_entries: Nat, wal_frames: Nat,
+    encoded_bytes: Nat}
+
 # Carries one legacy SST through size admission, decoding, and entry counting.
 type LegacyTableWalk is Type:
   LegacyLevels{lock: DbLock.Lock, read_path: String, release_path: String,
     levels: List<&2, List<&2, String>>, index: Nat, total_bytes: Nat,
-    entries: Nat}
+    entries: Nat, records: List<&2, MemTable.Entry>}
   LegacyPath{lock: DbLock.Lock, read_path: String, release_path: String,
     ldir: Maybe<&2, String>, names: List<&2, String>,
     levels: List<&2, List<&2, String>>, index: Nat, total_bytes: Nat,
-    entries: Nat}
+    entries: Nat, records: List<&2, MemTable.Entry>}
   LegacyNames{lock: DbLock.Lock, read_path: String, release_path: String,
     levels: List<&2, List<&2, String>>, index: Nat, dir: String,
-    names: List<&2, String>, total_bytes: Nat, entries: Nat}
+    names: List<&2, String>, total_bytes: Nat, entries: Nat,
+    records: List<&2, MemTable.Entry>}
   LegacySize{lock: DbLock.Lock, read_path: String, release_path: String,
     levels: List<&2, List<&2, String>>, index: Nat, dir: String,
     name: String, names: List<&2, String>, total_bytes: Nat, entries: Nat,
-    result: Result<&1, &1, U32 & String, Nat>}
+    result: Result<&1, &1, U32 & String, Nat>, records: List<&2, MemTable.Entry>}
   LegacyBudget{lock: DbLock.Lock, read_path: String, release_path: String,
     levels: List<&2, List<&2, String>>, index: Nat, dir: String,
     name: String, names: List<&2, String>, entries: Nat,
-    decision: SstReadPolicy.TotalDecision}
+    decision: SstReadPolicy.TotalDecision, records: List<&2, MemTable.Entry>}
   LegacyRead{lock: DbLock.Lock, read_path: String, release_path: String,
     levels: List<&2, List<&2, String>>, index: Nat, dir: String,
     names: List<&2, String>, total_bytes: Nat, entries: Nat,
-    result: Result<&1, &1, U32 & String, Sstable.Table>}
+    result: Result<&1, &1, U32 & String, Sstable.Table>,
+    records: List<&2, MemTable.Entry>}
 
 def path.clone.pair.go(
   path: String,
@@ -75,7 +85,24 @@ def table.validation(
   path: String,
   result: Result<&1, &1, Error, Nat & Nat>
 ) -> TableValidation:
-  TableValidation{lock, path, result}
+  TableValidation{lock, path, result, Nil{}, Nil{}}
+
+def table.validation.records(
+  lock: DbLock.Lock,
+  path: String,
+  result: Result<&1, &1, Error, Nat & Nat>,
+  records: List<&2, MemTable.Entry>
+) -> TableValidation:
+  TableValidation{lock, path, result, records, Nil{}}
+
+def table.validation.snapshot(
+  lock: DbLock.Lock,
+  path: String,
+  result: Result<&1, &1, Error, Nat & Nat>,
+  records: List<&2, MemTable.Entry>,
+  batches: List<&2, Wal.Batch>
+) -> TableValidation:
+  TableValidation{lock, path, result, records, batches}
 
 def table.release.result(
   value: Result<&1, &1, Error, Nat & Nat>,
@@ -87,7 +114,7 @@ def table.release.result(
 
 def table.release(state: TableValidation) -> IO(Result<&1, &1, Error, Nat & Nat>):
   match state:
-    case TableValidation{lock, path, result}:
+    case TableValidation{lock, path, result, _, _}:
       do IO<Result<&1, &1, Error, Nat & Nat>>:
         released : Result<&1, &1, DurableError.Error, Unit> <-
           DbLock.release(lock, "migrate-verify", path)
@@ -100,10 +127,47 @@ def table.finished(
 ) -> IO(TableValidation):
   IO.pure(TableValidation, table.validation(lock, path, result))
 
-def table.entries.count(entries: List<&2, MemTable.Entry>, count: Nat) -> Nat:
+def table.finished.records(
+  lock: DbLock.Lock,
+  path: String,
+  result: Result<&1, &1, Error, Nat & Nat>,
+  records: List<&2, MemTable.Entry>
+) -> IO(TableValidation):
+  IO.pure(TableValidation, table.validation.records(lock, path, result, records))
+
+def table.entries.count.keep.go(
+  entries: List<&2, MemTable.Entry>,
+  reversed: List<&2, MemTable.Entry>,
+  count: Nat
+) -> List<&2, MemTable.Entry> & Nat:
   match entries:
-    case Nil{}: count
-    case Con{_, tail}: table.entries.count(tail, Nat.add(count, 1n))
+    case Nil{}: (List.reverse(&2, MemTable.Entry, reversed), count)
+    case Con{entry, tail}:
+      table.entries.count.keep.go(tail, Con{entry, reversed}, Nat.add(count, 1n))
+
+def table.entries.count.keep(
+  entries: List<&2, MemTable.Entry>
+) -> List<&2, MemTable.Entry> & Nat:
+  table.entries.count.keep.go(entries, Nil{}, 0n)
+
+def table.read.next(
+  read: List<&2, MemTable.Entry> & Nat,
+  lock: DbLock.Lock,
+  read_path: String,
+  release_path: String,
+  levels: List<&2, List<&2, String>>,
+  index: Nat,
+  dir: String,
+  names: List<&2, String>,
+  total_bytes: Nat,
+  prior_entries: Nat,
+  prior_records: List<&2, MemTable.Entry>
+) -> LegacyTableWalk:
+  match read:
+    case (table_entries, table_count):
+      LegacyNames{lock, read_path, release_path, levels, index, dir,
+        names, total_bytes, Nat.add(prior_entries, table_count),
+        List.append(&2, MemTable.Entry, prior_records, table_entries)}
 
 def table.failure(code: U32) -> Error:
   Bool.pick(Error, U32.is_eq(code, SstStreamIo.resource_limit_error_code()),
@@ -127,7 +191,8 @@ def table.walk.size(
   index: Nat,
   names: List<&2, String>,
   total_bytes: Nat,
-  entries: Nat
+  entries: Nat,
+  records: List<&2, MemTable.Entry>
 ) -> IO(LegacyTableWalk):
   match paths:
     case ((file_root, read_path), ((file_name, name), (file_dir, dir))):
@@ -135,7 +200,7 @@ def table.walk.size(
         result : Result<&1, &1, U32 & String, Nat> <-
           Fs.file_size(file_root ++ "/" ++ file_dir ++ "/" ++ file_name)
         return LegacySize{lock, read_path, release_path, levels, index,
-          dir, name, names, total_bytes, entries, result}
+          dir, name, names, total_bytes, entries, result, records}
 
 def table.walk.decode(
   paths: (String & String) & (String & String),
@@ -146,7 +211,8 @@ def table.walk.decode(
   name: String,
   names: List<&2, String>,
   total_bytes: Nat,
-  entries: Nat
+  entries: Nat,
+  records: List<&2, MemTable.Entry>
 ) -> IO(LegacyTableWalk):
   match paths:
     case ((file_root, read_path), (file_dir, dir)):
@@ -155,7 +221,7 @@ def table.walk.decode(
           SstStreamIo.read_table_limited(
             file_root ++ "/" ++ file_dir ++ "/" ++ name, 67108864n)
         return LegacyRead{lock, read_path, release_path, levels, index,
-          dir, names, total_bytes, entries, result}
+          dir, names, total_bytes, entries, result, records}
 
 def table.walk.level.path(
   indices: Nat & Nat,
@@ -165,93 +231,101 @@ def table.walk.level.path(
   names: List<&2, String>,
   levels: List<&2, List<&2, String>>,
   total_bytes: Nat,
-  entries: Nat
+  entries: Nat,
+  records: List<&2, MemTable.Entry>
 ) -> LegacyTableWalk:
   match indices:
     case (lookup_index, next_index):
       LegacyPath{lock, read_path, release_path,
         Recover.ldir_of(lookup_index), names, levels, next_index,
-        total_bytes, entries}
+        total_bytes, entries, records}
 
 def table.walk.go(fuel: Nat, state: LegacyTableWalk) -> IO(TableValidation):
   match fuel:
     case 0n:
       match state:
-        case LegacyLevels{lock, _, release_path, _, _, _, _}:
+        case LegacyLevels{lock, _, release_path, _, _, _, _, records}:
           table.finished(lock, release_path, Fail{ResourceLimit{}})
-        case LegacyPath{lock, _, release_path, _, _, _, _, _, _}:
+        case LegacyPath{lock, _, release_path, _, _, _, _, _, _, records}:
           table.finished(lock, release_path, Fail{ResourceLimit{}})
-        case LegacyNames{lock, _, release_path, _, _, _, _, _, _}:
+        case LegacyNames{lock, _, release_path, _, _, _, _, _, _, records}:
           table.finished(lock, release_path, Fail{ResourceLimit{}})
-        case LegacySize{lock, _, release_path, _, _, _, _, _, _, _, _}:
+        case LegacySize{lock, _, release_path, _, _, _, _, _, _, _, _, records}:
           table.finished(lock, release_path, Fail{ResourceLimit{}})
-        case LegacyBudget{lock, _, release_path, _, _, _, _, _, _, _}:
+        case LegacyBudget{lock, _, release_path, _, _, _, _, _, _, _, records}:
           table.finished(lock, release_path, Fail{ResourceLimit{}})
-        case LegacyRead{lock, _, release_path, _, _, _, _, _, _, _}:
+        case LegacyRead{lock, _, release_path, _, _, _, _, _, _, _, records}:
           table.finished(lock, release_path, Fail{ResourceLimit{}})
     case 1n+rest:
       match state:
         case LegacyLevels{lock, read_path, release_path, levels, index,
-            total_bytes, entries}:
+            total_bytes, entries, records}:
           match levels:
             case Nil{}:
-              table.finished(lock, release_path, Done{(entries, total_bytes)})
+              table.finished.records(lock, release_path,
+                Done{(entries, total_bytes)}, records)
             case Con{names, tail}:
               table.walk.go(rest, table.walk.level.path(
                 QueuePolicy.nat.clone.pair(index), lock, read_path,
-                release_path, names, tail, total_bytes, entries))
+                release_path, names, tail, total_bytes, entries, records))
         case LegacyPath{lock, read_path, release_path, ldir, names, levels,
-            index, total_bytes, entries}:
+            index, total_bytes, entries, records}:
           match ldir:
             case None{}:
-              table.finished(lock, release_path, Fail{InvalidLegacyManifest{}})
+              table.finished.records(lock, release_path,
+                Fail{InvalidLegacyManifest{}}, records)
             case Some{dir}:
               table.walk.go(rest, LegacyNames{lock, read_path, release_path,
-                levels, index, dir, names, total_bytes, entries})
+                levels, index, dir, names, total_bytes, entries, records})
         case LegacyNames{lock, read_path, release_path, levels, index, dir,
-            names, total_bytes, entries}:
+            names, total_bytes, entries, records}:
           match names:
             case Nil{}:
               table.walk.go(rest, LegacyLevels{lock, read_path, release_path,
-                levels, Nat.add(index, 1n), total_bytes, entries})
+                levels, Nat.add(index, 1n), total_bytes, entries, records})
             case Con{name, tail}:
               do IO<TableValidation>:
                 next : LegacyTableWalk <- table.walk.size(
                   (path.clone.pair(read_path),
-                    (path.clone.pair(name), path.clone.pair(dir))),
+                  (path.clone.pair(name), path.clone.pair(dir))),
                   lock, release_path, levels, index, tail,
-                  total_bytes, entries)
+                  total_bytes, entries, records)
                 table.walk.go(rest, next)
         case LegacySize{lock, read_path, release_path, levels, index, dir,
-            name, names, total_bytes, entries, result}:
+            name, names, total_bytes, entries, result, records}:
           match result:
             case Fail{(code, message)}:
-              table.finished(lock, release_path, Fail{HostError{code, message}})
+              table.finished.records(lock, release_path,
+                Fail{HostError{code, message}}, records)
             case Done{size}:
               table.walk.go(rest, LegacyBudget{lock, read_path, release_path,
                 levels, index, dir, name, names, entries,
-                SstReadPolicy.total_decision(total_bytes, size, 67108864n)})
+                SstReadPolicy.total_decision(total_bytes, size, 67108864n),
+                records})
         case LegacyBudget{lock, read_path, release_path, levels, index, dir,
-            name, names, entries, decision}:
+            name, names, entries, decision, records}:
           match decision:
             case SstReadPolicy.TotalRejected{}:
-              table.finished(lock, release_path, Fail{ResourceLimit{}})
+              table.finished.records(lock, release_path,
+                Fail{ResourceLimit{}}, records)
             case SstReadPolicy.TotalAdmitted{next_total}:
               do IO<TableValidation>:
                 next : LegacyTableWalk <- table.walk.decode(
                   (path.clone.pair(read_path), path.clone.pair(dir)), lock,
                   release_path, levels, index, name, names, next_total,
-                  entries)
+                  entries, records)
                 table.walk.go(rest, next)
         case LegacyRead{lock, read_path, release_path, levels, index, dir,
-            names, total_bytes, entries, result}:
+            names, total_bytes, entries, result, records}:
           match result:
             case Fail{(code, _)}:
-              table.finished(lock, release_path, Fail{table.failure(code)})
+              table.finished.records(lock, release_path,
+                Fail{table.failure(code)}, records)
             case Done{Sstable.Tbl{table_entries, _, _, _, _, _, _, _}}:
-              table.walk.go(rest, LegacyNames{lock, read_path, release_path,
-                levels, index, dir, names, total_bytes,
-                table.entries.count(table_entries, entries)})
+              table.walk.go(rest, table.read.next(
+                table.entries.count.keep(table_entries), lock, read_path,
+                release_path, levels, index, dir, names, total_bytes,
+                entries, records))
 
 def table.walk.start.paths(
   paths: String & String,
@@ -264,7 +338,7 @@ def table.walk.start.paths(
       match measured:
         case (levels, _):
           table.walk.go(4194305n, LegacyLevels{lock, read_path,
-            release_path, levels, 0n, 0n, 0n})
+            release_path, levels, 0n, 0n, 0n, Nil{}})
 
 def table.walk.start(
   lock: DbLock.Lock,
@@ -281,7 +355,7 @@ def table.manifest.loaded(
   result: Result<&1, &1, U32 & String, Manifest.Manifest>
 ) -> IO(TableValidation):
   match state:
-    case TableValidation{lock, path, _}:
+    case TableValidation{lock, path, _, _, _}:
       match result:
         case Fail{_}:
           table.finished(lock, path, Fail{InvalidLegacyManifest{}})
@@ -633,122 +707,159 @@ def canonical.result(
         present : Result<&1, &1, U32 & String, Bool> <- Fs.exists(path ++ "/LOCK")
         lock.present(path, present)
 
-def wal.locked.classified(
-  result: Result<&1, &1, Error, Nat>,
+def wal.batches.measure.go(
+  batches: List<&2, Wal.Batch>,
+  reversed: List<&2, Wal.Batch>,
+  count: Nat
+) -> List<&2, Wal.Batch> & Nat:
+  match batches:
+    case Nil{}: (List.reverse(&2, Wal.Batch, reversed), count)
+    case Con{batch, tail}:
+      wal.batches.measure.go(tail, Con{batch, reversed}, Nat.add(count, 1n))
+
+def wal.batches.measure(batches: List<&2, Wal.Batch>) -> List<&2, Wal.Batch> & Nat:
+  wal.batches.measure.go(batches, Nil{}, 0n)
+
+def wal.locked.valid.batches(
+  measured: List<&2, Wal.Batch> & Nat,
   lock: DbLock.Lock,
   path: String,
-  size: Nat
+  size: Nat,
+  records: List<&2, MemTable.Entry>
+) -> TableValidation:
+  match measured:
+    case (batches, frames):
+      table.validation.snapshot(lock, path,
+        Done{(frames, size)}, records, batches)
+
+def wal.locked.classified(
+  result: LegacyWal.ReplayResult,
+  lock: DbLock.Lock,
+  path: String,
+  size: Nat,
+  records: List<&2, MemTable.Entry>
 ) -> TableValidation:
   match result:
-    case Fail{error}: table.validation(lock, path, Fail{error})
-    case Done{frames}:
-      table.validation(lock, path, Done{(frames, size)})
+    case LegacyWal.ReplayInvalid{}:
+      table.validation.records(lock, path, Fail{InvalidLegacyWal{}}, records)
+    case LegacyWal.ReplayValid{batches}:
+      wal.locked.valid.batches(wal.batches.measure(batches), lock, path,
+        size, records)
 
 def wal.locked.read.classify(
   result: Result<&1, &1, U32 & String, Bytes.Bytes>,
   lock: DbLock.Lock,
   path: String,
-  size: Nat
+  size: Nat,
+  records: List<&2, MemTable.Entry>
 ) -> TableValidation:
   match result:
     case Fail{(code, message)}:
-      table.validation(lock, path, Fail{HostError{code, message}})
+      table.validation.records(lock, path, Fail{HostError{code, message}}, records)
     case Done{bytes}:
-      wal.locked.classified(wal.classify(LegacyWal.verify(bytes)),
-        lock, path, size)
+      wal.locked.classified(LegacyWal.replay(bytes), lock, path, size, records)
 
 def wal.locked.read.closed(
   file: File,
   result: Result<&1, &1, U32 & String, Bytes.Bytes>,
   lock: DbLock.Lock,
   path: String,
-  size: Nat
+  size: Nat,
+  records: List<&2, MemTable.Entry>
 ) -> IO(TableValidation):
   do IO<TableValidation>:
     _closed : Unit <- File.close(file)
-    return wal.locked.read.classify(result, lock, path, size)
+    return wal.locked.read.classify(result, lock, path, size, records)
 
 def wal.locked.read.pair(
   pair: File & Result<&1, &1, U32 & String, Bytes.Bytes>,
   lock: DbLock.Lock,
   path: String,
-  size: Nat
+  size: Nat,
+  records: List<&2, MemTable.Entry>
 ) -> IO(TableValidation):
   match pair:
-    case (file, result): wal.locked.read.closed(file, result, lock, path, size)
+    case (file, result): wal.locked.read.closed(file, result, lock, path, size, records)
 
 def wal.locked.opened(
   lock: DbLock.Lock,
   sizes: Nat & Nat,
   opened: Result<&1, &1, U32 & String, File>,
-  path: String
+  path: String,
+  records: List<&2, MemTable.Entry>
 ) -> IO(TableValidation):
   match sizes opened:
     case (read_size, retained_size) Fail{(code, message)}:
       IO.pure(TableValidation,
-        table.validation(lock, path, Fail{HostError{code, message}}))
+        table.validation.records(lock, path, Fail{HostError{code, message}}, records))
     case (read_size, retained_size) Done{file}:
       do IO<TableValidation>:
         read : File & Result<&1, &1, U32 & String, Bytes.Bytes> <-
           Fs.read_at(file, 0, U32.from_nat(read_size))
-        wal.locked.read.pair(read, lock, path, retained_size)
+        wal.locked.read.pair(read, lock, path, retained_size, records)
 
 def wal.locked.sized(
   lock: DbLock.Lock,
   size: Nat,
   +path: String,
-  within_limit: Bool
+  within_limit: Bool,
+  records: List<&2, MemTable.Entry>
 ) -> IO(TableValidation):
   match within_limit:
     case False{}:
       IO.pure(TableValidation,
-        table.validation(lock, path, Fail{ResourceLimit{}}))
+        table.validation.records(lock, path, Fail{ResourceLimit{}}, records))
     case True{}:
       do IO<TableValidation>:
         opened : Result<&1, &1, U32 & String, File> <-
           File.open(path ++ "/WAL", "r")
-        wal.locked.opened(lock, QueuePolicy.nat.clone.pair(size), opened, path)
+        wal.locked.opened(lock, QueuePolicy.nat.clone.pair(size), opened, path,
+          records)
 
 def wal.locked.size.result(
   lock: DbLock.Lock,
   result: Result<&1, &1, U32 & String, Nat>,
-  path: String
+  path: String,
+  records: List<&2, MemTable.Entry>
 ) -> IO(TableValidation):
   match result:
     case Fail{(code, message)}:
       IO.pure(TableValidation,
-        table.validation(lock, path, Fail{HostError{code, message}}))
+        table.validation.records(lock, path, Fail{HostError{code, message}}, records))
     case Done{+size}:
-      wal.locked.sized(lock, size, path, Nat.is_le(size, max_wal_bytes()))
+      wal.locked.sized(lock, size, path, Nat.is_le(size, max_wal_bytes()), records)
 
 def wal.locked.present(
   lock: DbLock.Lock,
   present: Bool,
-  +path: String
+  +path: String,
+  records: List<&2, MemTable.Entry>
 ) -> IO(TableValidation):
   match present:
     case False{}:
-      IO.pure(TableValidation, table.validation(lock, path, Done{(0n, 0n)}))
+      IO.pure(TableValidation,
+        table.validation.snapshot(lock, path, Done{(0n, 0n)}, records, Nil{}))
     case True{}:
       do IO<TableValidation>:
         size : Result<&1, &1, U32 & String, Nat> <- Fs.file_size(path ++ "/WAL")
-        wal.locked.size.result(lock, size, path)
+        wal.locked.size.result(lock, size, path, records)
 
 def wal.locked.exists(
   lock: DbLock.Lock,
   result: Result<&1, &1, U32 & String, Bool>,
-  path: String
+  path: String,
+  records: List<&2, MemTable.Entry>
 ) -> IO(TableValidation):
   match result:
     case Fail{(code, message)}:
       IO.pure(TableValidation,
-        table.validation(lock, path, Fail{HostError{code, message}}))
-    case Done{present}: wal.locked.present(lock, present, path)
+        table.validation.records(lock, path, Fail{HostError{code, message}}, records))
+    case Done{present}: wal.locked.present(lock, present, path, records)
 
 def source.release.result(
-  value: Result<&1, &1, Error, SourceCounts>,
+  value: Result<&1, &1, Error, SourceSnapshot>,
   released: Result<&1, &1, DurableError.Error, Unit>
-) -> Result<&1, &1, Error, SourceCounts>:
+) -> Result<&1, &1, Error, SourceSnapshot>:
   match released:
     case Fail{error}: Fail{LockError{error}}
     case Done{Unit{}}: value
@@ -756,9 +867,9 @@ def source.release.result(
 def source.release(
   lock: DbLock.Lock,
   path: String,
-  value: Result<&1, &1, Error, SourceCounts>
-) -> IO(Result<&1, &1, Error, SourceCounts>):
-  do IO<Result<&1, &1, Error, SourceCounts>>:
+  value: Result<&1, &1, Error, SourceSnapshot>
+) -> IO(Result<&1, &1, Error, SourceSnapshot>):
+  do IO<Result<&1, &1, Error, SourceSnapshot>>:
     released : Result<&1, &1, DurableError.Error, Unit> <-
       DbLock.release(lock, "migrate-verify", path)
     return source.release.result(value, released)
@@ -766,46 +877,49 @@ def source.release(
 def source.wal.validated(
   sst: Nat & Nat,
   state: TableValidation
-) -> IO(Result<&1, &1, Error, SourceCounts>):
+) -> IO(Result<&1, &1, Error, SourceSnapshot>):
   match sst state:
-    case (sst_entries, sst_bytes) TableValidation{lock, path, result}:
+    case (sst_entries, sst_bytes) TableValidation{lock, path, result,
+        sst_records, wal_batches}:
       match result:
         case Fail{error}:
           source.release(lock, path, Fail{error})
         case Done{(wal_frames, wal_bytes)}:
-          source.release(lock, path, Done{LegacySourceCounts{
-            sst_entries, wal_frames, Nat.add(sst_bytes, wal_bytes)}})
+          source.release(lock, path, Done{LegacySourceSnapshot{sst_records,
+            wal_batches, sst_entries, wal_frames, Nat.add(sst_bytes, wal_bytes)}})
 
 def source.tables.present(
   sst: Nat & Nat,
+  sst_records: List<&2, MemTable.Entry>,
   lock: DbLock.Lock,
   paths: String & String
-) -> IO(Result<&1, &1, Error, SourceCounts>):
+) -> IO(Result<&1, &1, Error, SourceSnapshot>):
   match paths:
     case (exists_path, validation_path):
-      do IO<Result<&1, &1, Error, SourceCounts>>:
+      do IO<Result<&1, &1, Error, SourceSnapshot>>:
         present : Result<&1, &1, U32 & String, Bool> <-
           Fs.exists(exists_path ++ "/WAL")
-        wal : TableValidation <- wal.locked.exists(lock, present, validation_path)
+        wal : TableValidation <- wal.locked.exists(lock, present,
+          validation_path, sst_records)
         source.wal.validated(sst, wal)
 
 def source.tables.validated(
   state: TableValidation
-) -> IO(Result<&1, &1, Error, SourceCounts>):
+) -> IO(Result<&1, &1, Error, SourceSnapshot>):
   match state:
-    case TableValidation{lock, path, result}:
+    case TableValidation{lock, path, result, records, _}:
       match result:
         case Fail{error}: source.release(lock, path, Fail{error})
         case Done{sst}:
-          source.tables.present(sst, lock, path.clone.pair(path))
+          source.tables.present(sst, records, lock, path.clone.pair(path))
 
 def source.manifest.present(
   lock: DbLock.Lock,
   paths: String & String
-) -> IO(Result<&1, &1, Error, SourceCounts>):
+) -> IO(Result<&1, &1, Error, SourceSnapshot>):
   match paths:
     case (exists_path, validation_path):
-      do IO<Result<&1, &1, Error, SourceCounts>>:
+      do IO<Result<&1, &1, Error, SourceSnapshot>>:
         present : Result<&1, &1, U32 & String, Bool> <-
           Fs.exists(exists_path ++ "/MANIFEST")
         tables : TableValidation <-
@@ -815,47 +929,63 @@ def source.manifest.present(
 def source.locked.manifest(
   +path: String,
   result: Result<&1, &1, DurableError.Error, DbLock.Lock>
-) -> IO(Result<&1, &1, Error, SourceCounts>):
+) -> IO(Result<&1, &1, Error, SourceSnapshot>):
   match result:
     case Fail{error}:
-      IO.pure(Result<&1, &1, Error, SourceCounts>, Fail{LockError{error}})
+      IO.pure(Result<&1, &1, Error, SourceSnapshot>, Fail{LockError{error}})
     case Done{lock}:
       source.manifest.present(lock, path.clone.pair(path))
 
 def source.lock.present(
   +path: String,
   result: Result<&1, &1, U32 & String, Bool>
-) -> IO(Result<&1, &1, Error, SourceCounts>):
+) -> IO(Result<&1, &1, Error, SourceSnapshot>):
   match result:
     case Fail{(code, message)}:
-      IO.pure(Result<&1, &1, Error, SourceCounts>, Fail{HostError{code, message}})
+      IO.pure(Result<&1, &1, Error, SourceSnapshot>, Fail{HostError{code, message}})
     case Done{False{}}:
-      IO.pure(Result<&1, &1, Error, SourceCounts>,
+      IO.pure(Result<&1, &1, Error, SourceSnapshot>,
         Fail{HostError{2, "database LOCK file is missing"}})
     case Done{True{}}:
-      do IO<Result<&1, &1, Error, SourceCounts>>:
+      do IO<Result<&1, &1, Error, SourceSnapshot>>:
         acquired : Result<&1, &1, DurableError.Error, DbLock.Lock> <-
           DbLock.acquire(path, "migrate-verify")
         source.locked.manifest(path, acquired)
 
 def source.canonical(
   result: Result<&1, &1, U32 & String, String>
-) -> IO(Result<&1, &1, Error, SourceCounts>):
+) -> IO(Result<&1, &1, Error, SourceSnapshot>):
   match result:
     case Fail{(code, message)}:
-      IO.pure(Result<&1, &1, Error, SourceCounts>, Fail{HostError{code, message}})
+      IO.pure(Result<&1, &1, Error, SourceSnapshot>, Fail{HostError{code, message}})
     case Done{+path}:
-      do IO<Result<&1, &1, Error, SourceCounts>>:
+      do IO<Result<&1, &1, Error, SourceSnapshot>>:
         present : Result<&1, &1, U32 & String, Bool> <- Fs.exists(path ++ "/LOCK")
         source.lock.present(path, present)
 
-# Validates the legacy manifest, all referenced SSTs, and WAL under one source lock.
+def source.counts(
+  result: Result<&1, &1, Error, SourceSnapshot>
+) -> Result<&1, &1, Error, SourceCounts>:
+  match result:
+    case Fail{error}: Fail{error}
+    case Done{LegacySourceSnapshot{_, _, sst_entries, wal_frames, encoded_bytes}}:
+      Done{LegacySourceCounts{sst_entries, wal_frames, encoded_bytes}}
+
+# Reads legacy tables and WAL without changing source files.
+def read_legacy_source(
+  +path: String
+) -> IO(Result<&1, &1, Error, SourceSnapshot>):
+  do IO<Result<&1, &1, Error, SourceSnapshot>>:
+    canonical : Result<&1, &1, U32 & String, String> <- Fs.canonical_path(path)
+    source.canonical(canonical)
+
+# Validates the locked legacy view and returns its aggregate measurements.
 def verify_legacy_source(
   +path: String
 ) -> IO(Result<&1, &1, Error, SourceCounts>):
   do IO<Result<&1, &1, Error, SourceCounts>>:
-    canonical : Result<&1, &1, U32 & String, String> <- Fs.canonical_path(path)
-    source.canonical(canonical)
+    snapshot : Result<&1, &1, Error, SourceSnapshot> <- read_legacy_source(path)
+    return source.counts(snapshot)
 
 # Verifies a legacy WAL while holding the existing database lock read-only.
 def verify_legacy_wal(+path: String) -> IO(Result<&1, &1, Error, Nat>):
