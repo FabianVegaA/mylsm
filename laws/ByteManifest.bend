@@ -10,24 +10,6 @@ law empty_manifest_round_trips:
 law sst_manifest_round_trips:
   {Manifest.decode(Manifest.encode(Manifest.HasSst{})) == Done{Manifest.HasSst{}} : Result<&1, &1, Manifest.Error, Manifest.ManifestValue>}
 
-# The empty generation-five manifest preserves its layout.
-law generation_manifest_round_trips:
-  {Manifest.decode(Manifest.encode(Manifest.GenerationEmpty{})) ==
-    Done{Manifest.GenerationEmpty{}} :
-    Result<&1, &1, Manifest.Error, Manifest.ManifestValue>}
-
-# A generation-addressed SST manifest preserves its active file identifier.
-law generation_sst_manifest_round_trips:
-  {Manifest.decode(Manifest.encode(Manifest.GenerationSst{3})) ==
-    Done{Manifest.GenerationSst{3}} :
-    Result<&1, &1, Manifest.Error, Manifest.ManifestValue>}
-
-# Detects checksum corruption in a generation-five manifest.
-law generation_manifest_checksum_corruption_is_rejected:
-  {Manifest.decode(Bytes.set(Manifest.encode(Manifest.GenerationEmpty{}),
-    55, 1)) == Fail{Manifest.ChecksumMismatch{}} :
-    Result<&1, &1, Manifest.Error, Manifest.ManifestValue>}
-
 # An unknown storage generation fails before layout interpretation.
 law unknown_generation_is_rejected:
   {Manifest.decode(Bytes.set(Manifest.encode(Manifest.Empty{}), 11, 3)) == Fail{Manifest.UnsupportedVersion{3}} : Result<&1, &1, Manifest.Error, Manifest.ManifestValue>}

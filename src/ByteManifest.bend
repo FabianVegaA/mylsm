@@ -2,12 +2,10 @@ import Base
 import ./hub_sha/sha256.bend as SHA
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
-# Represents a legacy or generation-addressed byte-store table layout.
+# Represents the only published byte-store table layout currently supported.
 type ManifestValue is Data:
   Empty{}
   HasSst{}
-  GenerationEmpty{}
-  GenerationSst{file_id: U32}
 
 # Distinguishes malformed bytes, unknown formats, and comparator mismatch.
 type Error is Data:
@@ -88,12 +86,6 @@ def body(value: ManifestValue) -> Bytes.Bytes:
     case HasSst{}:
       Bytes.concat([magic(), u32.bytes(4), u32.bytes(1), u32.bytes(1),
         u32.bytes(1), u32.bytes(3), sst.name()])
-    case GenerationEmpty{}:
-      Bytes.concat([magic(), u32.bytes(5), u32.bytes(1), u32.bytes(1),
-        u32.bytes(0)])
-    case GenerationSst{file_id}:
-      Bytes.concat([magic(), u32.bytes(5), u32.bytes(1), u32.bytes(1),
-        u32.bytes(1), u32.bytes(file_id)])
 
 # Appends the digest of all preceding manifest bytes.
 def encode.body.copies(copies: Bytes.Bytes & Bytes.Bytes) -> Bytes.Bytes:
@@ -251,77 +243,6 @@ def decode.comparator.field(
 def decode.comparator(input: Bytes.Bytes) -> Result<&1, &1, Error, ManifestValue>:
   decode.comparator.field(Bytes.get.u32be(input, 12))
 
-def decode.v5.sst.value(
-  input: Bytes.Bytes,
-  field: Maybe<&2, U32>
-) -> Result<&1, &1, Error, ManifestValue>:
-  match field:
-    case None{}: Fail{Malformed{}}
-    case Some{file_id}:
-      decode.checksum(input, GenerationSst{file_id}, 28, 60)
-
-def decode.v5.sst.field(
-  pair: Bytes.Bytes & Maybe<&2, U32>
-) -> Result<&1, &1, Error, ManifestValue>:
-  match pair:
-    case (input, field): decode.v5.sst.value(input, field)
-
-def decode.v5.sst.count.value(
-  input: Bytes.Bytes,
-  count_field: Maybe<&2, U32>
-) -> Result<&1, &1, Error, ManifestValue>:
-  match count_field:
-    case None{}: Fail{Malformed{}}
-    case Some{0}:
-      decode.checksum(input, GenerationEmpty{}, 24, 56)
-    case Some{1}:
-      decode.v5.sst.field(Bytes.get.u32be(input, 24))
-    case _: Fail{Malformed{}}
-
-def decode.v5.sst.count.field(
-  pair: Bytes.Bytes & Maybe<&2, U32>
-) -> Result<&1, &1, Error, ManifestValue>:
-  match pair:
-    case (input, field): decode.v5.sst.count.value(input, field)
-
-def decode.v5.level_count.value(
-  input: Bytes.Bytes,
-  field: Maybe<&2, U32>
-) -> Result<&1, &1, Error, ManifestValue>:
-  match field:
-    case None{}: Fail{Malformed{}}
-    case Some{1}:
-      decode.v5.sst.count.field(Bytes.get.u32be(input, 20))
-    case _: Fail{Malformed{}}
-
-def decode.v5.level_count.field(
-  pair: Bytes.Bytes & Maybe<&2, U32>
-) -> Result<&1, &1, Error, ManifestValue>:
-  match pair:
-    case (input, field): decode.v5.level_count.value(input, field)
-
-def decode.v5.level_count(input: Bytes.Bytes) -> Result<&1, &1, Error, ManifestValue>:
-  decode.v5.level_count.field(Bytes.get.u32be(input, 16))
-
-def decode.v5.comparator.value(
-  input: Bytes.Bytes,
-  field: Maybe<&2, U32>
-) -> Result<&1, &1, Error, ManifestValue>:
-  match field:
-    case None{}: Fail{Malformed{}}
-    case Some{1}:
-      decode.v5.level_count(input)
-    case Some{generation}: Fail{ComparatorMismatch{generation}}
-
-def decode.v5.comparator.field(
-  pair: Bytes.Bytes & Maybe<&2, U32>
-) -> Result<&1, &1, Error, ManifestValue>:
-  match pair:
-    case (input, field): decode.v5.comparator.value(input, field)
-
-def decode.v5.comparator(input: Bytes.Bytes) -> Result<&1, &1, Error, ManifestValue>:
-  decode.v5.comparator.field(Bytes.get.u32be(input, 12))
-
 # Rejects unknown storage generations before comparator validation.
 def decode.version.value(
   input: Bytes.Bytes,
@@ -330,7 +251,6 @@ def decode.version.value(
   match field:
     case None{}: Fail{Malformed{}}
     case Some{4}: decode.comparator(input)
-    case Some{5}: decode.v5.comparator(input)
     case Some{generation}: Fail{UnsupportedVersion{generation}}
 
 def decode.version.field(
@@ -352,22 +272,16 @@ def decode.magic.pair(pair: Bytes.Bytes & Bool) -> Result<&1, &1, Error, Manifes
   match pair:
     case (input, valid): decode.magic(input, valid)
 
-def decode.magic.copies(
-  copies: Bytes.Bytes & Bytes.Bytes
-) -> Result<&1, &1, Error, ManifestValue>:
-  match copies:
-    case (input, for_magic):
-      decode.magic.pair((input,
-        equal(Bytes.eq(slice.result(Bytes.slice(for_magic, 0, 8)), magic()))))
-
 # Validates the size before reading fixed header fields.
-def decode.sized.check_magic(bytes: Bytes.Bytes) -> Result<&1, &1, Error, ManifestValue>:
-  decode.magic.copies(clone.split(bytes))
+def decode.sized.check_magic(copies: Bytes.Bytes & Bytes.Bytes) -> Result<&1, &1, Error, ManifestValue>:
+  match copies:
+    case (bytes, for_magic):
+      decode.magic.pair((bytes, equal(Bytes.eq(slice.result(Bytes.slice(for_magic, 0, 8)), magic()))))
 
 def decode.sized.valid(bytes: Bytes.Bytes, valid: Bool) -> Result<&1, &1, Error, ManifestValue>:
   match valid:
     case False{}: Fail{Malformed{}}
-    case True{}: decode.sized.check_magic(bytes)
+    case True{}: decode.sized.check_magic(clone.split(bytes))
 
 # Validates the size before reading fixed header fields.
 def decode.sized(input: Bytes.Bytes & U32) -> Result<&1, &1, Error, ManifestValue>:
@@ -376,8 +290,6 @@ def decode.sized(input: Bytes.Bytes & U32) -> Result<&1, &1, Error, ManifestValu
       match size:
         case 56: decode.sized.valid(bytes, True{})
         case 63: decode.sized.valid(bytes, True{})
-        case 60: decode.sized.valid(bytes, True{})
-        case 64: decode.sized.valid(bytes, True{})
         case _: decode.sized.valid(bytes, False{})
 
 # Decodes the bounded generation-four byte manifest.
