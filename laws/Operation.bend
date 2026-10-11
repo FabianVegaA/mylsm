@@ -108,3 +108,13 @@ law malformed_write_batch_is_rejected:
 law decoded_batch_keeps_mutation_list:
   {Operation.batch.result(Done{ByteWal.Batch{Nil{}}}) ==
     Operation.Decoded{Operation.WriteBatch{Nil{}}} : Operation.Decision}
+
+# Decodes a snapshot close with its exact owner-issued token.
+law snapshot_close_decodes_exact_token:
+  {Operation.decode.payload(11, Operation.u32.bytes(7)) ==
+    Operation.Decoded{Operation.SnapshotClose{7}} : Operation.Decision}
+
+# Rejects a truncated snapshot token used for close.
+law snapshot_close_rejects_short_token:
+  {Operation.decode.payload(11, Bytes.new(3)) ==
+    Operation.MalformedArguments{} : Operation.Decision}

@@ -246,3 +246,13 @@ def snapshot.get(
     pair : Client.Session & Result<&1, &1, Client.Error, Protocol.Response> <-
       Client.session.call(session, 10, snapshot.get.payload(snapshot_id, key))
     return get.result(pair)
+
+# Releases an owner snapshot token after its final cursor has closed.
+def snapshot.close(
+  session: Client.Session,
+  snapshot_id: U32
+) -> IO(Client.Session & Result<&1, &1, Client.Error, Unit>):
+  do IO<Client.Session & Result<&1, &1, Client.Error, Unit>>:
+    pair : Client.Session & Result<&1, &1, Client.Error, Protocol.Response> <-
+      Client.session.call(session, 11, Protocol.snapshot.id.bytes(snapshot_id))
+    return write.result(pair)

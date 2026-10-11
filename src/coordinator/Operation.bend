@@ -16,6 +16,7 @@ type Operation is Type:
   Stats{}
   SnapshotOpen{}
   SnapshotGet{snapshot_id: U32, key: Bytes.Bytes}
+  SnapshotClose{snapshot_id: U32}
 
 # Reports decoded arguments or a malformed/unsupported operation.
 type Decision is Type:
@@ -203,6 +204,16 @@ def snapshot.get.measured(measured: Bytes.Bytes & U32) -> Decision:
 def snapshot.get.decode(payload: Bytes.Bytes) -> Decision:
   snapshot.get.measured(Bytes.length(payload))
 
+# Decodes the exact four-byte owner token used to close a snapshot.
+def snapshot.close.decision(parsed: Maybe<&2, U32>) -> Decision:
+  match parsed:
+    case Some{snapshot_id}: Decoded{SnapshotClose{snapshot_id}}
+    case None{}: MalformedArguments{}
+
+# Rejects truncated and extended close-token payloads.
+def snapshot.close.decode(payload: Bytes.Bytes) -> Decision:
+  snapshot.close.decision(Protocol.snapshot.id.read(payload))
+
 def decode.payload(
   operation_code: U32,
   payload: Bytes.Bytes
@@ -217,6 +228,7 @@ def decode.payload(
     case 8: batch.result(ByteWal.decode(payload))
     case 9: empty.operation(Bytes.length(payload), SnapshotOpen{})
     case 10: snapshot.get.decode(payload)
+    case 11: snapshot.close.decode(payload)
     case _: UnsupportedOperation{}
 
 # Decodes the tagged operation payload without interpreting keys as text.

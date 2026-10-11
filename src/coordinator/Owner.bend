@@ -244,6 +244,33 @@ def snapshot.get(
   snapshot.get.lookup(handle, context, key,
     SnapshotStore.lookup.root(snapshots, snapshot_id))
 
+# Maps a close decision to success, Busy, or an unknown-token response.
+def snapshot.close.result(
+  handle: ByteDb.Handle,
+  context: ReplyContext,
+  result: SnapshotStore.CloseResult
+) -> DispatchResult:
+  match result:
+    case SnapshotStore.RootClosed{store}:
+      DispatchResult{handle, store,
+        reply.response(context, Protocol.Success{}, Bytes.new(0))}
+    case SnapshotStore.RootCloseBusy{store}:
+      DispatchResult{handle, store,
+        reply.response(context, Protocol.Busy{}, Bytes.new(0))}
+    case SnapshotStore.RootCloseMissing{store}:
+      DispatchResult{handle, store,
+        reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))}
+
+# Closes one owner snapshot token through the aggregate retention registry.
+def snapshot.close(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  context: ReplyContext,
+  snapshot_id: U32
+) -> IO(DispatchResult):
+  IO.pure(DispatchResult, snapshot.close.result(handle, context,
+    SnapshotStore.close(snapshots, snapshot_id)))
+
 def dispatch.operation(
   handle: ByteDb.Handle,
   context: ReplyContext,
@@ -288,6 +315,9 @@ def dispatch.operation(
     case Operation.SnapshotGet{_, _}:
       IO.pure(ByteDb.Handle & Protocol.Response,
         (handle, reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))))
+    case Operation.SnapshotClose{_}:
+      IO.pure(ByteDb.Handle & Protocol.Response,
+        (handle, reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))))
 
 def dispatch.decoded.state(
   handle: ByteDb.Handle,
@@ -300,6 +330,8 @@ def dispatch.decoded.state(
       snapshot.open(handle, snapshots, context)
     case Operation.Decoded{Operation.SnapshotGet{snapshot_id, key}}:
       snapshot.get(handle, snapshots, context, snapshot_id, key)
+    case Operation.Decoded{Operation.SnapshotClose{snapshot_id}}:
+      snapshot.close(handle, snapshots, context, snapshot_id)
     case Operation.Decoded{operation}:
       do IO<DispatchResult>:
         pair : ByteDb.Handle & Protocol.Response <-

@@ -8,19 +8,39 @@ def require(valid: Bool) -> IO(Unit):
     case True{}: IO.print("OWNER_SNAPSHOT_STORE_PASSED")
     case False{}: IO.die(Unit, 1, "owner snapshot store state was invalid")
 
-# Verifies a token lookup preserves its root and total owner accounting.
-def found(result: Store.LookupResult) -> IO(Unit):
+# Verifies the second close leaves no roots or aggregate reservations.
+def closed.last(result: Store.CloseResult) -> IO(Unit):
+  match result:
+    case Store.RootClosed{store}:
+      require(Store.has.counts(store, 0n, 0n, 0n))
+    case Store.RootCloseBusy{_}:
+      IO.die(Unit, 1, "childless snapshot close unexpectedly returned busy")
+    case Store.RootCloseMissing{_}:
+      IO.die(Unit, 1, "older snapshot token was not closed")
+
+# Closes the second token and passes its reconstructed store to the final close.
+def closed.second(result: Store.CloseResult) -> IO(Unit):
+  match result:
+    case Store.RootClosed{store}:
+      closed.last(Store.close(store, 1))
+    case Store.RootCloseBusy{_}:
+      IO.die(Unit, 1, "childless snapshot close unexpectedly returned busy")
+    case Store.RootCloseMissing{_}:
+      IO.die(Unit, 1, "second snapshot token was not closed")
+
+# Reads the second token after the first lookup reconstructed the store.
+def found.second(result: Store.LookupResult) -> IO(Unit):
   match result:
     case Store.RootFound{store, _}:
-      require(Store.has.counts(store, 2n, 0n, 2n))
+      closed.second(Store.close(store, 2))
     case Store.RootMissing{_}:
-      IO.die(Unit, 1, "stored snapshot token was not found")
+      IO.die(Unit, 1, "second snapshot token was not found")
 
-# Reads an older token after a lookup reconstructed the retained store.
+# Reads the older token before passing the rebuilt store to the second lookup.
 def found.first(result: Store.LookupResult, second_id: U32) -> IO(Unit):
   match result:
     case Store.RootFound{store, _}:
-      found(Store.lookup.root(store, second_id))
+      found.second(Store.lookup.root(store, second_id))
     case Store.RootMissing{_}:
       IO.die(Unit, 1, "older snapshot token was not found")
 

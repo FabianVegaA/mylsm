@@ -34,6 +34,9 @@ def Laws.snapshot_open_tag_is_a_request_operation():
 def Laws.snapshot_get_tag_is_a_request_operation():
   {==}
 
+def Laws.snapshot_close_tag_is_a_request_operation():
+  {==}
+
 def Laws.snapshot_identifier_one_roundtrips():
   {==}
 

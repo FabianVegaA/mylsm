@@ -45,3 +45,9 @@ def Laws.malformed_write_batch_is_rejected():
 
 def Laws.decoded_batch_keeps_mutation_list():
   {==}
+
+def Laws.snapshot_close_decodes_exact_token():
+  {==}
+
+def Laws.snapshot_close_rejects_short_token():
+  {==}
