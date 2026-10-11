@@ -50,7 +50,7 @@ type Handle is Type:
 
 # Retains one immutable SST generation and an owned copy of the active delta.
 type SnapshotRoot is Type:
-  SnapshotRoot{sst_path: Maybe<&1, String>, sst_bytes: Nat,
+  SnapshotRoot{sst_path: Maybe<&1, String>, retained_bytes: Nat,
     delta: List<&1, ByteMemTable.Entry>}
 
 # Reports canonical byte entry count and payload size.
@@ -2293,10 +2293,38 @@ def snapshot_limited(
         Handle{path, lock, ByteMemTable.empty(), state, base_stats},
         ByteMemTable.retained_bytes.keep(table), max_bytes)
 
+def snapshot.root.reservation.result(
+  handle: Handle,
+  path: Maybe<&1, String>,
+  delta: List<&1, ByteMemTable.Entry>,
+  decision: SnapshotPolicy.Decision
+) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
+  match decision:
+    case SnapshotPolicy.ResourceLimit{}:
+      IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
+        (handle, Fail{ResourceLimit{}}))
+    case SnapshotPolicy.Retained{_, retained_bytes}:
+      IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
+        (handle, Done{SnapshotRoot{path, retained_bytes, delta}}))
+
+def snapshot.root.reservation(
+  handle: Handle,
+  path: Maybe<&1, String>,
+  sst_bytes: Nat,
+  delta_bytes: Nat,
+  delta: List<&1, ByteMemTable.Entry>,
+  max_bytes: Nat
+) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
+  snapshot.root.reservation.result(handle, path, delta,
+    SnapshotPolicy.reserve(0n, 0n,
+      Nat.add(sst_bytes, delta_bytes), 1n, max_bytes))
+
 def snapshot.root.file.size.result(
   handle: Handle,
   path: String,
   delta: List<&1, ByteMemTable.Entry>,
+  delta_bytes: Nat,
+  max_bytes: Nat,
   result: Result<&1, &1, U32 & String, Nat>
 ) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
   match result:
@@ -2304,24 +2332,29 @@ def snapshot.root.file.size.result(
       IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
         (handle, Fail{Io{code, message}}))
     case Done{size}:
-      IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
-        (handle, Done{SnapshotRoot{Some{path}, size, delta}}))
+      snapshot.root.reservation(handle, Some{path}, size, delta_bytes, delta,
+        max_bytes)
 
 def snapshot.root.file.size(
   handle: Handle,
   paths: String & String,
-  delta: List<&1, ByteMemTable.Entry>
+  delta: List<&1, ByteMemTable.Entry>,
+  delta_bytes: Nat,
+  max_bytes: Nat
 ) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
   match paths:
     case (file_path, retained_path):
       do IO<Handle & Result<&1, &1, Error, SnapshotRoot>>:
         size : Result<&1, &1, U32 & String, Nat> <- Fs.file_size(file_path)
-        snapshot.root.file.size.result(handle, retained_path, delta, size)
+        snapshot.root.file.size.result(handle, retained_path, delta,
+          delta_bytes, max_bytes, size)
 
 def snapshot.root.manifest.result(
   read_path: String,
   handle: Handle,
   delta: List<&1, ByteMemTable.Entry>,
+  delta_bytes: Nat,
+  max_bytes: Nat,
   result: Result<&1, &1, ByteManifestIo.Error, ByteManifest.ManifestValue>
 ) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
   match result:
@@ -2332,23 +2365,25 @@ def snapshot.root.manifest.result(
       IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
         (handle, Fail{Io{code, message}}))
     case Done{ByteManifest.Empty{}}:
-      IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
-        (handle, Done{SnapshotRoot{None{}, 0n, delta}}))
+      snapshot.root.reservation(handle, None{}, 0n, delta_bytes, delta,
+        max_bytes)
     case Done{ByteManifest.GenerationEmpty{}}:
-      IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
-        (handle, Done{SnapshotRoot{None{}, 0n, delta}}))
+      snapshot.root.reservation(handle, None{}, 0n, delta_bytes, delta,
+        max_bytes)
     case Done{ByteManifest.HasSst{}}:
       snapshot.root.file.size(handle,
-        path.clone.pair(read_path ++ "/SST"), delta)
+        path.clone.pair(read_path ++ "/SST"), delta, delta_bytes, max_bytes)
     case Done{ByteManifest.GenerationSst{file_id}}:
       snapshot.root.file.size(handle,
         path.clone.pair(ByteManifest.sst.generation.path(read_path, file_id)),
-        delta)
+        delta, delta_bytes, max_bytes)
 
 def snapshot.root.manifest(
   paths: String & String,
   handle: Handle,
-  delta: List<&1, ByteMemTable.Entry>
+  delta: List<&1, ByteMemTable.Entry>,
+  delta_bytes: Nat,
+  max_bytes: Nat
 ) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
   match paths:
     case (manifest_path, read_path):
@@ -2356,7 +2391,8 @@ def snapshot.root.manifest(
         manifest : Result<&1, &1, ByteManifestIo.Error,
           ByteManifest.ManifestValue> <-
             ByteManifestIo.read(manifest_path ++ "/MANIFEST")
-        snapshot.root.manifest.result(read_path, handle, delta, manifest)
+        snapshot.root.manifest.result(read_path, handle, delta, delta_bytes,
+          max_bytes, manifest)
 
 def snapshot.root.snapshot.paths(
   paths: String & String & String,
@@ -2364,39 +2400,37 @@ def snapshot.root.snapshot.paths(
   table: ByteMemTable.Table,
   state: HandleState,
   base_stats: VisibleStats.Stats,
-  delta: List<&1, ByteMemTable.Entry>
+  delta: List<&1, ByteMemTable.Entry>,
+  delta_bytes: Nat,
+  max_bytes: Nat
 ) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
   match paths:
     case (manifest_path, (read_path, retained_path)):
       snapshot.root.manifest((manifest_path, read_path),
-        Handle{retained_path, lock, table, state, base_stats}, delta)
+        Handle{retained_path, lock, table, state, base_stats}, delta,
+        delta_bytes, max_bytes)
 
 def snapshot.root.snapshot.delta(
   handle: Handle,
   copied: List<&1, ByteMemTable.Entry>,
-  decision: SnapshotPolicy.Decision
+  delta_bytes: Nat,
+  max_bytes: Nat
 ) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
   match handle:
     case Handle{path, lock, table, state, base_stats}:
-      match decision:
-        case SnapshotPolicy.ResourceLimit{}:
-          IO.pure(Handle & Result<&1, &1, Error, SnapshotRoot>,
-            (Handle{path, lock, table, state, base_stats}, Fail{ResourceLimit{}}))
-        case SnapshotPolicy.Retained{_, _}:
-          snapshot.root.snapshot.paths(path.clone.triple(path), lock, table,
-            state, base_stats,
-            ByteMemTable.ordered_entries(ByteMemTable.Table{copied}))
+      snapshot.root.snapshot.paths(path.clone.triple(path), lock, table,
+        state, base_stats,
+        ByteMemTable.ordered_entries(ByteMemTable.Table{copied}), delta_bytes,
+        max_bytes)
 
 def snapshot.root.preflight.estimated(
   handle: Handle,
-  stats: VisibleStats.Stats,
+  _stats: VisibleStats.Stats,
   copied: List<&1, ByteMemTable.Entry>,
   delta_bytes: Nat,
   max_bytes: Nat
 ) -> IO(Handle & Result<&1, &1, Error, SnapshotRoot>):
-  snapshot.root.snapshot.delta(handle, copied,
-    SnapshotPolicy.reserve(0n, 0n,
-      snapshot.estimate(stats, delta_bytes), 1n, max_bytes))
+  snapshot.root.snapshot.delta(handle, copied, delta_bytes, max_bytes)
 
 def snapshot.root.preflight.ready(
   +path: String,

@@ -13,6 +13,12 @@ def Laws.snapshot_count_limit_is_rejected():
 def Laws.retained_byte_limit_is_rejected():
   {==}
 
+def Laws.snapshot_root_exact_sst_and_delta_budget_is_accepted():
+  {==}
+
+def Laws.snapshot_root_sst_and_delta_overflow_is_rejected():
+  {==}
+
 def Laws.first_reservation_starts_aggregate_accounting():
   {==}
 

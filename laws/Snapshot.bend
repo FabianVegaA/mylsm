@@ -13,6 +13,16 @@ law snapshot_count_limit_is_rejected:
 law retained_byte_limit_is_rejected:
   {Snapshot.reserve(1n, 9n, 4n, 2n, 12n) == Snapshot.ResourceLimit{} : Snapshot.Decision}
 
+# Admits a retained root when its SST and active delta exactly fit the byte limit.
+law snapshot_root_exact_sst_and_delta_budget_is_accepted:
+  {Snapshot.reserve(0n, 0n, Nat.add(96n, 32n), 1n, 128n) ==
+    Snapshot.Retained{1n, 128n} : Snapshot.Decision}
+
+# Rejects a retained root when its SST and active delta exceed the byte limit.
+law snapshot_root_sst_and_delta_overflow_is_rejected:
+  {Snapshot.reserve(0n, 0n, Nat.add(97n, 32n), 1n, 128n) ==
+    Snapshot.ResourceLimit{} : Snapshot.Decision}
+
 # Carries the first admitted reservation into the next admission decision.
 law first_reservation_starts_aggregate_accounting:
   {Snapshot.reserve(0n, 0n, 8n, 3n, 12n) == Snapshot.Retained{1n, 8n} : Snapshot.Decision}

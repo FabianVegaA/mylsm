@@ -161,8 +161,8 @@ def fixture.root(
         IO.die(Unit, 1, "snapshot root preflight failed")
     case (handle, Done{root}):
       match root:
-        case ByteDurableDb.SnapshotRoot{_, sst_bytes, _}:
-          match sst_bytes:
+        case ByteDurableDb.SnapshotRoot{_, retained_bytes, _}:
+          match retained_bytes:
             case 1n+rest:
               do IO<Unit>:
                 changed : ByteDurableDb.Handle &
@@ -175,19 +175,35 @@ def fixture.root(
               do IO<Unit>:
                 _handle_close : Result<&1, &1, ByteDurableDb.Error, Unit> <-
                   ByteDurableDb.close(handle)
-                IO.die(Unit, 1, "snapshot root did not track SST bytes")
+                IO.die(Unit, 1, "snapshot root did not track retained bytes")
 
 # Flushes the seed entry before capturing an SST-backed root.
+def fixture.root.limited(
+  pair: ByteDurableDb.Handle & Result<&1, &1, ByteDurableDb.Error, ByteDurableDb.SnapshotRoot>
+) -> IO(Unit):
+  match pair:
+    case (handle, Fail{ByteDurableDb.ResourceLimit{}}):
+      do IO<Unit>:
+        root : ByteDurableDb.Handle &
+          Result<&1, &1, ByteDurableDb.Error, ByteDurableDb.SnapshotRoot> <-
+            ByteDurableDb.snapshot_root_limited(1048576n, handle)
+        fixture.root(root)
+    case (handle, _):
+      do IO<Unit>:
+        _handle_close : Result<&1, &1, ByteDurableDb.Error, Unit> <-
+          ByteDurableDb.close(handle)
+        IO.die(Unit, 1, "snapshot root ignored retained SST byte limit")
+
 def fixture.flushed(
   pair: ByteDurableDb.Handle & Result<&1, &1, ByteDurableDb.Error, Unit>
 ) -> IO(Unit):
   match pair:
     case (handle, Done{Unit{}}):
       do IO<Unit>:
-        root : ByteDurableDb.Handle &
+        limited : ByteDurableDb.Handle &
           Result<&1, &1, ByteDurableDb.Error, ByteDurableDb.SnapshotRoot> <-
-            ByteDurableDb.snapshot_root_limited(1048576n, handle)
-        fixture.root(root)
+            ByteDurableDb.snapshot_root_limited(0n, handle)
+        fixture.root.limited(limited)
     case (handle, Fail{_}):
       do IO<Unit>:
         _handle_close : Result<&1, &1, ByteDurableDb.Error, Unit> <-
