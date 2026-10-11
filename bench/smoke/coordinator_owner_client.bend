@@ -2,6 +2,7 @@ import Base
 import ../../src/Console.bend as Console
 import ../../src/coordinator/Client.bend as Client
 import ../../src/coordinator/Protocol.bend as Protocol
+import ../../src/coordinator/UnixSocketIo.bend as UnixSocket
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # Converts a parsed hexadecimal fixture into its exact request bytes.
@@ -99,8 +100,54 @@ def put.request(endpoint: String) -> IO(Unit):
         bytes.from_hex("00ff"), bytes.from_hex("80ff00"))
     put.request.result(pair)
 
+def endpoint.clone.pair.go(
+  endpoint: String,
+  left: String,
+  right: String
+) -> String & String:
+  match endpoint:
+    case SNil{}: (String.reverse(left), String.reverse(right))
+    case SCon{+character, rest}:
+      endpoint.clone.pair.go(rest, SCon{character, left},
+        SCon{character, right})
+
+def endpoint.clone.pair(endpoint: String) -> String & String:
+  endpoint.clone.pair.go(endpoint, SNil{}, SNil{})
+
+def disconnect.connected(
+  pair: File & Result<&1, &1, UnixSocket.Error, Unit>
+) -> IO(Unit):
+  match pair:
+    case (client, Done{Unit{}}):
+      do IO<Unit>:
+        _closed : Unit <- File.close(client)
+        IO.print("OWNER_CLIENT_DISCONNECTED")
+    case (client, Fail{_}):
+      do IO<Unit>:
+        _closed : Unit <- File.close(client)
+        fail("coordinator disconnect fixture could not connect")
+
+def disconnect.created(
+  pair: Result<&1, &1, UnixSocket.Error, File> & String
+) -> IO(Unit):
+  match pair:
+    case (Done{client}, endpoint):
+      do IO<Unit>:
+        connected : File & Result<&1, &1, UnixSocket.Error, Unit> <-
+          UnixSocket.connect(client, endpoint)
+        disconnect.connected(connected)
+    case (Fail{_}, _): fail("coordinator disconnect fixture could not create socket")
+
+def disconnect.endpoint(paths: String & String) -> IO(Unit):
+  match paths:
+    case (endpoint, retained_endpoint):
+      do IO<Unit>:
+        created : Result<&1, &1, UnixSocket.Error, File> <- UnixSocket.create()
+        _disconnected : Unit <- disconnect.created((created, endpoint))
+        put.request(retained_endpoint)
+
 # Exercises a serialized binary put and read through independent IPC calls.
 def main() -> IO(Unit):
   do IO<Unit>:
     endpoint : String <- IO.try(String, Console.get_env("MYLSM_OWNER_ENDPOINT"))
-    put.request(endpoint)
+    disconnect.endpoint(endpoint.clone.pair(endpoint))
