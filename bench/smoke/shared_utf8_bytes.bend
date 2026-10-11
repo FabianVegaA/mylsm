@@ -135,13 +135,15 @@ def verify.snapshot.value(
   match valid:
     case True{}:
       do IO<Unit>:
-        _closed : Unit = MyLSM.Utf8.snapshot.close(snapshot)
+        _closed : Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
+          MyLSM.Utf8.snapshot.close(snapshot)
         pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Cursor> <-
           MyLSM.Utf8.scan_range(handle, Some{"valid"}, None{})
         verify.scan.opened(pair)
     case False{}:
       do IO<Unit>:
-        _closed : Unit = MyLSM.Utf8.snapshot.close(snapshot)
+        _closed : Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
+          MyLSM.Utf8.snapshot.close(snapshot)
         _handle : Result<&1, &1, MyLSM.Utf8.Error, Unit> <- MyLSM.Utf8.close(handle)
         IO.die(Unit, 1, "UTF-8 snapshot changed its text value")
 
@@ -154,7 +156,8 @@ def verify.snapshot.read(
       verify.snapshot.value(handle, snapshot, String.eq(value, "á"))
     case (snapshot, _):
       do IO<Unit>:
-        _closed : Unit = MyLSM.Utf8.snapshot.close(snapshot)
+        _closed : Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
+          MyLSM.Utf8.snapshot.close(snapshot)
         _handle : Result<&1, &1, MyLSM.Utf8.Error, Unit> <- MyLSM.Utf8.close(handle)
         IO.die(Unit, 1, "UTF-8 snapshot omitted its text value")
 
@@ -163,7 +166,11 @@ def verify.snapshot.opened(
 ) -> IO(Unit):
   match pair:
     case (handle, Done{snapshot}):
-      verify.snapshot.read(handle, MyLSM.Utf8.snapshot.get(snapshot, "valid"))
+      do IO<Unit>:
+        value : MyLSM.Utf8.Snapshot &
+          Result<&1, &1, MyLSM.Utf8.Error, Maybe<&1, String>> <-
+            MyLSM.Utf8.snapshot.get(snapshot, "valid")
+        verify.snapshot.read(handle, value)
     case (handle, Fail{_}):
       do IO<Unit>:
         _closed : Result<&1, &1, MyLSM.Utf8.Error, Unit> <- MyLSM.Utf8.close(handle)

@@ -33,6 +33,7 @@ import ./src/coordinator/EndpointPath.bend as EndpointPath
 import ./src/coordinator/OwnerGenerationIo.bend as OwnerGenerationIo
 import ./src/coordinator/Client.bend as OwnerClient
 import ./src/coordinator/ByteClient.bend as OwnerByteClient
+import ./src/coordinator/CursorCodec.bend as OwnerCursorCodec
 import ./src/coordinator/Protocol.bend as CoordinatorProtocol
 import ./src/coordinator/StatsCodec.bend as OwnerStatsCodec
 import ./src/coordinator/Io.bend as OwnerIo
@@ -79,6 +80,7 @@ type Bytes.Stats is Data:
 
 type Bytes.Snapshot is Type:
   ByteSnapshot{entries: List<&1, ByteMemTable.Entry>}
+  RemoteByteSnapshot{session: OwnerClient.Session, snapshot_id: U32}
 
 type Bytes.BackupStream is Type:
   ByteBackupStream{inner: BackupCodec.Stream}
@@ -192,6 +194,7 @@ type Bytes.ScanBounds is Type:
 type Bytes.Cursor is Type:
   ByteCursor{inner: ByteRangeCursor.Cursor, bounds: ByteRangeCursor.Bounds}
   ByteStreamCursor{inner: VisibleByteCursor.Cursor}
+  ByteOwnerCursor{session: OwnerClient.Session, snapshot_id: U32, cursor_id: U32}
   ByteFailureCursor{error: Bytes.Error}
   ByteClosedCursor{}
 
@@ -609,6 +612,25 @@ def Bytes.snapshot.raw(
     case (raw, Fail{error}): (ByteHandle{raw}, Fail{Bytes.error(error)})
     case (raw, Done{entries}): (ByteHandle{raw}, Done{ByteSnapshot{entries}})
 
+def Bytes.snapshot.remote.opened.sessions(
+  sessions: OwnerClient.Session & OwnerClient.Session,
+  snapshot_id: U32
+) -> Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Snapshot>:
+  match sessions:
+    case (handle_session, snapshot_session):
+      (RemoteByteHandle{handle_session},
+        Done{RemoteByteSnapshot{snapshot_session, snapshot_id}})
+
+def Bytes.snapshot.remote.opened(
+  pair: OwnerClient.Session & Result<&1, &1, OwnerClient.Error, U32>
+) -> Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Snapshot>:
+  match pair:
+    case (session, Fail{error}):
+      (RemoteByteHandle{session}, Fail{Bytes.owner.error(error)})
+    case (session, Done{snapshot_id}):
+      Bytes.snapshot.remote.opened.sessions(OwnerClient.session.clone(session),
+        snapshot_id)
+
 def Bytes.snapshot(handle: Bytes.Handle) -> IO(Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Snapshot>):
   match handle:
     case ByteHandle{raw}:
@@ -617,8 +639,33 @@ def Bytes.snapshot(handle: Bytes.Handle) -> IO(Bytes.Handle & Result<&1, &1, Byt
           RawByteDb.snapshot_limited(Bytes.snapshot.limit(), raw)
         return Bytes.snapshot.raw(pair)
     case RemoteByteHandle{session}:
-      IO.pure(Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Snapshot>,
-        (RemoteByteHandle{session}, Fail{UnsupportedOperation{}}))
+      do IO<Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Snapshot>>:
+        pair : OwnerClient.Session & Result<&1, &1, OwnerClient.Error, U32> <-
+          OwnerByteClient.snapshot.open(session)
+        return Bytes.snapshot.remote.opened(pair)
+
+def Bytes.snapshot.clone.local(
+  entries: List<&1, ByteMemTable.Entry> & List<&1, ByteMemTable.Entry>
+) -> Bytes.Snapshot & Bytes.Snapshot:
+  match entries:
+    case (first, second): (ByteSnapshot{first}, ByteSnapshot{second})
+
+def Bytes.snapshot.clone.remote(
+  +snapshot_id: U32,
+  sessions: OwnerClient.Session & OwnerClient.Session
+) -> Bytes.Snapshot & Bytes.Snapshot:
+  match sessions:
+    case (first, second):
+      (RemoteByteSnapshot{first, snapshot_id},
+        RemoteByteSnapshot{second, snapshot_id})
+
+def Bytes.snapshot.clone(snapshot: Bytes.Snapshot) -> Bytes.Snapshot & Bytes.Snapshot:
+  match snapshot:
+    case ByteSnapshot{entries}:
+      Bytes.snapshot.clone.local(ByteMemTable.entries.clone(entries))
+    case RemoteByteSnapshot{session, +snapshot_id}:
+      Bytes.snapshot.clone.remote(snapshot_id,
+        OwnerClient.session.clone(session))
 
 def Bytes.snapshot.cursor.ready(
   snapshot_entries: List<&1, ByteMemTable.Entry>,
@@ -657,22 +704,85 @@ def Bytes.snapshot.cursor(
         ByteMemTable.entries.clone(entries),
         ByteRangeCursor.bounds.clone(ByteRangeCursor.Bounds{lower, upper, prefix}))
 
+def Bytes.snapshot.cursor.result(
+  pair: Bytes.Snapshot & Bytes.Cursor
+) -> Bytes.Snapshot & Result<&1, &1, Bytes.Error, Bytes.Cursor>:
+  match pair:
+    case (snapshot, cursor): (snapshot, Done{cursor})
+
+def Bytes.snapshot.cursor.remote.sessions(
+  +snapshot_id: U32,
+  +cursor_id: U32,
+  sessions: OwnerClient.Session & OwnerClient.Session
+) -> Bytes.Snapshot & Result<&1, &1, Bytes.Error, Bytes.Cursor>:
+  match sessions:
+    case (snapshot_session, cursor_session):
+      (RemoteByteSnapshot{snapshot_session, snapshot_id},
+        Done{ByteOwnerCursor{cursor_session, snapshot_id, cursor_id}})
+
+def Bytes.snapshot.cursor.remote(
+  snapshot_id: U32,
+  pair: OwnerClient.Session & Result<&1, &1, OwnerClient.Error, U32>
+) -> Bytes.Snapshot & Result<&1, &1, Bytes.Error, Bytes.Cursor>:
+  match pair:
+    case (session, Fail{error}):
+      (RemoteByteSnapshot{session, snapshot_id}, Fail{Bytes.owner.error(error)})
+    case (session, Done{cursor_id}):
+      Bytes.snapshot.cursor.remote.sessions(snapshot_id, cursor_id,
+        OwnerClient.session.clone(session))
+
+def Bytes.snapshot.scan_range.local(
+  snapshot: Bytes.Snapshot,
+  lower: Maybe<&1, PackedBytes.Bytes>,
+  upper: Maybe<&1, PackedBytes.Bytes>
+) -> Bytes.Snapshot & Result<&1, &1, Bytes.Error, Bytes.Cursor>:
+  match snapshot:
+    case ByteSnapshot{entries}:
+      Bytes.snapshot.cursor.result(
+        Bytes.snapshot.cursor(entries, ScanBounds{lower, upper, None{}}))
+    case RemoteByteSnapshot{_, _}:
+      (snapshot, Fail{UnsupportedOperation{}})
+
+def Bytes.snapshot.scan_prefix.local(
+  snapshot: Bytes.Snapshot,
+  prefix: PackedBytes.Bytes
+) -> Bytes.Snapshot & Result<&1, &1, Bytes.Error, Bytes.Cursor>:
+  match snapshot:
+    case ByteSnapshot{entries}:
+      Bytes.snapshot.cursor.result(Bytes.snapshot.cursor(entries,
+        ScanBounds{None{}, None{}, Some{prefix}}))
+    case RemoteByteSnapshot{_, _}:
+      (snapshot, Fail{UnsupportedOperation{}})
+
 def Bytes.snapshot.scan_range(
   snapshot: Bytes.Snapshot,
   lower: Maybe<&1, PackedBytes.Bytes>,
   upper: Maybe<&1, PackedBytes.Bytes>
-) -> Bytes.Snapshot & Bytes.Cursor:
+) -> IO(Bytes.Snapshot & Result<&1, &1, Bytes.Error, Bytes.Cursor>):
   match snapshot:
     case ByteSnapshot{entries}:
-      Bytes.snapshot.cursor(entries, ScanBounds{lower, upper, None{}})
+      IO.pure(Bytes.Snapshot & Result<&1, &1, Bytes.Error, Bytes.Cursor>,
+        Bytes.snapshot.scan_range.local(snapshot, lower, upper))
+    case RemoteByteSnapshot{session, +snapshot_id}:
+      do IO<Bytes.Snapshot & Result<&1, &1, Bytes.Error, Bytes.Cursor>>:
+        pair : OwnerClient.Session & Result<&1, &1, OwnerClient.Error, U32> <-
+          OwnerByteClient.snapshot.cursor.open.range(session, snapshot_id,
+            lower, upper)
+        return Bytes.snapshot.cursor.remote(snapshot_id, pair)
 
 def Bytes.snapshot.scan_prefix(
   snapshot: Bytes.Snapshot,
   prefix: PackedBytes.Bytes
-) -> Bytes.Snapshot & Bytes.Cursor:
+) -> IO(Bytes.Snapshot & Result<&1, &1, Bytes.Error, Bytes.Cursor>):
   match snapshot:
     case ByteSnapshot{entries}:
-      Bytes.snapshot.cursor(entries, ScanBounds{None{}, None{}, Some{prefix}})
+      IO.pure(Bytes.Snapshot & Result<&1, &1, Bytes.Error, Bytes.Cursor>,
+        Bytes.snapshot.scan_prefix.local(snapshot, prefix))
+    case RemoteByteSnapshot{session, +snapshot_id}:
+      do IO<Bytes.Snapshot & Result<&1, &1, Bytes.Error, Bytes.Cursor>>:
+        pair : OwnerClient.Session & Result<&1, &1, OwnerClient.Error, U32> <-
+          OwnerByteClient.snapshot.cursor.open.prefix(session, snapshot_id, prefix)
+        return Bytes.snapshot.cursor.remote(snapshot_id, pair)
 
 def Bytes.snapshot.get.result(
   pair: ByteMemTable.Table & Maybe<&1, PackedBytes.Bytes>
@@ -680,16 +790,56 @@ def Bytes.snapshot.get.result(
   match pair:
     case (ByteMemTable.Table{entries}, value): (ByteSnapshot{entries}, value)
 
+def Bytes.snapshot.get.local.result(
+  pair: ByteMemTable.Table & Maybe<&1, PackedBytes.Bytes>
+) -> Bytes.Snapshot & Result<&1, &1, Bytes.Error, Maybe<&1, PackedBytes.Bytes>>:
+  match pair:
+    case (ByteMemTable.Table{entries}, value):
+      (ByteSnapshot{entries}, Done{value})
+
+def Bytes.snapshot.get.remote(
+  snapshot_id: U32,
+  pair: OwnerClient.Session & Result<&1, &1, OwnerClient.Error, Maybe<&1, PackedBytes.Bytes>>
+) -> Bytes.Snapshot & Result<&1, &1, Bytes.Error, Maybe<&1, PackedBytes.Bytes>>:
+  match pair:
+    case (session, Fail{error}):
+      (RemoteByteSnapshot{session, snapshot_id}, Fail{Bytes.owner.error(error)})
+    case (session, Done{value}):
+      (RemoteByteSnapshot{session, snapshot_id}, Done{value})
+
 def Bytes.snapshot.get(
   snapshot: Bytes.Snapshot,
   key: PackedBytes.Bytes
-) -> Bytes.Snapshot & Maybe<&1, PackedBytes.Bytes>:
+) -> IO(Bytes.Snapshot & Result<&1, &1, Bytes.Error, Maybe<&1, PackedBytes.Bytes>>):
   match snapshot:
     case ByteSnapshot{entries}:
-      Bytes.snapshot.get.result(ByteMemTable.get(ByteMemTable.Table{entries}, key))
+      IO.pure(Bytes.Snapshot & Result<&1, &1, Bytes.Error, Maybe<&1, PackedBytes.Bytes>>,
+        Bytes.snapshot.get.local.result(ByteMemTable.get(
+          ByteMemTable.Table{entries}, key)))
+    case RemoteByteSnapshot{session, +snapshot_id}:
+      do IO<Bytes.Snapshot & Result<&1, &1, Bytes.Error, Maybe<&1, PackedBytes.Bytes>>>:
+        pair : OwnerClient.Session &
+          Result<&1, &1, OwnerClient.Error, Maybe<&1, PackedBytes.Bytes>> <-
+            OwnerByteClient.snapshot.get(session, snapshot_id, key)
+        return Bytes.snapshot.get.remote(snapshot_id, pair)
 
-def Bytes.snapshot.close(_snapshot: Bytes.Snapshot) -> Unit:
-  Unit{}
+
+def Bytes.snapshot.close.remote(
+  pair: OwnerClient.Session & Result<&1, &1, OwnerClient.Error, Unit>
+) -> Result<&1, &1, Bytes.Error, Unit>:
+  match pair:
+    case (_, Fail{error}): Fail{Bytes.owner.error(error)}
+    case (_, Done{Unit{}}): Done{Unit{}}
+
+def Bytes.snapshot.close(snapshot: Bytes.Snapshot) -> IO(Result<&1, &1, Bytes.Error, Unit>):
+  match snapshot:
+    case ByteSnapshot{_}:
+      IO.pure(Result<&1, &1, Bytes.Error, Unit>, Done{Unit{}})
+    case RemoteByteSnapshot{session, snapshot_id}:
+      do IO<Result<&1, &1, Bytes.Error, Unit>>:
+        pair : OwnerClient.Session & Result<&1, &1, OwnerClient.Error, Unit> <-
+          OwnerByteClient.snapshot.close(session, snapshot_id)
+        return Bytes.snapshot.close.remote(pair)
 
 def Bytes.backup.error(error: BackupCodec.Error) -> Bytes.Error:
   match error:
@@ -713,13 +863,20 @@ def Bytes.backup.snapshot(
     case (handle, Fail{error}): (handle, Fail{error})
     case (handle, Done{ByteSnapshot{entries}}):
       Bytes.backup.started(handle, BackupCodec.start(entries))
+    case (handle, Done{RemoteByteSnapshot{_, _}}):
+      (handle, Fail{UnsupportedOperation{}})
 
 # Opens a stable logical export from one retained database snapshot.
 def Bytes.backup(handle: Bytes.Handle) -> IO(Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.BackupStream>):
-  do IO<Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.BackupStream>>:
-    snapshot : Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Snapshot> <-
-      Bytes.snapshot(handle)
-    return Bytes.backup.snapshot(snapshot)
+  match handle:
+    case ByteHandle{_}:
+      do IO<Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.BackupStream>>:
+        snapshot : Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Snapshot> <-
+          Bytes.snapshot(handle)
+        return Bytes.backup.snapshot(snapshot)
+    case RemoteByteHandle{session}:
+      IO.pure(Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.BackupStream>,
+        (RemoteByteHandle{session}, Fail{UnsupportedOperation{}}))
 
 def Bytes.backup.next.result(
   result: Result<&1, &1, BackupCodec.Error, BackupCodec.Step>
@@ -763,6 +920,9 @@ def Bytes.backup_to.snapshot(
       do IO<Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>>:
         result : Result<&1, &1, BackupIo.Error, Unit> <- BackupIo.export(path, entries)
         return Bytes.backup_to.result(handle, result)
+    case (handle, Done{RemoteByteSnapshot{_, _}}):
+      IO.pure(Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>,
+        (handle, Fail{UnsupportedOperation{}}))
 
 def Bytes.backup_to.opened(
   path: String,
@@ -951,6 +1111,31 @@ def Bytes.snapshot.stream.step(step: Bytes.ScanStep) -> Bytes.StreamStep:
     case ScanEnd{cursor}: StreamEnd{cursor}
     case ScanFailure{error, cursor}: StreamFailure{error, cursor}
 
+def Bytes.owner.cursor.frame(
+  +snapshot_id: U32,
+  +cursor_id: U32,
+  pair: OwnerClient.Session & Result<&1, &1, OwnerClient.Error, OwnerCursorCodec.Frame>
+) -> Bytes.StreamStep:
+  match pair:
+    case (session, Fail{error}):
+      StreamFailure{Bytes.owner.error(error),
+        ByteOwnerCursor{session, snapshot_id, cursor_id}}
+    case (session, Done{OwnerCursorCodec.CursorEnd{}}):
+      StreamEnd{ByteClosedCursor{}}
+    case (session, Done{OwnerCursorCodec.CursorItem{key, value}}):
+      StreamItem{key, value, ByteOwnerCursor{session, snapshot_id, cursor_id}}
+
+def Bytes.scan_next.remote(
+  session: OwnerClient.Session,
+  +snapshot_id: U32,
+  +cursor_id: U32
+) -> IO(Bytes.StreamStep):
+  do IO<Bytes.StreamStep>:
+    pair : OwnerClient.Session &
+      Result<&1, &1, OwnerClient.Error, OwnerCursorCodec.Frame> <-
+        OwnerByteClient.snapshot.cursor.next(session, cursor_id)
+    return Bytes.owner.cursor.frame(snapshot_id, cursor_id, pair)
+
 def Bytes.scan_next_io.stream(cursor: VisibleByteCursor.Cursor) -> IO(Bytes.StreamStep):
   do IO<Bytes.StreamStep>:
     step : VisibleByteCursor.Step <- VisibleByteCursor.next(cursor)
@@ -974,6 +1159,11 @@ def Bytes.scan_close(cursor: Bytes.Cursor) -> IO(Result<&1, &1, Bytes.Error, Uni
   match cursor:
     case ByteStreamCursor{inner}:
       Bytes.scan_close_io.stream(inner)
+    case ByteOwnerCursor{session, _, cursor_id}:
+      do IO<Result<&1, &1, Bytes.Error, Unit>>:
+        pair : OwnerClient.Session & Result<&1, &1, OwnerClient.Error, Unit> <-
+          OwnerByteClient.snapshot.cursor.close(session, cursor_id)
+        return Bytes.snapshot.close.remote(pair)
     case ByteCursor{inner, _}:
       IO.pure(Result<&1, &1, Bytes.Error, Unit>, Done{Unit{}})
     case ByteClosedCursor{}:
@@ -1008,6 +1198,8 @@ def Bytes.snapshot.scan_next(cursor: Bytes.Cursor) -> Bytes.ScanStep:
   match cursor:
     case ByteCursor{inner, bounds}:
       Bytes.scan_next.cloned(inner, ByteRangeCursor.bounds.clone(bounds))
+    case ByteOwnerCursor{_, _, _}:
+      ScanFailure{UnsupportedOperation{}, ByteClosedCursor{}}
     case ByteFailureCursor{error}:
       ScanFailure{error, ByteClosedCursor{}}
     case _: ScanEnd{cursor}
@@ -1042,6 +1234,8 @@ def Bytes.scan_next(cursor: Bytes.Cursor) -> IO(Bytes.StreamStep):
   match cursor:
     case ByteStreamCursor{inner}:
       Bytes.scan_next_io.stream(inner)
+    case ByteOwnerCursor{session, snapshot_id, cursor_id}:
+      Bytes.scan_next.remote(session, snapshot_id, cursor_id)
     case ByteCursor{inner, bounds}:
       Bytes.scan_next_io.snapshot(inner, bounds)
     case ByteClosedCursor{}:
@@ -1059,6 +1253,8 @@ def Bytes.scan_seek(
   match cursor:
     case ByteStreamCursor{inner}:
       ByteStreamCursor{VisibleByteCursor.seek(inner, lower)}
+    case ByteOwnerCursor{_, _, _}:
+      ByteFailureCursor{UnsupportedOperation{}}
     case ByteCursor{_, _}:
       Bytes.snapshot.scan_seek(cursor, lower)
     case ByteClosedCursor{}: ByteClosedCursor{}
@@ -2061,95 +2257,109 @@ def Utf8.snapshot.get.decoded(
   result: Result<&1, &1, U32 & String, String>
 ) -> Utf8.Snapshot & Result<&1, &1, Utf8.Error, Maybe<&1, String>>:
   match result:
-    case Fail{_}:
-      (Utf8Snapshot{snapshot}, Fail{InvalidUtf8{}})
-    case Done{text}:
-      (Utf8Snapshot{snapshot}, Done{Some{text}})
+    case Fail{_}: (Utf8Snapshot{snapshot}, Fail{InvalidUtf8{}})
+    case Done{text}: (Utf8Snapshot{snapshot}, Done{Some{text}})
 
 def Utf8.snapshot.get.result(
-  pair: Bytes.Snapshot & Maybe<&1, PackedBytes.Bytes>
+  pair: Bytes.Snapshot & Result<&1, &1, Bytes.Error, Maybe<&1, PackedBytes.Bytes>>
 ) -> Utf8.Snapshot & Result<&1, &1, Utf8.Error, Maybe<&1, String>>:
   match pair:
-    case (snapshot, None{}):
-      (Utf8Snapshot{snapshot}, Done{None{}})
-    case (snapshot, Some{value}):
+    case (snapshot, Fail{error}): (Utf8Snapshot{snapshot}, Fail{Utf8Failure{error}})
+    case (snapshot, Done{None{}}): (Utf8Snapshot{snapshot}, Done{None{}})
+    case (snapshot, Done{Some{value}}):
       Utf8.snapshot.get.decoded(snapshot, Utf8Codec.to_string_strict(value))
 
 def Utf8.snapshot.get.encoded(
   snapshot: Bytes.Snapshot,
   encoded: Result<&1, &1, Utf8.Error, PackedBytes.Bytes>
-) -> Utf8.Snapshot & Result<&1, &1, Utf8.Error, Maybe<&1, String>>:
+) -> IO(Utf8.Snapshot & Result<&1, &1, Utf8.Error, Maybe<&1, String>>):
   match encoded:
     case Fail{error}:
-      (Utf8Snapshot{snapshot}, Fail{error})
+      IO.pure(Utf8.Snapshot & Result<&1, &1, Utf8.Error, Maybe<&1, String>>,
+        (Utf8Snapshot{snapshot}, Fail{error}))
     case Done{key}:
-      Utf8.snapshot.get.result(Bytes.snapshot.get(snapshot, key))
+      do IO<Utf8.Snapshot & Result<&1, &1, Utf8.Error, Maybe<&1, String>>>:
+        pair : Bytes.Snapshot &
+          Result<&1, &1, Bytes.Error, Maybe<&1, PackedBytes.Bytes>> <-
+            Bytes.snapshot.get(snapshot, key)
+        return Utf8.snapshot.get.result(pair)
 
 def Utf8.snapshot.get(
   snapshot: Utf8.Snapshot,
   +key: String
-) -> Utf8.Snapshot & Result<&1, &1, Utf8.Error, Maybe<&1, String>>:
+) -> IO(Utf8.Snapshot & Result<&1, &1, Utf8.Error, Maybe<&1, String>>):
   match snapshot:
     case Utf8Snapshot{inner}:
       Utf8.snapshot.get.encoded(inner, Utf8.encode(key))
 
 def Utf8.snapshot.range.opened(
-  pair: Bytes.Snapshot & Bytes.Cursor
+  pair: Bytes.Snapshot & Result<&1, &1, Bytes.Error, Bytes.Cursor>
 ) -> Utf8.Snapshot & Result<&1, &1, Utf8.Error, Utf8.Cursor>:
   match pair:
-    case (snapshot, cursor):
+    case (snapshot, Fail{error}): (Utf8Snapshot{snapshot}, Fail{Utf8Failure{error}})
+    case (snapshot, Done{cursor}):
       (Utf8Snapshot{snapshot}, Done{Utf8Cursor{cursor, Utf8CursorActive{}}})
 
 def Utf8.snapshot.range.result(
   snapshot: Bytes.Snapshot,
   lower: Result<&1, &1, Utf8.Error, Maybe<&1, PackedBytes.Bytes>>,
   upper: Result<&1, &1, Utf8.Error, Maybe<&1, PackedBytes.Bytes>>
-) -> Utf8.Snapshot & Result<&1, &1, Utf8.Error, Utf8.Cursor>:
+) -> IO(Utf8.Snapshot & Result<&1, &1, Utf8.Error, Utf8.Cursor>):
   match lower upper:
     case Fail{error} _:
-      (Utf8Snapshot{snapshot}, Fail{error})
+      IO.pure(Utf8.Snapshot & Result<&1, &1, Utf8.Error, Utf8.Cursor>,
+        (Utf8Snapshot{snapshot}, Fail{error}))
     case Done{_} Fail{error}:
-      (Utf8Snapshot{snapshot}, Fail{error})
+      IO.pure(Utf8.Snapshot & Result<&1, &1, Utf8.Error, Utf8.Cursor>,
+        (Utf8Snapshot{snapshot}, Fail{error}))
     case Done{lower_bound} Done{upper_bound}:
-      Utf8.snapshot.range.opened(Bytes.snapshot.scan_range(snapshot,
-        lower_bound, upper_bound))
+      do IO<Utf8.Snapshot & Result<&1, &1, Utf8.Error, Utf8.Cursor>>:
+        pair : Bytes.Snapshot & Result<&1, &1, Bytes.Error, Bytes.Cursor> <-
+          Bytes.snapshot.scan_range(snapshot, lower_bound, upper_bound)
+        return Utf8.snapshot.range.opened(pair)
 
 def Utf8.snapshot.scan_range(
   snapshot: Utf8.Snapshot,
   lower: Maybe<&2, String>,
   upper: Maybe<&2, String>
-) -> Utf8.Snapshot & Result<&1, &1, Utf8.Error, Utf8.Cursor>:
+) -> IO(Utf8.Snapshot & Result<&1, &1, Utf8.Error, Utf8.Cursor>):
   match snapshot:
     case Utf8Snapshot{inner}:
       Utf8.snapshot.range.result(inner, Utf8.scan.bound(lower), Utf8.scan.bound(upper))
 
 def Utf8.snapshot.prefix.opened(
-  pair: Bytes.Snapshot & Bytes.Cursor
+  pair: Bytes.Snapshot & Result<&1, &1, Bytes.Error, Bytes.Cursor>
 ) -> Utf8.Snapshot & Result<&1, &1, Utf8.Error, Utf8.Cursor>:
   Utf8.snapshot.range.opened(pair)
 
-def Utf8.snapshot.prefix.encoded(
+def Utf8.snapshot.scan_prefix.encoded(
   snapshot: Bytes.Snapshot,
   encoded: Result<&1, &1, Utf8.Error, PackedBytes.Bytes>
-) -> Utf8.Snapshot & Result<&1, &1, Utf8.Error, Utf8.Cursor>:
+) -> IO(Utf8.Snapshot & Result<&1, &1, Utf8.Error, Utf8.Cursor>):
   match encoded:
     case Fail{error}:
-      (Utf8Snapshot{snapshot}, Fail{error})
-    case Done{prefix}:
-      Utf8.snapshot.prefix.opened(Bytes.snapshot.scan_prefix(snapshot, prefix))
+      IO.pure(Utf8.Snapshot & Result<&1, &1, Utf8.Error, Utf8.Cursor>,
+        (Utf8Snapshot{snapshot}, Fail{error}))
+    case Done{bytes}:
+      do IO<Utf8.Snapshot & Result<&1, &1, Utf8.Error, Utf8.Cursor>>:
+        pair : Bytes.Snapshot & Result<&1, &1, Bytes.Error, Bytes.Cursor> <-
+          Bytes.snapshot.scan_prefix(snapshot, bytes)
+        return Utf8.snapshot.prefix.opened(pair)
 
 def Utf8.snapshot.scan_prefix(
   snapshot: Utf8.Snapshot,
   +prefix: String
-) -> Utf8.Snapshot & Result<&1, &1, Utf8.Error, Utf8.Cursor>:
+) -> IO(Utf8.Snapshot & Result<&1, &1, Utf8.Error, Utf8.Cursor>):
   match snapshot:
     case Utf8Snapshot{inner}:
-      Utf8.snapshot.prefix.encoded(inner, Utf8.encode(prefix))
+      Utf8.snapshot.scan_prefix.encoded(inner, Utf8.encode(prefix))
 
-def Utf8.snapshot.close(snapshot: Utf8.Snapshot) -> Unit:
+def Utf8.snapshot.close(snapshot: Utf8.Snapshot) -> IO(Result<&1, &1, Utf8.Error, Unit>):
   match snapshot:
     case Utf8Snapshot{inner}:
-      Bytes.snapshot.close(inner)
+      do IO<Result<&1, &1, Utf8.Error, Unit>>:
+        result : Result<&1, &1, Bytes.Error, Unit> <- Bytes.snapshot.close(inner)
+        return Utf8.close.result(result)
 
 # Opens the same logical byte backup through the text facade.
 def Utf8.backup.started(

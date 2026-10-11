@@ -205,12 +205,14 @@ def snapshot.cursor.item.checked(
         case True{}:
           do IO<Unit>:
             _cursor : MyLSM.Bytes.Cursor = MyLSM.Bytes.snapshot.scan_close(cursor)
-            _closed : Unit = MyLSM.Bytes.snapshot.close(snapshot)
+            _closed : Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
+              MyLSM.Bytes.snapshot.close(snapshot)
             snapshot.value.verified(handle, True{})
         case False{}:
           do IO<Unit>:
             _cursor : MyLSM.Bytes.Cursor = MyLSM.Bytes.snapshot.scan_close(cursor)
-            _closed : Unit = MyLSM.Bytes.snapshot.close(snapshot)
+            _closed : Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
+              MyLSM.Bytes.snapshot.close(snapshot)
             _handle : Result<&1, &1, MyLSM.Bytes.Error, Unit> <- MyLSM.Bytes.close(handle)
             die("byte snapshot scan returned an unexpected pair")
 def snapshot.cursor.item(
@@ -225,29 +227,44 @@ def snapshot.cursor.item(
     case MyLSM.ScanSkip{next_cursor}:
       do IO<Unit>:
         _cursor : MyLSM.Bytes.Cursor = MyLSM.Bytes.snapshot.scan_close(next_cursor)
-        _closed : Unit = MyLSM.Bytes.snapshot.close(snapshot)
+        _closed : Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
+              MyLSM.Bytes.snapshot.close(snapshot)
         _handle : Result<&1, &1, MyLSM.Bytes.Error, Unit> <- MyLSM.Bytes.close(handle)
         die("byte snapshot scan unexpectedly skipped its first entry")
     case MyLSM.ScanEnd{next_cursor}:
       do IO<Unit>:
         _cursor : MyLSM.Bytes.Cursor = MyLSM.Bytes.snapshot.scan_close(next_cursor)
-        _closed : Unit = MyLSM.Bytes.snapshot.close(snapshot)
+        _closed : Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
+              MyLSM.Bytes.snapshot.close(snapshot)
         _handle : Result<&1, &1, MyLSM.Bytes.Error, Unit> <- MyLSM.Bytes.close(handle)
         die("byte snapshot scan ended before its first entry")
     case MyLSM.ScanFailure{_, next_cursor}:
       do IO<Unit>:
         _cursor : MyLSM.Bytes.Cursor = MyLSM.Bytes.snapshot.scan_close(next_cursor)
-        _closed : Unit = MyLSM.Bytes.snapshot.close(snapshot)
+        _closed : Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
+              MyLSM.Bytes.snapshot.close(snapshot)
         _handle : Result<&1, &1, MyLSM.Bytes.Error, Unit> <- MyLSM.Bytes.close(handle)
         die("byte snapshot scan failed before its first entry")
 
+def snapshot.step(step: MyLSM.Bytes.StreamStep) -> MyLSM.Bytes.ScanStep:
+  match step:
+    case MyLSM.StreamItem{key, value, cursor}:
+      MyLSM.ScanItem{key, value, cursor}
+    case MyLSM.StreamSkip{cursor}: MyLSM.ScanSkip{cursor}
+    case MyLSM.StreamEnd{cursor}: MyLSM.ScanEnd{cursor}
+    case MyLSM.StreamFailure{error, cursor}:
+      MyLSM.ScanFailure{error, cursor}
+
 def snapshot.cursor.opened(
   handle: MyLSM.Bytes.Handle,
-  pair: MyLSM.Bytes.Snapshot & MyLSM.Bytes.Cursor
+  pair: MyLSM.Bytes.Snapshot & Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Cursor>
 ) -> IO(Unit):
   match pair:
-    case (snapshot, cursor):
-      snapshot.cursor.item(handle, snapshot, MyLSM.Bytes.snapshot.scan_next(cursor))
+    case (_, Fail{_}): die("byte snapshot cursor could not open")
+    case (snapshot, Done{cursor}):
+      do IO<Unit>:
+        step : MyLSM.Bytes.StreamStep <- MyLSM.Bytes.scan_next(cursor)
+        snapshot.cursor.item(handle, snapshot, snapshot.step(step))
 
 def snapshot.value.result(
   snapshot: MyLSM.Bytes.Snapshot,
@@ -256,24 +273,28 @@ def snapshot.value.result(
 ) -> IO(Unit):
       match valid:
         case True{}:
-          snapshot.cursor.opened(handle,
-            MyLSM.Bytes.snapshot.scan_range(snapshot, Some{bytes("61")}, None{}))
+          do IO<Unit>:
+            opened : MyLSM.Bytes.Snapshot &
+              Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Cursor> <-
+                MyLSM.Bytes.snapshot.scan_range(snapshot, Some{bytes("61")}, None{})
+            snapshot.cursor.opened(handle, opened)
         case False{}:
           do IO<Unit>:
-            _closed : Unit = MyLSM.Bytes.snapshot.close(snapshot)
+            _closed : Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
+              MyLSM.Bytes.snapshot.close(snapshot)
             _handle : Result<&1, &1, MyLSM.Bytes.Error, Unit> <- MyLSM.Bytes.close(handle)
             die("byte snapshot returned the wrong value")
 
 def snapshot.read(
   handle: MyLSM.Bytes.Handle,
-  pair: MyLSM.Bytes.Snapshot & Maybe<&1, Bytes.Bytes>
+  pair: MyLSM.Bytes.Snapshot & Result<&1, &1, MyLSM.Bytes.Error, Maybe<&1, Bytes.Bytes>>
 ) -> IO(Unit):
   match pair:
-    case (snapshot, Some{value}):
+    case (snapshot, Done{Some{value}}):
       snapshot.value.result(snapshot, handle, equal.result(Bytes.eq(value, bytes("31"))))
-    case (snapshot, None{}):
+    case (snapshot, _):
       do IO<Unit>:
-        _closed : Unit = MyLSM.Bytes.snapshot.close(snapshot)
+        _closed : Result<&1, &1, MyLSM.Bytes.Error, Unit> <- MyLSM.Bytes.snapshot.close(snapshot)
         _handle : Result<&1, &1, MyLSM.Bytes.Error, Unit> <- MyLSM.Bytes.close(handle)
         die("byte snapshot omitted its retained key")
 
@@ -282,7 +303,11 @@ def snapshot.opened(
 ) -> IO(Unit):
   match pair:
     case (handle, Done{snapshot}):
-      snapshot.read(handle, MyLSM.Bytes.snapshot.get(snapshot, bytes("61")))
+      do IO<Unit>:
+        value : MyLSM.Bytes.Snapshot &
+          Result<&1, &1, MyLSM.Bytes.Error, Maybe<&1, Bytes.Bytes>> <-
+            MyLSM.Bytes.snapshot.get(snapshot, bytes("61"))
+        snapshot.read(handle, value)
     case (handle, Fail{_}):
       do IO<Unit>:
         _closed : Result<&1, &1, MyLSM.Bytes.Error, Unit> <- MyLSM.Bytes.close(handle)

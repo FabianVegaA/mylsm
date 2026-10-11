@@ -114,31 +114,147 @@ def put.start(handle: MyLSM.Bytes.Handle) -> IO(Unit):
         bytes.from_hex("80ff"))
     put.result(written)
 
-def scan.step(cursor: MyLSM.Bytes.Cursor) -> MyLSM.Bytes.ScanStep:
-  MyLSM.Bytes.snapshot.scan_next(cursor)
+def scan.step(frame: MyLSM.Bytes.StreamStep) -> MyLSM.Bytes.ScanStep:
+  match frame:
+    case MyLSM.StreamItem{key, value, cursor}:
+      MyLSM.ScanItem{key, value, cursor}
+    case MyLSM.StreamSkip{cursor}: MyLSM.ScanSkip{cursor}
+    case MyLSM.StreamEnd{cursor}: MyLSM.ScanEnd{cursor}
+    case MyLSM.StreamFailure{error, cursor}: MyLSM.ScanFailure{error, cursor}
 
-def scan.failure.checked(
+def snapshot.cursor.second.checked(
   handle: MyLSM.Bytes.Handle,
+  snapshot: MyLSM.Bytes.Snapshot,
+  cursor: MyLSM.Bytes.Cursor,
+  valid: Bool
+) -> IO(Unit):
+  match valid:
+    case True{}:
+      do IO<Unit>:
+        _cursor : Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
+          MyLSM.Bytes.scan_close(cursor)
+        _snapshot : Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
+          MyLSM.Bytes.snapshot.close(snapshot)
+        put.start(handle)
+    case False{}: fail("remote snapshot cursor changed its second item")
+
+def snapshot.cursor.second.read(
+  handle: MyLSM.Bytes.Handle,
+  snapshot: MyLSM.Bytes.Snapshot,
+  step: MyLSM.Bytes.StreamStep
+) -> IO(Unit):
+  match step:
+    case MyLSM.StreamItem{key, value, cursor}:
+      snapshot.cursor.second.checked(handle, snapshot, cursor,
+        value.valid(Bytes.eq(key, bytes.from_hex("0103"))) &&
+          value.valid(Bytes.eq(value, bytes.from_hex("aabb"))))
+    case _: fail("remote snapshot cursor ended before the second item")
+
+def snapshot.cursor.second(
+  handle: MyLSM.Bytes.Handle,
+  snapshot: MyLSM.Bytes.Snapshot,
+  cursor: MyLSM.Bytes.Cursor,
+  closed: Result<&1, &1, MyLSM.Bytes.Error, Unit>
+) -> IO(Unit):
+  match closed:
+    case Fail{MyLSM.Busy{}}:
+      do IO<Unit>:
+        next : MyLSM.Bytes.StreamStep <- MyLSM.Bytes.scan_next(cursor)
+        snapshot.cursor.second.read(handle, snapshot, next)
+    case _: fail("owner closed a snapshot with a live cursor")
+
+def snapshot.cursor.first.cloned(
+  handle: MyLSM.Bytes.Handle,
+  cursor: MyLSM.Bytes.Cursor,
+  snapshots: MyLSM.Bytes.Snapshot & MyLSM.Bytes.Snapshot
+) -> IO(Unit):
+  match snapshots:
+    case (for_close, for_continue):
+      do IO<Unit>:
+        closed : Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
+          MyLSM.Bytes.snapshot.close(for_close)
+        snapshot.cursor.second(handle, for_continue, cursor, closed)
+
+def snapshot.cursor.first.checked(
+  handle: MyLSM.Bytes.Handle,
+  snapshot: MyLSM.Bytes.Snapshot,
+  cursor: MyLSM.Bytes.Cursor,
+  valid: Bool
+) -> IO(Unit):
+  match valid:
+    case True{}:
+      snapshot.cursor.first.cloned(handle, cursor,
+        MyLSM.Bytes.snapshot.clone(snapshot))
+    case False{}: fail("remote snapshot cursor changed its first item")
+
+def snapshot.cursor.first(
+  handle: MyLSM.Bytes.Handle,
+  snapshot: MyLSM.Bytes.Snapshot,
   step: MyLSM.Bytes.ScanStep
 ) -> IO(Unit):
   match step:
-    case MyLSM.ScanFailure{MyLSM.UnsupportedOperation{}, closed}:
-      put.start(handle)
-    case _: fail("remote scan did not report UnsupportedOperation")
+    case MyLSM.ScanItem{key, value, cursor}:
+      snapshot.cursor.first.checked(handle, snapshot, cursor,
+        value.valid(Bytes.eq(key, bytes.from_hex("00ff"))) &&
+          value.valid(Bytes.eq(value, bytes.from_hex("80ff00"))))
+    case _: fail("remote snapshot cursor returned no first item")
 
-def scan.failure(pair: MyLSM.Bytes.Handle & MyLSM.Bytes.Cursor) -> IO(Unit):
+def snapshot.cursor.opened(
+  handle: MyLSM.Bytes.Handle,
+  pair: MyLSM.Bytes.Snapshot & Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Cursor>
+) -> IO(Unit):
   match pair:
-    case (handle, cursor):
+    case (snapshot, Done{cursor}):
       do IO<Unit>:
-        step : MyLSM.Bytes.ScanStep <- IO.pure(MyLSM.Bytes.ScanStep,
-          scan.step(cursor))
-        scan.failure.checked(handle, step)
+        first : MyLSM.Bytes.StreamStep <- MyLSM.Bytes.scan_next(cursor)
+        snapshot.cursor.first(handle, snapshot, scan.step(first))
+    case _: fail("public owner snapshot cursor could not open")
+
+def snapshot.read.checked(
+  handle: MyLSM.Bytes.Handle,
+  snapshot: MyLSM.Bytes.Snapshot,
+  valid: Bool
+) -> IO(Unit):
+  match valid:
+    case True{}:
+      do IO<Unit>:
+        opened : MyLSM.Bytes.Snapshot &
+          Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Cursor> <-
+            MyLSM.Bytes.snapshot.scan_range(snapshot, None{}, None{})
+        snapshot.cursor.opened(handle, opened)
+    case False{}: fail("public owner snapshot changed the binary value")
+
+def snapshot.read(
+  handle: MyLSM.Bytes.Handle,
+  pair: MyLSM.Bytes.Snapshot & Result<&1, &1, MyLSM.Bytes.Error, Maybe<&1, Bytes.Bytes>>
+) -> IO(Unit):
+  match pair:
+    case (snapshot, Done{Some{value}}):
+      snapshot.read.checked(handle, snapshot,
+        value.valid(Bytes.eq(value, bytes.from_hex("80ff00"))))
+    case _: fail("public owner snapshot omitted the binary value")
+
+def snapshot.opened(
+  pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Snapshot>
+) -> IO(Unit):
+  match pair:
+    case (handle, Done{snapshot}):
+      do IO<Unit>:
+        read : MyLSM.Bytes.Snapshot &
+          Result<&1, &1, MyLSM.Bytes.Error, Maybe<&1, Bytes.Bytes>> <-
+            MyLSM.Bytes.snapshot.get(snapshot, bytes.from_hex("00ff"))
+        snapshot.read(handle, read)
+    case (_, Fail{_}): fail("public owner snapshot could not open")
 
 # Opens through the public facade while the owner holds the database lock.
 def opened(result: Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Handle>) -> IO(Unit):
   match result:
     case Done{handle}:
-      scan.failure(MyLSM.Bytes.snapshot.live_scan_range(handle, None{}, None{}))
+      do IO<Unit>:
+        snapshot : MyLSM.Bytes.Handle &
+          Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Snapshot> <-
+            MyLSM.Bytes.snapshot(handle)
+        snapshot.opened(snapshot)
     case Fail{_}: fail("public coordinator client could not open owner")
 
 def main() -> IO(Unit):

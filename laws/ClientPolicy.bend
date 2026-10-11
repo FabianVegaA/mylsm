@@ -1,6 +1,7 @@
 # A mutation can enter the dispatched state exactly once.
 import Base
 import ../src/coordinator/ClientPolicy.bend as ClientPolicy
+import ../src/coordinator/SessionPolicy.bend as SessionPolicy
 import ../src/coordinator/Protocol.bend as Protocol
 
 # Accepts one first dispatch.
@@ -137,3 +138,15 @@ law get_not_found_status_is_missing:
 law get_commit_unknown_status_is_failure:
   {ClientPolicy.response.get.status(Protocol.CommitUnknown{}) ==
     ClientPolicy.GetFailureStatus{Protocol.CommitUnknown{}} : ClientPolicy.GetStatus}
+
+# Preserves an available request number in both copied session states.
+law session_request_clone_preserves_available_number:
+  {SessionPolicy.requests.clone(ClientPolicy.RequestAvailable{19}) ==
+    (ClientPolicy.RequestAvailable{19}, ClientPolicy.RequestAvailable{19}) :
+      ClientPolicy.RequestSequence & ClientPolicy.RequestSequence}
+
+# Keeps exhaustion terminal in both copied session states.
+law session_request_clone_preserves_exhaustion:
+  {SessionPolicy.requests.clone(ClientPolicy.RequestExhausted{}) ==
+    (ClientPolicy.RequestExhausted{}, ClientPolicy.RequestExhausted{}) :
+      ClientPolicy.RequestSequence & ClientPolicy.RequestSequence}

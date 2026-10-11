@@ -76,3 +76,9 @@ def Laws.get_not_found_status_is_missing():
 
 def Laws.get_commit_unknown_status_is_failure():
   {==}
+
+def Laws.session_request_clone_preserves_available_number():
+  {==}
+
+def Laws.session_request_clone_preserves_exhaustion():
+  {==}

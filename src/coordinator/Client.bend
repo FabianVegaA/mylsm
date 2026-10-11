@@ -1,6 +1,7 @@
 import Base
 import ../ByteMemTable.bend as ByteMemTable
 import ./ClientPolicy.bend as Policy
+import ./SessionPolicy.bend as SessionPolicy
 import ./Io.bend as Io
 import ./Operation.bend as Operation
 import ./Protocol.bend as Protocol
@@ -409,6 +410,26 @@ def string.clone.pair(value: String) -> String & String:
 # Starts one client session with its first request identifier.
 def session.open(endpoint: String, generation: U32) -> Session:
   Session{endpoint, generation, Policy.RequestAvailable{1}}
+
+def session.clone.ready(
+  endpoints: String & String,
+  generations: U32 & U32,
+  requests: Policy.RequestSequence & Policy.RequestSequence
+) -> Session & Session:
+  match endpoints:
+    case (first_endpoint, second_endpoint):
+      match generations:
+        case (first_generation, second_generation):
+          match requests:
+            case (first_requests, second_requests):
+              (Session{first_endpoint, first_generation, first_requests},
+                Session{second_endpoint, second_generation, second_requests})
+
+def session.clone(session: Session) -> Session & Session:
+  match session:
+    case Session{endpoint, +generation, requests}:
+      session.clone.ready(string.clone.pair(endpoint),
+        (generation, generation), SessionPolicy.requests.clone(requests))
 
 def session.call.ready(
   endpoints: String & String,
