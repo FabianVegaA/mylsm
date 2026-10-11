@@ -7,7 +7,8 @@ DB="$WORK/db"
 SERVER_PID=
 CLIENT_ONE_PID=
 CLIENT_TWO_PID=
-trap 'for pid in "$CLIENT_ONE_PID" "$CLIENT_TWO_PID" "$SERVER_PID"; do if [[ -n "$pid" ]]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi; done; rm -rf "$WORK"' EXIT
+OWNER_BACKUP_PID=
+trap 'for pid in "$CLIENT_ONE_PID" "$CLIENT_TWO_PID" "$OWNER_BACKUP_PID" "$SERVER_PID"; do if [[ -n "$pid" ]]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi; done; rm -rf "$WORK"' EXIT
 
 bend "$ROOT/bench/smoke/coordinator_owner_socket.bend" -o "$WORK/owner-server"
 bend "$ROOT/bench/smoke/coordinator_owner_client.bend" -o "$WORK/owner-client"
@@ -45,8 +46,17 @@ wait "$CLIENT_TWO_PID"
 CLIENT_TWO_PID=
 MYLSM_DB_PATH="$DB" "$WORK/public-owner-client"
 MYLSM_DB_PATH="$DB" "$WORK/public-utf8-owner-client"
+MYLSM_DB_PATH="$DB" MYLSM_OWNER_ACTION=backup \
+MYLSM_BACKUP_PATH="$WORK/owner-backup" "$WORK/public-owner-client" &
+OWNER_BACKUP_PID=$!
 wait "$SERVER_PID"
 SERVER_PID=
+wait "$OWNER_BACKUP_PID"
+OWNER_BACKUP_PID=
+MYLSM_BACKUP_PATH="$WORK/owner-backup" \
+MYLSM_RESTORE_DESTINATION="$WORK/owner-restored" \
+MYLSM_RESTORE_CHECK_PATH="$WORK/owner-restored" \
+  bend "$ROOT/bench/smoke/public_owner_backup_restore.bend"
 cat "$WORK/server.log"
 if [[ -S "$DB/MYLSM.sock" ]]; then
   exit 1
