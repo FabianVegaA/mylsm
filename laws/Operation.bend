@@ -49,6 +49,23 @@ law nonempty_snapshot_open_is_rejected:
   {Operation.decode.payload(9, Bytes.new(1)) ==
     Operation.MalformedArguments{} : Operation.Decision}
 
+# Decodes a snapshot token separately from its unmodified binary key.
+law snapshot_get_keeps_raw_key_bytes:
+  {Operation.decode.payload(10, Bytes.concat([Operation.u32.bytes(7),
+    bytes.fixture(Bytes.from_hex("00ff"))])) ==
+    Operation.Decoded{Operation.SnapshotGet{7,
+      bytes.fixture(Bytes.from_hex("00ff"))}} : Operation.Decision}
+
+# Rejects snapshot reads without a complete four-byte token.
+law incomplete_snapshot_get_token_is_rejected:
+  {Operation.decode.payload(10, Bytes.new(3)) ==
+    Operation.MalformedArguments{} : Operation.Decision}
+
+# Allows an empty binary key after a complete token.
+law snapshot_get_accepts_empty_key:
+  {Operation.decode.payload(10, Operation.u32.bytes(7)) ==
+    Operation.Decoded{Operation.SnapshotGet{7, Bytes.new(0)}} : Operation.Decision}
+
 # Rejects flush arguments instead of silently ignoring trailing bytes.
 law nonempty_flush_is_rejected:
   {Operation.decode.payload(4, Bytes.new(1)) == Operation.MalformedArguments{} : Operation.Decision}

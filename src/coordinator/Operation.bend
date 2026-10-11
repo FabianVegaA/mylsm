@@ -15,6 +15,7 @@ type Operation is Type:
   Compact{}
   Stats{}
   SnapshotOpen{}
+  SnapshotGet{snapshot_id: U32, key: Bytes.Bytes}
 
 # Reports decoded arguments or a malformed/unsupported operation.
 type Decision is Type:
@@ -150,6 +151,58 @@ def batch.result(
     case Done{ByteWal.Batch{mutations}}:
       Decoded{WriteBatch{mutations}}
 
+def snapshot.get.key.sliced(pair: Bytes.Bytes & Bytes.Bytes) -> Bytes.Bytes:
+  match pair:
+    case (_, key): key
+
+def snapshot.get.decision(snapshot_id: U32, key: Bytes.Bytes) -> Decision:
+  Decoded{SnapshotGet{snapshot_id, key}}
+
+def snapshot.get.decoded(
+  payload: Bytes.Bytes,
+  snapshot_id: U32,
+  length: U32
+) -> Decision:
+  snapshot.get.decision(snapshot_id,
+    snapshot.get.key.sliced(Bytes.slice(payload, 4, U32.sub(length, 4))))
+
+def snapshot.get.header.result(
+  payload: Bytes.Bytes,
+  snapshot_id: U32,
+  length: U32,
+  has_header: Bool
+) -> Decision:
+  match has_header:
+    case True{}: snapshot.get.decoded(payload, snapshot_id, length)
+    case False{}: MalformedArguments{}
+
+def snapshot.get.parsed(
+  parsed: Bytes.Bytes & Maybe<&2, U32>,
+  length: U32,
+  has_header: Bool
+) -> Decision:
+  match parsed:
+    case (payload, Some{snapshot_id}):
+      snapshot.get.header.result(payload, snapshot_id, length, has_header)
+    case _: MalformedArguments{}
+
+def snapshot.get.length.checked(
+  parsed: Bytes.Bytes & Maybe<&2, U32>,
+  lengths: U32 & U32 & U32
+) -> Decision:
+  match lengths:
+    case (length, (check_length, _)):
+      snapshot.get.parsed(parsed, length, U32.is_le(4, check_length))
+
+def snapshot.get.measured(measured: Bytes.Bytes & U32) -> Decision:
+  match measured:
+    case (payload, length):
+      snapshot.get.length.checked(Bytes.get.u32be(payload, 0),
+        Protocol.u32.duplicate.triple(length))
+
+def snapshot.get.decode(payload: Bytes.Bytes) -> Decision:
+  snapshot.get.measured(Bytes.length(payload))
+
 def decode.payload(
   operation_code: U32,
   payload: Bytes.Bytes
@@ -161,8 +214,9 @@ def decode.payload(
     case 4: empty.operation(Bytes.length(payload), Flush{})
     case 5: empty.operation(Bytes.length(payload), Compact{})
     case 6: empty.operation(Bytes.length(payload), Stats{})
-    case 9: empty.operation(Bytes.length(payload), SnapshotOpen{})
     case 8: batch.result(ByteWal.decode(payload))
+    case 9: empty.operation(Bytes.length(payload), SnapshotOpen{})
+    case 10: snapshot.get.decode(payload)
     case _: UnsupportedOperation{}
 
 # Decodes the tagged operation payload without interpreting keys as text.

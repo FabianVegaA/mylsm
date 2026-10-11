@@ -230,3 +230,19 @@ def snapshot.open(
     pair : Client.Session & Result<&1, &1, Client.Error, Protocol.Response> <-
       Client.session.call(session, 9, Bytes.new(0))
     return snapshot.open.result(pair)
+
+# Prefixes a byte key with its fixed-width snapshot token.
+def snapshot.get.payload(snapshot_id: U32, key: Bytes.Bytes) -> Bytes.Bytes:
+  Bytes.concat([Protocol.snapshot.id.bytes(snapshot_id), key])
+
+# Reads one key through a retained owner snapshot without changing its token.
+def snapshot.get(
+  session: Client.Session,
+  snapshot_id: U32,
+  key: Bytes.Bytes
+) -> IO(Client.Session & Result<&1, &1, Client.Error, Maybe<&1, Bytes.Bytes>>):
+  do IO<Client.Session & Result<&1, &1, Client.Error,
+      Maybe<&1, Bytes.Bytes>>>:
+    pair : Client.Session & Result<&1, &1, Client.Error, Protocol.Response> <-
+      Client.session.call(session, 10, snapshot.get.payload(snapshot_id, key))
+    return get.result(pair)

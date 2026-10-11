@@ -84,14 +84,49 @@ def get.missing(session: Client.Session) -> IO(Unit):
       ByteClient.get(session, bytes.from_hex("0102"))
     get.missing.result(pair)
 
-# Continues only when the owner allocated a nonzero snapshot ID.
-def snapshot.open.checked.id(
+def snapshot.get.value.checked(
+  pair: Client.Session & (Bytes.Bytes & Bytes.Bytes & Bool)
+) -> IO(Unit):
+  match pair:
+    case (session, (_, (_, equal))):
+      match equal:
+        case True{}: get.missing(session)
+        case False{}: fail("snapshot read changed the raw binary value")
+
+def snapshot.get.result(
+  pair: Client.Session & Result<&1, &1, Client.Error, Maybe<&1, Bytes.Bytes>>
+) -> IO(Unit):
+  match pair:
+    case (_, Fail{_}): fail("coordinator snapshot read failed")
+    case (session, Done{None{}}): fail("snapshot did not contain its key")
+    case (session, Done{Some{value}}):
+      snapshot.get.value.checked((session,
+        Bytes.eq(value, bytes.from_hex("80ff00"))))
+
+# Rejects zero IDs and reads the owner-held snapshot for a valid token.
+def snapshot.open.checked.id.value(
   session: Client.Session,
+  snapshot_id: U32,
   is_zero: Bool
 ) -> IO(Unit):
   match is_zero:
     case True{}: fail("owner allocated snapshot identifier zero")
-    case False{}: get.missing(session)
+    case False{}:
+      do IO<Unit>:
+        result : Client.Session & Result<&1, &1, Client.Error,
+          Maybe<&1, Bytes.Bytes>> <- ByteClient.snapshot.get(session,
+            snapshot_id, bytes.from_hex("00ff"))
+        snapshot.get.result(result)
+
+# Reads the fixture key after the owner allocated a nonzero snapshot ID.
+def snapshot.open.checked.id(
+  session: Client.Session,
+  ids: U32 & U32 & U32
+) -> IO(Unit):
+  match ids:
+    case (check_id, (snapshot_id, _)):
+      snapshot.open.checked.id.value(session, snapshot_id,
+        U32.is_eq(check_id, 0))
 
 # Continues after an owner token was allocated with a nonzero ID.
 def snapshot.open.checked(
@@ -99,7 +134,8 @@ def snapshot.open.checked(
 ) -> IO(Unit):
   match pair:
     case (session, Done{snapshot_id}):
-      snapshot.open.checked.id(session, U32.is_eq(snapshot_id, 0))
+      snapshot.open.checked.id(session,
+        Protocol.u32.duplicate.triple(snapshot_id))
     case (_, Fail{_}): fail("coordinator client snapshot open failed")
 
 # Opens and checks one owner-managed snapshot through the wire protocol.

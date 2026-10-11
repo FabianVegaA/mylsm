@@ -201,6 +201,49 @@ def snapshot.open(
         ByteDb.snapshot_root_limited(67108864n, handle)
     return snapshot.open.captured(captured, snapshots, context)
 
+def snapshot.get.result(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  context: ReplyContext,
+  result: Result<&1, &1, ByteDb.Error, Maybe<&1, Bytes.Bytes>>
+) -> DispatchResult:
+  match result:
+    case Fail{error}:
+      DispatchResult{handle, snapshots,
+        reply.response(context, error.status(error), Bytes.new(0))}
+    case Done{None{}}:
+      DispatchResult{handle, snapshots,
+        reply.response(context, Protocol.NotFound{}, Bytes.new(0))}
+    case Done{Some{value}}:
+      DispatchResult{handle, snapshots,
+        reply.response(context, Protocol.Success{}, value)}
+
+def snapshot.get.lookup(
+  handle: ByteDb.Handle,
+  context: ReplyContext,
+  key: Bytes.Bytes,
+  lookup: SnapshotStore.LookupResult
+) -> IO(DispatchResult):
+  match lookup:
+    case SnapshotStore.RootFound{store, root}:
+      do IO<DispatchResult>:
+        result : Result<&1, &1, ByteDb.Error, Maybe<&1, Bytes.Bytes>> <-
+          ByteDb.snapshot.root.get(root, key)
+        return snapshot.get.result(handle, store, context, result)
+    case SnapshotStore.RootMissing{store}:
+      IO.pure(DispatchResult, DispatchResult{handle, store,
+        reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))})
+
+def snapshot.get(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  context: ReplyContext,
+  snapshot_id: U32,
+  key: Bytes.Bytes
+) -> IO(DispatchResult):
+  snapshot.get.lookup(handle, context, key,
+    SnapshotStore.lookup.root(snapshots, snapshot_id))
+
 def dispatch.operation(
   handle: ByteDb.Handle,
   context: ReplyContext,
@@ -242,6 +285,9 @@ def dispatch.operation(
     case Operation.SnapshotOpen{}:
       IO.pure(ByteDb.Handle & Protocol.Response,
         (handle, reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))))
+    case Operation.SnapshotGet{_, _}:
+      IO.pure(ByteDb.Handle & Protocol.Response,
+        (handle, reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))))
 
 def dispatch.decoded.state(
   handle: ByteDb.Handle,
@@ -252,6 +298,8 @@ def dispatch.decoded.state(
   match decision:
     case Operation.Decoded{Operation.SnapshotOpen{}}:
       snapshot.open(handle, snapshots, context)
+    case Operation.Decoded{Operation.SnapshotGet{snapshot_id, key}}:
+      snapshot.get(handle, snapshots, context, snapshot_id, key)
     case Operation.Decoded{operation}:
       do IO<DispatchResult>:
         pair : ByteDb.Handle & Protocol.Response <-

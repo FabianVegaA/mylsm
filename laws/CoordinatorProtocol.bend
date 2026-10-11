@@ -92,6 +92,11 @@ law snapshot_open_tag_is_a_request_operation:
   {Protocol.validate(Protocol.Request{1, 7, 19, 9, Bytes.new(0)}, 1, 7, 16n) ==
     Protocol.Accepted{19, 9, Bytes.new(0)} : Protocol.Decision}
 
+# Admits the snapshot-get tag and leaves its token/key framing to decoding.
+law snapshot_get_tag_is_a_request_operation:
+  {Protocol.validate(Protocol.Request{1, 7, 19, 10, Bytes.new(4)}, 1, 7, 16n) ==
+    Protocol.Accepted{19, 10, Bytes.new(4)} : Protocol.Decision}
+
 # Encodes snapshot identifiers as fixed-width big-endian values.
 law snapshot_identifier_one_roundtrips:
   {Protocol.snapshot.id.read(Protocol.snapshot.id.bytes(1)) == Some{1} : Maybe<&2, U32>}

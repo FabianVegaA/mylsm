@@ -10,6 +10,15 @@ def Laws.empty_snapshot_open_is_decoded():
 def Laws.nonempty_snapshot_open_is_rejected():
   {==}
 
+def Laws.snapshot_get_keeps_raw_key_bytes():
+  {==}
+
+def Laws.incomplete_snapshot_get_token_is_rejected():
+  {==}
+
+def Laws.snapshot_get_accepts_empty_key():
+  {==}
+
 def Laws.nonempty_flush_is_rejected():
   {==}
 
