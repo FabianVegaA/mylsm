@@ -26,6 +26,7 @@ import ./src/transfer/BackupCursorIo.bend as BackupCursorIo
 import ./src/transfer/RestoreIo.bend as RestoreIo
 import ./src/transfer/FormatInspect.bend as FormatInspect
 import ./src/transfer/FormatInspectIo.bend as FormatInspectIo
+import ./src/transfer/MigrateRunIo.bend as MigrateRunIo
 import ./src/StorageBytes.bend as Utf8Codec
 import ./src/Fs.bend as Fs
 import ./src/coordinator/EndpointPath.bend as EndpointPath
@@ -1398,6 +1399,13 @@ def inspect(
     result : Result<&1, &1, FormatInspectIo.Error, FormatInspect.Inspection> <-
       FormatInspectIo.inspect(dir)
     return public_inspection_result(result)
+
+# Converts a verified 0.5.0.0 database into a new generation-four destination.
+def migrate_legacy(
+  source: String,
+  destination: String
+) -> IO(Result<&1, &1, MigrateRunIo.Error, Unit>):
+  MigrateRunIo.migrate_legacy_source(source, destination)
 
 # Opens an existing database with a bounded wait for its process lock.
 def open_existing_wait(

@@ -176,6 +176,24 @@ def legacy.batch.entries(mutations: List<&2, Wal.Mut>) -> List<&2, MemTable.Entr
         case Wal.Del{key}:
           Con{MemTable.Entry{key, None{}}, legacy.batch.entries(tail)}
 
+def legacy.mutations.count(mutations: List<&2, Wal.Mut>) -> Nat:
+  match mutations:
+    case Nil{}: 0n
+    case Con{_, tail}: Nat.add(1n, legacy.mutations.count(tail))
+
+def legacy.batches.mutation.count(batches: List<&2, Wal.Batch>) -> Nat:
+  match batches:
+    case Nil{}: 0n
+    case Con{Wal.Batch{muts}, tail}:
+      Nat.add(legacy.mutations.count(muts),
+        legacy.batches.mutation.count(tail))
+
+def legacy.source.mutation.count(
+  sst_entries: Nat,
+  wal_batches: List<&2, Wal.Batch>
+) -> Nat:
+  Nat.add(sst_entries, legacy.batches.mutation.count(wal_batches))
+
 def legacy.batches.entries(batches: List<&2, Wal.Batch>) -> List<&2, MemTable.Entry>:
   match batches:
     case Nil{}: Nil{}

@@ -128,3 +128,7 @@ law migration_wal_tombstone_shadows_legacy_sst:
 # The composed snapshot converter emits no record hidden by a WAL tombstone.
 law migration_snapshot_conversion_drops_wal_shadowed_records:
   {fixture.source.no.canonical(fixture.source.converted()) == True{} : Bool}
+
+# Preflight counts every SST record and WAL mutation before deduplication.
+law migration_source_count_includes_shadowed_mutations:
+  {Migrate.legacy.source.mutation.count(1n, fixture.source.wal()) == 3n : Nat}

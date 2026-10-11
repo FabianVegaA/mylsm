@@ -3,7 +3,10 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 DB=$(mktemp -d "${TMPDIR:-/tmp}/mylsm-legacy-sst.XXXXXX")
-trap 'rm -rf "$DB"' EXIT
+DEST="$DB-migrated"
+CONFLICT_DEST="$DB-conflict"
+CONFLICT_BUNDLE="$CONFLICT_DEST.migrate-060.bundle"
+trap 'rm -rf "$DB" "$DEST" "$DEST.migrate-060.bundle" "$DEST.migrate-060.bundle.backup-060.tmp" "$DEST.restore-060.tmp" "$CONFLICT_DEST" "$CONFLICT_BUNDLE" "$CONFLICT_BUNDLE.backup-060.tmp" "$CONFLICT_DEST.restore-060.tmp"' EXIT
 rmdir "$DB"
 
 MYLSM_DB_PATH="$DB" bend "$ROOT/bench/smoke/legacy_sst_io.bend"
@@ -17,6 +20,19 @@ SOURCE_BYTES=$(($(wc -c < "$DB/l0/0.tbl") + $(wc -c < "$DB/WAL")))
 rg -q "LEGACY_SOURCE_ENCODED_BYTES=$SOURCE_BYTES" <<< "$SOURCE_REPORT"
 AFTER=$(cksum "$DB/LOCK" "$DB/MANIFEST" "$DB/l0/0.tbl" "$DB/WAL")
 test "$BEFORE" = "$AFTER"
+mkdir -p "$CONFLICT_BUNDLE"
+printf 'preserve-existing-bundle\n' > "$CONFLICT_BUNDLE/BACKUP"
+MYLSM_DB_PATH="$DB" MYLSM_MIGRATE_DEST="$CONFLICT_DEST" bend "$ROOT/bench/smoke/legacy_migration_conflict.bend"
+rg -q '^preserve-existing-bundle$' "$CONFLICT_BUNDLE/BACKUP"
+rm -rf "$CONFLICT_BUNDLE"
+MYLSM_DB_PATH="$DB" MYLSM_MIGRATE_DEST="$DEST" bend "$ROOT/bench/smoke/legacy_migrate.bend"
+test -f "$DEST/MANIFEST"
+AFTER_MIGRATE=$(cksum "$DB/LOCK" "$DB/MANIFEST" "$DB/l0/0.tbl" "$DB/WAL")
+test "$BEFORE" = "$AFTER_MIGRATE"
+DEST_BEFORE=$(find "$DEST" -type f -exec cksum {} \; | sort)
+MYLSM_DB_PATH="$DB" MYLSM_MIGRATE_DEST="$DEST" bend "$ROOT/bench/smoke/legacy_migration_destination.bend"
+DEST_AFTER=$(find "$DEST" -type f -exec cksum {} \; | sort)
+test "$DEST_BEFORE" = "$DEST_AFTER"
 cp -R "$DB" "$DB-wal-corrupt"
 printf '\001' | dd of="$DB-wal-corrupt/WAL" bs=1 seek=0 conv=notrunc 2>/dev/null
 CORRUPT_WAL_BEFORE=$(cksum "$DB-wal-corrupt/LOCK" "$DB-wal-corrupt/MANIFEST" "$DB-wal-corrupt/l0/0.tbl" "$DB-wal-corrupt/WAL")

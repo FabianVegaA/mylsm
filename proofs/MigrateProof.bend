@@ -21,3 +21,6 @@ def Laws.migration_wal_tombstone_shadows_legacy_sst():
 
 def Laws.migration_snapshot_conversion_drops_wal_shadowed_records():
   {==}
+
+def Laws.migration_source_count_includes_shadowed_mutations():
+  {==}
