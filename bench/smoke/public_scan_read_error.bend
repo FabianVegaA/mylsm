@@ -87,7 +87,7 @@ def first.valid(
     case True{}:
       do IO<Unit>:
         path : String <- IO.try(String, Console.get_env("MYLSM_DB_PATH"))
-        truncated : Result<&1, &1, U32 & String, Unit> <- Fs.truncate(path ++ "/SST", 0n)
+        truncated : Result<&1, &1, U32 & String, Unit> <- Fs.truncate(path ++ "/SST.00000003", 0n)
         truncate.result(handle, cursor, truncated)
 
 def first.step(

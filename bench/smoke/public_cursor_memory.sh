@@ -13,7 +13,7 @@ measure_scan() {
   local database="$WORK/db-$count"
   MYLSM_DB_PATH="$database" MYLSM_CURSOR_MODE=create MYLSM_CURSOR_COUNT="$count" "$BINARY"
   local sst_bytes
-  sst_bytes=$(wc -c < "$database/SST" | tr -d ' ')
+  sst_bytes=$(wc -c < "$database/SST.00000001" | tr -d ' ')
   local open_rss
   local scan_rss
   open_rss=$(MYLSM_DB_PATH="$database" MYLSM_CURSOR_MODE=open MYLSM_CURSOR_COUNT="$count" \

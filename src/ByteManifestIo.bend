@@ -53,6 +53,10 @@ def read.sized(file: File, size: Nat) -> IO(Result<&1, &1, Error, Manifest.Manif
       do IO<Result<&1, &1, Error, Manifest.ManifestValue>>:
         pair : File & Result<&1, &1, U32 & String, Bytes.Bytes> <- Fs.read_at(file, 0, 63)
         read.decoded(pair)
+    case 60n:
+      do IO<Result<&1, &1, Error, Manifest.ManifestValue>>:
+        pair : File & Result<&1, &1, U32 & String, Bytes.Bytes> <- Fs.read_at(file, 0, 60)
+        read.decoded(pair)
     case _:
       do IO<Result<&1, &1, Error, Manifest.ManifestValue>>:
         _closed : Unit <- File.close(file)
@@ -81,7 +85,7 @@ def read.path.opened(
         size : Result<&1, &1, U32 & String, Nat> <- Fs.file_size(path)
         read.size.result(file, size)
 
-# Reads and validates one bounded generation-four manifest.
+# Reads and validates one bounded generation-four or generation-five manifest.
 def read(
   +path: String
 ) -> IO(Result<&1, &1, Error, Manifest.ManifestValue>):

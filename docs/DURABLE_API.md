@@ -80,7 +80,7 @@ data. `open_recovering` remains available for callers that manage ownership them
 ## 0.6 API work in progress
 
 The current branch exposes distinct `Utf8` and `Bytes` namespaces over the same
-generation-four byte store. `Utf8` strictly encodes String keys and values as UTF-8;
+generation-five manifest format over the generation-four byte record codecs. `Utf8` strictly encodes String keys and values as UTF-8;
 `Bytes` uses `bend-kit-bytes.Bytes` and preserves arbitrary byte sequences. Reading
 invalid stored UTF-8 through `Utf8.get` returns `InvalidUtf8` and preserves the handle.
 The byte facade exposes IO-based `scan`, `scan_range`, and `scan_prefix`. They capture

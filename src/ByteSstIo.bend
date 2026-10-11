@@ -5,6 +5,52 @@ import ./Fs.bend as Fs
 import ./scan/ByteBlockReader.bend as ByteBlockReader
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
+def path.clone.reverse(path: String, reversed: String) -> String:
+  match path:
+    case SNil{}: reversed
+    case SCon{character, rest}:
+      path.clone.reverse(rest, SCon{character, reversed})
+
+def path.clone(path: String) -> String:
+  path.clone.reverse(path.clone.reverse(path, SNil{}), SNil{})
+
+def nat.clone.pair.step(pair: Nat & Nat) -> Nat & Nat:
+  match pair:
+    case (left, right): (Nat.add(left, 1n), Nat.add(right, 1n))
+
+def nat.clone.pair(value: Nat) -> Nat & Nat:
+  match value:
+    case 0n: (0n, 0n)
+    case 1n+rest: nat.clone.pair.step(nat.clone.pair(rest))
+
+def path.clone.pair.scalar(
+  first: String,
+  second: String,
+  scalars: Nat & Nat
+) -> String & String:
+  match scalars:
+    case (left, right):
+      (SCon{Chr{U32.from_nat(left)}, first},
+        SCon{Chr{U32.from_nat(right)}, second})
+
+def path.clone.pair.build(
+  path: String,
+  copies: String & String
+) -> String & String:
+  match path:
+    case SNil{}:
+      match copies:
+        case (left, right): (path.clone.reverse(left, SNil{}), path.clone.reverse(right, SNil{}))
+    case SCon{Chr{+scalar}, rest}:
+      match copies:
+        case (left, right):
+          path.clone.pair.build(rest,
+            path.clone.pair.scalar(left, right,
+              nat.clone.pair(U32.to_nat(scalar))))
+
+def path.clone.pair(path: String) -> String & String:
+  path.clone.pair.build(path, (SNil{}, SNil{}))
+
 # Carries the reader or its latest step through blockwise recovery.
 type ReadState is Type:
   ReadNeed{reader: ByteBlockReader.Reader, table: ByteMemTable.Table}
@@ -195,6 +241,8 @@ def write.directory.synced(
 # Atomically renames the synced temporary SST and syncs its directory.
 def write.published(
   +directory: String,
+  temporary: String,
+  final_path: String,
   result: Result<&1, &1, U32 & String, Unit>
 ) -> IO(Result<&1, &1, U32 & String, Unit>):
   match result:
@@ -203,36 +251,44 @@ def write.published(
     case Done{Unit{}}:
       do IO<Result<&1, &1, U32 & String, Unit>>:
         renamed : Result<&1, &1, U32 & String, Unit> <-
-          Fs.rename(directory ++ "/SST.tmp", directory ++ "/SST")
+          Fs.rename(temporary, final_path)
         write.directory.synced(directory, renamed)
 
 # Syncs the temporary SST contents before publication.
 def write.synced(
   +directory: String,
+  temporaries: String & String,
+  final_path: String,
   result: Result<&1, &1, U32 & String, Unit>
 ) -> IO(Result<&1, &1, U32 & String, Unit>):
-  match result:
-    case Fail{error}:
-      IO.pure(Result<&1, &1, U32 & String, Unit>, Fail{error})
-    case Done{Unit{}}:
-      do IO<Result<&1, &1, U32 & String, Unit>>:
-        synced : Result<&1, &1, U32 & String, Unit> <- Fs.fsync(directory ++ "/SST.tmp")
-        write.published(directory, synced)
+  match temporaries:
+    case (for_sync, for_rename):
+      match result:
+        case Fail{error}:
+          IO.pure(Result<&1, &1, U32 & String, Unit>, Fail{error})
+        case Done{Unit{}}:
+          do IO<Result<&1, &1, U32 & String, Unit>>:
+            synced : Result<&1, &1, U32 & String, Unit> <- Fs.fsync(for_sync)
+            write.published(directory, for_rename, final_path, synced)
 
 # Closes the completed temporary-file write before syncing it.
 def write.written(
   +directory: String,
+  temporary: String,
+  final_path: String,
   pair: File & Result<&1, &1, U32 & String, Unit>
 ) -> IO(Result<&1, &1, U32 & String, Unit>):
   match pair:
     case (file, result):
       do IO<Result<&1, &1, U32 & String, Unit>>:
         _closed : Unit <- File.close(file)
-        write.synced(directory, result)
+        write.synced(directory, path.clone.pair(temporary), final_path, result)
 
 # Writes the encoded SST bytes to the temporary file.
 def write.encoded(
   +directory: String,
+  temporary: String,
+  final_path: String,
   bytes: Bytes.Bytes,
   opened: Result<&1, &1, U32 & String, File>
 ) -> IO(Result<&1, &1, U32 & String, Unit>):
@@ -242,7 +298,7 @@ def write.encoded(
     case Done{file}:
       do IO<Result<&1, &1, U32 & String, Unit>>:
         pair : File & Result<&1, &1, U32 & String, Unit> <- Fs.write_bytes(file, bytes)
-        write.written(directory, pair)
+        write.written(directory, temporary, final_path, pair)
 
 # Closes the temporary file when encoding rejects sorted input.
 def write.encoder.failed(
@@ -259,6 +315,8 @@ def write.encoder.failed(
 # Dispatches a validated encoding result after opening the temporary file.
 def write.opened(
   +directory: String,
+  temporary: String,
+  final_path: String,
   encoded: Result<&1, &1, ByteSstFile.Error, Bytes.Bytes>,
   opened: Result<&1, &1, U32 & String, File>
 ) -> IO(Result<&1, &1, U32 & String, Unit>):
@@ -266,16 +324,51 @@ def write.opened(
     case Fail{_}:
       write.encoder.failed(opened)
     case Done{bytes}:
-      write.encoded(directory, bytes, opened)
+      write.encoded(directory, temporary, final_path, bytes, opened)
+
+def path.temporary.final(copies: String & String) -> String & String:
+  match copies:
+    case (temporary_base, final_path):
+      (temporary_base ++ ".tmp", final_path)
+
+def write_atomic_at.opened(
+  +directory: String,
+  temporary_copies: String & String,
+  final_path: String,
+  entries: List<&1, ByteMemTable.Entry>
+) -> IO(Result<&1, &1, U32 & String, Unit>):
+  match temporary_copies:
+    case (temporary, retained_temporary):
+      do IO<Result<&1, &1, U32 & String, Unit>>:
+        opened : Result<&1, &1, U32 & String, File> <- File.open(temporary, "w")
+        write.opened(directory, retained_temporary, final_path,
+          ByteSstFile.encode_file(entries, 0), opened)
+
+def write_atomic_at.paths(
+  +directory: String,
+  paths: String & String,
+  entries: List<&1, ByteMemTable.Entry>
+) -> IO(Result<&1, &1, U32 & String, Unit>):
+  match paths:
+    case (temporary, final_path):
+      write_atomic_at.opened(directory, path.clone.pair(temporary),
+        final_path, entries)
+
+# Atomically publishes one bounded byte SST at a caller-selected path.
+def write_atomic_at(
+  +directory: String,
+  final_path: String,
+  entries: List<&1, ByteMemTable.Entry>
+) -> IO(Result<&1, &1, U32 & String, Unit>):
+  write_atomic_at.paths(directory,
+    path.temporary.final(path.clone.pair(final_path)), entries)
 
 # Encodes and atomically publishes one bounded byte SST snapshot.
 def write_atomic(
   +directory: String,
   entries: List<&1, ByteMemTable.Entry>
 ) -> IO(Result<&1, &1, U32 & String, Unit>):
-  do IO<Result<&1, &1, U32 & String, Unit>>:
-    opened : Result<&1, &1, U32 & String, File> <- File.open(directory ++ "/SST.tmp", "w")
-    write.opened(directory, ByteSstFile.encode_file(entries, 0), opened)
+  write_atomic_at(directory, directory ++ "/SST", entries)
 
 # Reads one decoded block at a time and returns only after footer validation.
 def read(+path: String) -> IO(Result<&1, &1, U32 & String, ByteMemTable.Table>):

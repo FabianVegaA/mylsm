@@ -29,6 +29,10 @@ def finish(cursor: MyLSM.Bytes.Cursor) -> IO(Unit):
 def end.check(step: MyLSM.Bytes.ScanStep) -> IO(Unit):
   match step:
     case MyLSM.ScanEnd{cursor}: finish(cursor)
+    case MyLSM.ScanFailure{_, cursor}:
+      do IO<Unit>:
+        _cursor : MyLSM.Bytes.Cursor = MyLSM.Bytes.snapshot.scan_close(cursor)
+        die("snapshot cursor failed after the final item")
     case _: die("snapshot included a key committed after scan creation")
 
 def second.matches(cursor: MyLSM.Bytes.Cursor, checks: Bool & Bool) -> IO(Unit):
@@ -54,6 +58,10 @@ def second.check(
       do IO<Unit>:
         _cursor : MyLSM.Bytes.Cursor = MyLSM.Bytes.snapshot.scan_close(cursor)
         die("snapshot ended before its second entry")
+    case MyLSM.ScanFailure{_, cursor}:
+      do IO<Unit>:
+        _cursor : MyLSM.Bytes.Cursor = MyLSM.Bytes.snapshot.scan_close(cursor)
+        die("snapshot cursor failed before its second entry")
 
 def first.matches(cursor: MyLSM.Bytes.Cursor, checks: Bool & Bool) -> IO(Unit):
   match checks:
@@ -78,6 +86,10 @@ def first.check(
       do IO<Unit>:
         _cursor : MyLSM.Bytes.Cursor = MyLSM.Bytes.snapshot.scan_close(cursor)
         die("snapshot ended before its first entry")
+    case MyLSM.ScanFailure{_, cursor}:
+      do IO<Unit>:
+        _cursor : MyLSM.Bytes.Cursor = MyLSM.Bytes.snapshot.scan_close(cursor)
+        die("snapshot cursor failed before its first entry")
 
 def scan.closed(cursor: MyLSM.Bytes.Cursor, result: Result<&1, &1, MyLSM.Bytes.Error, Unit>) -> IO(Unit):
   match result:
@@ -222,6 +234,12 @@ def snapshot.cursor.item(
         _closed : Unit = MyLSM.Bytes.snapshot.close(snapshot)
         _handle : Result<&1, &1, MyLSM.Bytes.Error, Unit> <- MyLSM.Bytes.close(handle)
         die("byte snapshot scan ended before its first entry")
+    case MyLSM.ScanFailure{_, next_cursor}:
+      do IO<Unit>:
+        _cursor : MyLSM.Bytes.Cursor = MyLSM.Bytes.snapshot.scan_close(next_cursor)
+        _closed : Unit = MyLSM.Bytes.snapshot.close(snapshot)
+        _handle : Result<&1, &1, MyLSM.Bytes.Error, Unit> <- MyLSM.Bytes.close(handle)
+        die("byte snapshot scan failed before its first entry")
 
 def snapshot.cursor.opened(
   handle: MyLSM.Bytes.Handle,

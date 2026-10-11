@@ -10,6 +10,46 @@ law empty_manifest_round_trips:
 law sst_manifest_round_trips:
   {Manifest.decode(Manifest.encode(Manifest.HasSst{})) == Done{Manifest.HasSst{}} : Result<&1, &1, Manifest.Error, Manifest.ManifestValue>}
 
+# The empty generation-five manifest preserves its layout.
+law generation_manifest_round_trips:
+  {Manifest.decode(Manifest.encode(Manifest.GenerationEmpty{})) ==
+    Done{Manifest.GenerationEmpty{}} :
+    Result<&1, &1, Manifest.Error, Manifest.ManifestValue>}
+
+# A generation-addressed SST manifest preserves its active file identifier.
+law generation_sst_manifest_round_trips:
+  {Manifest.decode(Manifest.encode(Manifest.GenerationSst{3})) ==
+    Done{Manifest.GenerationSst{3}} :
+    Result<&1, &1, Manifest.Error, Manifest.ManifestValue>}
+
+# Generation paths use an unambiguous fixed-width hexadecimal file identifier.
+law generation_sst_path_encodes_the_identifier:
+  {String.eq(Manifest.sst.generation.path("/db", 3), "/db/SST.00000003") ==
+    True{} : Bool}
+
+# Generation identifiers advance by one without wrapping.
+law next_generation_identifier_advances:
+  {Manifest.next.file.id(Manifest.GenerationSst{3}) == Manifest.FileIdAvailable{4} : Manifest.FileIdDecision}
+
+# Exhausted generation identifiers are rejected instead of wrapping.
+law generation_identifier_exhaustion_is_reported:
+  {Manifest.next.file.id(Manifest.GenerationSst{4294967295}) == Manifest.FileIdExhausted{} : Manifest.FileIdDecision}
+
+# Legacy SST manifests begin generation-addressed publication at file one.
+law legacy_manifest_starts_generation_at_one:
+  {Manifest.next.file.id(Manifest.HasSst{}) == Manifest.FileIdAvailable{1} : Manifest.FileIdDecision}
+
+# Detects checksum corruption in a generation-five manifest.
+law generation_manifest_checksum_corruption_is_rejected:
+  {Manifest.decode(Bytes.set(Manifest.encode(Manifest.GenerationEmpty{}),
+    55, 1)) == Fail{Manifest.ChecksumMismatch{}} :
+    Result<&1, &1, Manifest.Error, Manifest.ManifestValue>}
+
+# Rejects manifest lengths that no supported decoder reads from disk.
+law unsupported_manifest_size_is_rejected:
+  {Manifest.decode(Bytes.new(64)) == Fail{Manifest.Malformed{}} :
+    Result<&1, &1, Manifest.Error, Manifest.ManifestValue>}
+
 # An unknown storage generation fails before layout interpretation.
 law unknown_generation_is_rejected:
   {Manifest.decode(Bytes.set(Manifest.encode(Manifest.Empty{}), 11, 3)) == Fail{Manifest.UnsupportedVersion{3}} : Result<&1, &1, Manifest.Error, Manifest.ManifestValue>}

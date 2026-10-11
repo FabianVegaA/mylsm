@@ -169,7 +169,7 @@ def initialized.manifest(
     case Done{Unit{}}:
       do IO<Result<&1, &1, Error, Handle>>:
         published : Result<&1, &1, U32 & String, Unit> <-
-          ByteManifestIo.write_atomic(path, ByteManifest.Empty{})
+          ByteManifestIo.write_atomic(path, ByteManifest.GenerationEmpty{})
         initialized(path, lock, published)
 
 # Releases ownership when syncing the created database directory fails.
@@ -286,10 +286,17 @@ def open.manifest.result(
     case Fail{error}: open.manifest.failed(path, lock, error)
     case Done{ByteManifest.Empty{}}:
       open.wal(path, lock, VisibleStats.Stats{0n, 0n})
+    case Done{ByteManifest.GenerationEmpty{}}:
+      open.wal(path, lock, VisibleStats.Stats{0n, 0n})
     case Done{ByteManifest.HasSst{}}:
       do IO<Result<&1, &1, Error, Handle>>:
         metadata : Result<&1, &1, U32 & String, ByteBlockReader.Metadata> <-
           ByteSstIo.validate(path ++ "/SST")
+        open.sst.validated(path, lock, metadata)
+    case Done{ByteManifest.GenerationSst{file_id}}:
+      do IO<Result<&1, &1, Error, Handle>>:
+        metadata : Result<&1, &1, U32 & String, ByteBlockReader.Metadata> <-
+          ByteSstIo.validate(ByteManifest.sst.generation.path(path, file_id))
         open.sst.validated(path, lock, metadata)
 
 # Checks for a published byte SST while retaining database ownership.
@@ -613,118 +620,6 @@ def flush.manifest(
 
 # Keeps the original table when SST publication fails; after publication,
 # checkpoints the WAL through atomic replacement and retains canonical entries.
-def flush.written(
-  +path: String,
-  lock: DbLock.Lock,
-  table: ByteMemTable.Table,
-  entries: List<&1, ByteMemTable.Entry>,
-  result: Result<&1, &1, U32 & String, Unit>
-) -> IO(Handle & Result<&1, &1, Error, Unit>):
-  match result:
-    case Fail{(code, message)}:
-      IO.pure(Handle & Result<&1, &1, Error, Unit>,
-        (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}}, Fail{Io{code, message}}))
-    case Done{Unit{}}:
-      do IO<Handle & Result<&1, &1, Error, Unit>>:
-        published : Result<&1, &1, U32 & String, Unit> <-
-          ByteManifestIo.write_atomic(path, ByteManifest.HasSst{})
-        flush.manifest(path, lock, table, entries, published)
-
-# Retains the live table while an independently owned ordered copy is encoded.
-def flush.snapshot(
-  +path: String,
-  lock: DbLock.Lock,
-  table: ByteMemTable.Table,
-  pair: List<&1, ByteMemTable.Entry> & List<&1, ByteMemTable.Entry>
-) -> IO(Handle & Result<&1, &1, Error, Unit>):
-  match pair:
-    case (encoded, retained):
-      do IO<Handle & Result<&1, &1, Error, Unit>>:
-        written : Result<&1, &1, U32 & String, Unit> <- ByteSstIo.write_atomic(path, encoded)
-        flush.written(path, lock, table, retained, written)
-
-# Builds a canonical snapshot without consuming the live table.
-def flush.table(
-  +path: String,
-  lock: DbLock.Lock,
-  pair: ByteMemTable.Table & List<&1, ByteMemTable.Entry>
-) -> IO(Handle & Result<&1, &1, Error, Unit>):
-  match pair:
-    case (table, entries):
-      flush.snapshot(path, lock, table,
-        ByteSstFile.entries.clone(ByteMemTable.ordered_entries(ByteMemTable.Table{entries})))
-
-# Clones the table entries so flush can retain the live in-memory state.
-def flush.cloned(
-  +path: String,
-  lock: DbLock.Lock,
-  pair: List<&1, ByteMemTable.Entry> & List<&1, ByteMemTable.Entry>
-) -> IO(Handle & Result<&1, &1, Error, Unit>):
-  match pair:
-    case (live, snapshot):
-      flush.table(path, lock, (ByteMemTable.Table{live}, snapshot))
-
-# Merges the persisted SST beneath the newest in-memory WAL delta.
-def flush.sst.loaded(
-  +path: String,
-  lock: DbLock.Lock,
-  table: ByteMemTable.Table,
-  result: Result<&1, &1, U32 & String, ByteMemTable.Table>
-) -> IO(Handle & Result<&1, &1, Error, Unit>):
-  match table:
-    case ByteMemTable.Table{delta}:
-      match result:
-        case Fail{(code, message)}:
-          IO.pure(Handle & Result<&1, &1, Error, Unit>,
-            (Handle{path, lock, ByteMemTable.Table{delta}, Open{}, VisibleStats.Stats{0n, 0n}},
-              Fail{recovery.error(code, message)}))
-        case Done{ByteMemTable.Table{base}}:
-          flush.cloned(path, lock,
-            ByteSstFile.entries.clone(ByteMemTable.append(delta, base)))
-
-def flush.manifest.loaded(
-  +path: String,
-  lock: DbLock.Lock,
-  table: ByteMemTable.Table,
-  result: Result<&1, &1, ByteManifestIo.Error, ByteManifest.ManifestValue>
-) -> IO(Handle & Result<&1, &1, Error, Unit>):
-  match table:
-    case ByteMemTable.Table{entries}:
-      match result:
-        case Fail{ByteManifestIo.Invalid{_}}:
-          IO.pure(Handle & Result<&1, &1, Error, Unit>,
-            (Handle{path, lock, ByteMemTable.Table{entries}, Open{}, VisibleStats.Stats{0n, 0n}}, Fail{Corruption{"byte manifest validation failed"}}))
-        case Fail{ByteManifestIo.Host{code, message}}:
-          IO.pure(Handle & Result<&1, &1, Error, Unit>,
-            (Handle{path, lock, ByteMemTable.Table{entries}, Open{}, VisibleStats.Stats{0n, 0n}}, Fail{Io{code, message}}))
-        case Done{ByteManifest.Empty{}}:
-          flush.cloned(path, lock, ByteSstFile.entries.clone(entries))
-        case Done{ByteManifest.HasSst{}}:
-          do IO<Handle & Result<&1, &1, Error, Unit>>:
-            base : Result<&1, &1, U32 & String, ByteMemTable.Table> <-
-              ByteSstIo.read(path ++ "/SST")
-            flush.sst.loaded(path, lock, ByteMemTable.Table{entries}, base)
-
-# Clones table entries before creating a canonical snapshot.
-def flush.open(
-  +path: String,
-  lock: DbLock.Lock,
-  table: ByteMemTable.Table
-) -> IO(Handle & Result<&1, &1, Error, Unit>):
-  do IO<Handle & Result<&1, &1, Error, Unit>>:
-    manifest : Result<&1, &1, ByteManifestIo.Error, ByteManifest.ManifestValue> <-
-      ByteManifestIo.read(path ++ "/MANIFEST")
-    flush.manifest.loaded(path, lock, table, manifest)
-
-# Publishes the current byte table as an authenticated SST snapshot.
-def flush(handle: Handle) -> IO(Handle & Result<&1, &1, Error, Unit>):
-  match handle:
-    case Handle{path, lock, table, Open{}, base_stats}:
-      flush.open(path, lock, table)
-    case Handle{path, lock, table, Poisoned{}, base_stats}:
-      IO.pure(Handle & Result<&1, &1, Error, Unit>,
-        (Handle{path, lock, table, Poisoned{}, VisibleStats.Stats{0n, 0n}}, Fail{CommitUnknown{0, "database handle requires reopen"}}))
-
 # Reverses a string while preserving all path characters.
 def path.reverse(path: String, reversed: String) -> String:
   match path:
@@ -796,6 +691,197 @@ def path.clone.triple.first(pair: String & String) -> String & String & String:
 def path.clone.triple(path: String) -> String & String & String:
   path.clone.triple.first(path.clone.pair(path))
 
+
+def flush.written(
+  +path: String,
+  lock: DbLock.Lock,
+  table: ByteMemTable.Table,
+  entries: List<&1, ByteMemTable.Entry>,
+  file_id: U32,
+  result: Result<&1, &1, U32 & String, Unit>
+) -> IO(Handle & Result<&1, &1, Error, Unit>):
+  match result:
+    case Fail{(code, message)}:
+      IO.pure(Handle & Result<&1, &1, Error, Unit>,
+        (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}}, Fail{Io{code, message}}))
+    case Done{Unit{}}:
+      do IO<Handle & Result<&1, &1, Error, Unit>>:
+        published : Result<&1, &1, U32 & String, Unit> <-
+          ByteManifestIo.write_atomic(path, ByteManifest.GenerationSst{file_id})
+        flush.manifest(path, lock, table, entries, published)
+
+def flush.snapshot.publish.file_ids(
+  paths: String & (String & String),
+  lock: DbLock.Lock,
+  table: ByteMemTable.Table,
+  pair: List<&1, ByteMemTable.Entry> & List<&1, ByteMemTable.Entry>,
+  file_ids: U32 & U32
+) -> IO(Handle & Result<&1, &1, Error, Unit>):
+  match paths:
+    case (directory, (file_directory, retained_path)):
+      match pair:
+        case (encoded, retained):
+          match file_ids:
+            case (for_path, for_manifest):
+              do IO<Handle & Result<&1, &1, Error, Unit>>:
+                written : Result<&1, &1, U32 & String, Unit> <-
+                  ByteSstIo.write_atomic_at(directory,
+                    ByteManifest.sst.generation.path(file_directory, for_path), encoded)
+                flush.written(retained_path, lock, table, retained, for_manifest, written)
+
+def flush.snapshot.publish(
+  paths: String & (String & String),
+  lock: DbLock.Lock,
+  table: ByteMemTable.Table,
+  pair: List<&1, ByteMemTable.Entry> & List<&1, ByteMemTable.Entry>,
+  file_id: U32
+) -> IO(Handle & Result<&1, &1, Error, Unit>):
+  flush.snapshot.publish.file_ids(paths, lock, table, pair,
+    ByteManifest.clone.file.id(file_id))
+
+def flush.snapshot.identifier(
+  paths: String & (String & String),
+  lock: DbLock.Lock,
+  table: ByteMemTable.Table,
+  entries: List<&1, ByteMemTable.Entry> & List<&1, ByteMemTable.Entry>,
+  decision: ByteManifest.FileIdDecision
+) -> IO(Handle & Result<&1, &1, Error, Unit>):
+  match paths:
+    case (directory, (file_directory, retained_path)):
+      match entries:
+        case (encoded, retained):
+          match decision:
+            case ByteManifest.FileIdAvailable{file_id}:
+              flush.snapshot.publish((directory, (file_directory, retained_path)),
+                lock, table, (encoded, retained), file_id)
+            case ByteManifest.FileIdExhausted{}:
+              IO.pure(Handle & Result<&1, &1, Error, Unit>,
+                (Handle{retained_path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}},
+                  Fail{ResourceLimit{}}))
+
+def flush.snapshot.manifest(
+  path: String,
+  lock: DbLock.Lock,
+  table: ByteMemTable.Table,
+  entries: List<&1, ByteMemTable.Entry> & List<&1, ByteMemTable.Entry>,
+  result: Result<&1, &1, ByteManifestIo.Error, ByteManifest.ManifestValue>
+) -> IO(Handle & Result<&1, &1, Error, Unit>):
+  match result:
+    case Fail{ByteManifestIo.Invalid{_}}:
+      IO.pure(Handle & Result<&1, &1, Error, Unit>,
+        (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}},
+          Fail{Corruption{"byte manifest validation failed"}}))
+    case Fail{ByteManifestIo.Host{code, message}}:
+      IO.pure(Handle & Result<&1, &1, Error, Unit>,
+        (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}},
+          Fail{Io{code, message}}))
+    case Done{value}:
+      flush.snapshot.identifier(path.clone.triple(path), lock, table, entries,
+        ByteManifest.next.file.id(value))
+
+# Retains the live table while an independently owned ordered copy is encoded.
+def flush.snapshot(
+  +path: String,
+  lock: DbLock.Lock,
+  table: ByteMemTable.Table,
+  pair: List<&1, ByteMemTable.Entry> & List<&1, ByteMemTable.Entry>
+) -> IO(Handle & Result<&1, &1, Error, Unit>):
+  match pair:
+    case (encoded, retained):
+      do IO<Handle & Result<&1, &1, Error, Unit>>:
+        manifest : Result<&1, &1, ByteManifestIo.Error, ByteManifest.ManifestValue> <-
+          ByteManifestIo.read(path ++ "/MANIFEST")
+        flush.snapshot.manifest(path, lock, table, (encoded, retained), manifest)
+
+# Builds a canonical snapshot without consuming the live table.
+def flush.table(
+  +path: String,
+  lock: DbLock.Lock,
+  pair: ByteMemTable.Table & List<&1, ByteMemTable.Entry>
+) -> IO(Handle & Result<&1, &1, Error, Unit>):
+  match pair:
+    case (table, entries):
+      flush.snapshot(path, lock, table,
+        ByteSstFile.entries.clone(ByteMemTable.ordered_entries(ByteMemTable.Table{entries})))
+
+# Clones the table entries so flush can retain the live in-memory state.
+def flush.cloned(
+  +path: String,
+  lock: DbLock.Lock,
+  pair: List<&1, ByteMemTable.Entry> & List<&1, ByteMemTable.Entry>
+) -> IO(Handle & Result<&1, &1, Error, Unit>):
+  match pair:
+    case (live, snapshot):
+      flush.table(path, lock, (ByteMemTable.Table{live}, snapshot))
+
+# Merges the persisted SST beneath the newest in-memory WAL delta.
+def flush.sst.loaded(
+  +path: String,
+  lock: DbLock.Lock,
+  table: ByteMemTable.Table,
+  result: Result<&1, &1, U32 & String, ByteMemTable.Table>
+) -> IO(Handle & Result<&1, &1, Error, Unit>):
+  match table:
+    case ByteMemTable.Table{delta}:
+      match result:
+        case Fail{(code, message)}:
+          IO.pure(Handle & Result<&1, &1, Error, Unit>,
+            (Handle{path, lock, ByteMemTable.Table{delta}, Open{}, VisibleStats.Stats{0n, 0n}},
+              Fail{recovery.error(code, message)}))
+        case Done{ByteMemTable.Table{base}}:
+          flush.cloned(path, lock,
+            ByteSstFile.entries.clone(ByteMemTable.append(delta, base)))
+
+def flush.manifest.loaded(
+  +path: String,
+  lock: DbLock.Lock,
+  table: ByteMemTable.Table,
+  result: Result<&1, &1, ByteManifestIo.Error, ByteManifest.ManifestValue>
+) -> IO(Handle & Result<&1, &1, Error, Unit>):
+  match table:
+    case ByteMemTable.Table{entries}:
+      match result:
+        case Fail{ByteManifestIo.Invalid{_}}:
+          IO.pure(Handle & Result<&1, &1, Error, Unit>,
+            (Handle{path, lock, ByteMemTable.Table{entries}, Open{}, VisibleStats.Stats{0n, 0n}}, Fail{Corruption{"byte manifest validation failed"}}))
+        case Fail{ByteManifestIo.Host{code, message}}:
+          IO.pure(Handle & Result<&1, &1, Error, Unit>,
+            (Handle{path, lock, ByteMemTable.Table{entries}, Open{}, VisibleStats.Stats{0n, 0n}}, Fail{Io{code, message}}))
+        case Done{ByteManifest.Empty{}}:
+          flush.cloned(path, lock, ByteSstFile.entries.clone(entries))
+        case Done{ByteManifest.GenerationEmpty{}}:
+          flush.cloned(path, lock, ByteSstFile.entries.clone(entries))
+        case Done{ByteManifest.HasSst{}}:
+          do IO<Handle & Result<&1, &1, Error, Unit>>:
+            base : Result<&1, &1, U32 & String, ByteMemTable.Table> <-
+              ByteSstIo.read(path ++ "/SST")
+            flush.sst.loaded(path, lock, ByteMemTable.Table{entries}, base)
+        case Done{ByteManifest.GenerationSst{file_id}}:
+          do IO<Handle & Result<&1, &1, Error, Unit>>:
+            base : Result<&1, &1, U32 & String, ByteMemTable.Table> <-
+              ByteSstIo.read(ByteManifest.sst.generation.path(path, file_id))
+            flush.sst.loaded(path, lock, ByteMemTable.Table{entries}, base)
+
+# Clones table entries before creating a canonical snapshot.
+def flush.open(
+  +path: String,
+  lock: DbLock.Lock,
+  table: ByteMemTable.Table
+) -> IO(Handle & Result<&1, &1, Error, Unit>):
+  do IO<Handle & Result<&1, &1, Error, Unit>>:
+    manifest : Result<&1, &1, ByteManifestIo.Error, ByteManifest.ManifestValue> <-
+      ByteManifestIo.read(path ++ "/MANIFEST")
+    flush.manifest.loaded(path, lock, table, manifest)
+
+# Publishes the current byte table as an authenticated SST snapshot.
+def flush(handle: Handle) -> IO(Handle & Result<&1, &1, Error, Unit>):
+  match handle:
+    case Handle{path, lock, table, Open{}, base_stats}:
+      flush.open(path, lock, table)
+    case Handle{path, lock, table, Poisoned{}, base_stats}:
+      IO.pure(Handle & Result<&1, &1, Error, Unit>,
+        (Handle{path, lock, table, Poisoned{}, VisibleStats.Stats{0n, 0n}}, Fail{CommitUnknown{0, "database handle requires reopen"}}))
+
 def compact.entries(
   +path: String,
   lock: DbLock.Lock,
@@ -842,10 +928,17 @@ def compact.manifest.loaded(
             (Handle{path, lock, ByteMemTable.Table{entries}, Open{}, VisibleStats.Stats{0n, 0n}}, Fail{Io{code, message}}))
         case Done{ByteManifest.Empty{}}:
           compact.entries(path, lock, ByteSstFile.entries.clone(entries))
+        case Done{ByteManifest.GenerationEmpty{}}:
+          compact.entries(path, lock, ByteSstFile.entries.clone(entries))
         case Done{ByteManifest.HasSst{}}:
           do IO<Handle & Result<&1, &1, Error, Unit>>:
             base : Result<&1, &1, U32 & String, ByteMemTable.Table> <-
               ByteSstIo.read(path ++ "/SST")
+            compact.sst.loaded(path, lock, ByteMemTable.Table{entries}, base)
+        case Done{ByteManifest.GenerationSst{file_id}}:
+          do IO<Handle & Result<&1, &1, Error, Unit>>:
+            base : Result<&1, &1, U32 & String, ByteMemTable.Table> <-
+              ByteSstIo.read(ByteManifest.sst.generation.path(path, file_id))
             compact.sst.loaded(path, lock, ByteMemTable.Table{entries}, base)
 
 def compact.pathcopies(
@@ -1027,7 +1120,7 @@ def get.sst.sized(
             case Done{size}:
               do IO<Handle & Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>>:
                 opened : Result<&1, &1, U32 & String, SstCursor.Cursor> <-
-                  SstCursor.open.trusted(cursor_path ++ "/SST",
+                  SstCursor.open.trusted(cursor_path,
                     SstCursor.Bounds{Some{lower}, None{}, None{}})
                 get.sst.opened(retained_path, lock, table, query, size, opened)
 
@@ -1042,9 +1135,100 @@ def get.sst.start(
       match keys:
         case (lower, query):
           do IO<Handle & Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>>:
-            size : Result<&1, &1, U32 & String, Nat> <- Fs.file_size(size_path ++ "/SST")
+            size : Result<&1, &1, U32 & String, Nat> <- Fs.file_size(size_path)
             get.sst.sized((cursor_path, retained_path), lock, table,
               (lower, query), size)
+
+def get.sst.generation.file.paths(
+  files: String & String,
+  retained_path: String,
+  lock: DbLock.Lock,
+  table: ByteMemTable.Table,
+  keys: Bytes.Bytes & Bytes.Bytes
+) -> IO(Handle & Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>):
+  match files:
+    case (size_path, cursor_path):
+      match keys:
+        case (lower, query):
+          do IO<Handle & Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>>:
+            size : Result<&1, &1, U32 & String, Nat> <- Fs.file_size(size_path)
+            get.sst.sized((cursor_path, retained_path), lock, table,
+              (lower, query), size)
+
+def get.sst.generation.file(
+  values: String & String,
+  lock: DbLock.Lock,
+  table: ByteMemTable.Table,
+  keys: Bytes.Bytes & Bytes.Bytes
+) -> IO(Handle & Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>):
+  match values:
+    case (generation_path, retained_path):
+      get.sst.generation.file.paths(path.clone.pair(generation_path),
+        retained_path, lock, table, keys)
+
+def get.sst.generation.read(
+  paths: String & String,
+  file_id: U32,
+  lock: DbLock.Lock,
+  table: ByteMemTable.Table,
+  key: Bytes.Bytes
+) -> IO(Handle & Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>):
+  match paths:
+    case (generation_dir, retained_path):
+      get.sst.generation.file(
+        (ByteManifest.sst.generation.path(generation_dir, file_id), retained_path),
+        lock, table, ByteMemTable.bytes.clone(key))
+
+def get.sst.generation.probe(
+  paths: String & String,
+  file_id: U32,
+  lock: DbLock.Lock,
+  key: Bytes.Bytes,
+  pair: ByteMemTable.Table & ByteMemTable.Probe
+) -> IO(Handle & Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>):
+  match paths:
+    case (generation_dir, retained_path):
+      match pair:
+        case (table, ByteMemTable.Absent{}):
+          get.sst.generation.read((generation_dir, retained_path), file_id,
+            lock, table, key)
+        case (table, ByteMemTable.Deleted{}):
+          IO.pure(Handle & Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>,
+            (Handle{retained_path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}},
+              Done{None{}}))
+        case (table, ByteMemTable.Present{value}):
+          IO.pure(Handle & Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>,
+            (Handle{retained_path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}},
+              Done{Some{value}}))
+
+def get.sst.generation.probe.start(
+  paths: String & String,
+  file_id: U32,
+  lock: DbLock.Lock,
+  keys: Bytes.Bytes & Bytes.Bytes,
+  table: ByteMemTable.Table
+) -> IO(Handle & Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>):
+  match paths:
+    case (generation_dir, retained_path):
+      match keys:
+        case (probe_key, fallback_key):
+          get.sst.generation.probe((generation_dir, retained_path), file_id,
+            lock, fallback_key, ByteMemTable.probe(table, probe_key))
+
+def get.sst.generation.path(
+  paths: String & String,
+  file_id: U32,
+  lock: DbLock.Lock,
+  table: ByteMemTable.Table,
+  key: Bytes.Bytes
+) -> IO(Handle & Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>):
+  get.sst.generation.probe.start(paths, file_id, lock,
+    ByteMemTable.bytes.clone(key), table)
+
+def path.append.sst.triple(paths: String & (String & String)) -> String & (String & String):
+  match paths:
+    case (size_dir, (cursor_dir, retained_path)):
+      (size_dir ++ "/SST", (cursor_dir ++ "/SST", retained_path))
 
 def get.sst(
   +path: String,
@@ -1052,7 +1236,7 @@ def get.sst(
   key: Bytes.Bytes,
   table: ByteMemTable.Table
 ) -> IO(Handle & Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>):
-  get.sst.start(path.clone.triple(path), lock, table,
+  get.sst.start(path.append.sst.triple(path.clone.triple(path)), lock, table,
     ByteMemTable.bytes.clone(key))
 
 def get.delta(
@@ -1108,8 +1292,12 @@ def get.manifest(
         (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}}, Fail{Io{code, message}}))
     case Done{ByteManifest.Empty{}}:
       get.delta(path, lock, ByteMemTable.get(table, key))
+    case Done{ByteManifest.GenerationEmpty{}}:
+      get.delta(path, lock, ByteMemTable.get(table, key))
     case Done{ByteManifest.HasSst{}}:
       get.sst.probe.start(path, lock, ByteMemTable.bytes.clone(key), table)
+    case Done{ByteManifest.GenerationSst{file_id}}:
+      get.sst.generation.path(path.clone.pair(path), file_id, lock, table, key)
 
 def get.pathcopies(
   copies: String & String,
@@ -1789,25 +1977,37 @@ def scan.sources.opened(
       IO.pure(Handle & Result<&1, &1, Error, VisibleCursor.Cursor>,
         (handle, Done{VisibleCursor.open(Some{base}, delta, bounds)}))
 
-def scan.exists.result(
+def scan.manifest.result(
   +path: String,
   handle: Handle,
   delta: List<&1, ByteMemTable.Entry>,
   bounds: RangeCursor.Bounds,
   sst_bounds: SstCursor.Bounds,
-  exists: Result<&1, &1, U32 & String, Bool>
+  result: Result<&1, &1, ByteManifestIo.Error, ByteManifest.ManifestValue>
 ) -> IO(Handle & Result<&1, &1, Error, VisibleCursor.Cursor>):
-  match exists:
-    case Fail{error}:
+  match result:
+    case Fail{ByteManifestIo.Invalid{_}}:
       IO.pure(Handle & Result<&1, &1, Error, VisibleCursor.Cursor>,
-        (handle, Fail{io.error(error)}))
-    case Done{False{}}:
+        (handle, Fail{Corruption{"byte manifest validation failed"}}))
+    case Fail{ByteManifestIo.Host{code, message}}:
+      IO.pure(Handle & Result<&1, &1, Error, VisibleCursor.Cursor>,
+        (handle, Fail{Io{code, message}}))
+    case Done{ByteManifest.Empty{}}:
       IO.pure(Handle & Result<&1, &1, Error, VisibleCursor.Cursor>,
         (handle, Done{VisibleCursor.open(None{}, delta, bounds)}))
-    case Done{True{}}:
+    case Done{ByteManifest.GenerationEmpty{}}:
+      IO.pure(Handle & Result<&1, &1, Error, VisibleCursor.Cursor>,
+        (handle, Done{VisibleCursor.open(None{}, delta, bounds)}))
+    case Done{ByteManifest.HasSst{}}:
       do IO<Handle & Result<&1, &1, Error, VisibleCursor.Cursor>>:
         opened : Result<&1, &1, U32 & String, SstCursor.Cursor> <-
           SstCursor.open.trusted(path ++ "/SST", sst_bounds)
+        scan.sources.opened(handle, delta, bounds, opened)
+    case Done{ByteManifest.GenerationSst{file_id}}:
+      do IO<Handle & Result<&1, &1, Error, VisibleCursor.Cursor>>:
+        opened : Result<&1, &1, U32 & String, SstCursor.Cursor> <-
+          SstCursor.open.trusted(
+            ByteManifest.sst.generation.path(path, file_id), sst_bounds)
         scan.sources.opened(handle, delta, bounds, opened)
 
 def scan.path.kept.triple(
@@ -1836,9 +2036,9 @@ def scan.exists.start(
   match paths:
     case (exists_path, (sst_path, handle)):
       do IO<Handle & Result<&1, &1, Error, VisibleCursor.Cursor>>:
-        exists : Result<&1, &1, U32 & String, Bool> <-
-          Fs.exists(exists_path ++ "/SST")
-        scan.exists.result(sst_path, handle, delta, bounds, sst_bounds, exists)
+        manifest : Result<&1, &1, ByteManifestIo.Error, ByteManifest.ManifestValue> <-
+          ByteManifestIo.read(exists_path ++ "/MANIFEST")
+        scan.manifest.result(sst_path, handle, delta, bounds, sst_bounds, manifest)
 
 def scan.bounds.cloned(
   handle: Handle,
@@ -1993,10 +2193,19 @@ def snapshot.manifest.result.paths(
         case Done{ByteManifest.Empty{}}:
           snapshot.limited.saved.result(
             Handle{retained_path, lock, table, state, base_stats}, Done{ByteMemTable.empty()})
+        case Done{ByteManifest.GenerationEmpty{}}:
+          snapshot.limited.saved.result(
+            Handle{retained_path, lock, table, state, base_stats}, Done{ByteMemTable.empty()})
         case Done{ByteManifest.HasSst{}}:
           do IO<Handle & Result<&1, &1, Error, List<&1, ByteMemTable.Entry>>>:
             base : Result<&1, &1, U32 & String, ByteMemTable.Table> <-
               ByteSstIo.read(read_path ++ "/SST")
+            snapshot.limited.saved.result(
+              Handle{retained_path, lock, table, state, base_stats}, base)
+        case Done{ByteManifest.GenerationSst{file_id}}:
+          do IO<Handle & Result<&1, &1, Error, List<&1, ByteMemTable.Entry>>>:
+            base : Result<&1, &1, U32 & String, ByteMemTable.Table> <-
+              ByteSstIo.read(ByteManifest.sst.generation.path(read_path, file_id))
             snapshot.limited.saved.result(
               Handle{retained_path, lock, table, state, base_stats}, base)
 
