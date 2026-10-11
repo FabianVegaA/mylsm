@@ -109,3 +109,18 @@ def Laws.publication_prepends_to_retained_generations(references):
 
 def Laws.publication_preserves_older_retained_generations():
   {==}
+
+def Laws.pin_selected_retired_generation():
+  {==}
+
+def Laws.pin_missing_generation_preserves_registry():
+  {==}
+
+def Laws.release_final_retired_generation():
+  {==}
+
+def Laws.release_nonfinal_retired_generation():
+  {==}
+
+def Laws.release_missing_generation_preserves_registry():
+  {==}

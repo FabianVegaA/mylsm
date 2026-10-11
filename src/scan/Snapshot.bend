@@ -53,12 +53,34 @@ type RetentionDecision is Data:
 
 # Tracks one published SST generation and its live reader references.
 type FileGeneration is Data:
-  FileGeneration{number: Nat, bytes: Nat, references: Nat}
+  FileGeneration{id: Nat, size: Nat, references: Nat}
 
 # Keeps the current generation separate from all reader-retained generations.
 type GenerationRegistry is Data:
   GenerationRegistry{current: FileGeneration,
     retired: List<&2, FileGeneration>}
+
+# Reports a successful generation pin or preserves the registry on a missing identifier.
+type GenerationPinDecision is Data:
+  Pinned{registry: GenerationRegistry}
+  MissingGeneration{registry: GenerationRegistry}
+
+# Reports an incremented reader count for a located retired generation.
+type RetiredPin is Data:
+  RetiredPinned{retired: List<&2, FileGeneration>}
+  RetiredPinMissing{retired: List<&2, FileGeneration>}
+
+# Reports a retained, reclaimed, or missing retired generation during release.
+type RetiredRelease is Data:
+  RetiredReleased{retired: List<&2, FileGeneration>}
+  RetiredReclaimed{retired: List<&2, FileGeneration>, number: Nat, bytes: Nat}
+  RetiredMissing{retired: List<&2, FileGeneration>}
+
+# Reports a decremented reference or identifies files reclaimed after the last reader.
+type GenerationReleaseDecision is Data:
+  GenerationReleased{registry: GenerationRegistry}
+  GenerationReclaimed{registry: GenerationRegistry, number: Nat, bytes: Nat}
+  MissingReference{registry: GenerationRegistry}
 
 # Produces the updated reservation only when both bounds admit it.
 def reserve.result(
@@ -301,14 +323,14 @@ def publish.registry.current(
   next_bytes: Nat
 ) -> GenerationRegistry:
   match current:
-    case FileGeneration{+number, +bytes, references}:
+    case FileGeneration{+id, +size, references}:
       match references:
         case 0n:
-          GenerationRegistry{FileGeneration{Nat.add(number, 1n),
+          GenerationRegistry{FileGeneration{Nat.add(id, 1n),
             next_bytes, 0n}, retired}
         case 1n+rest:
-          GenerationRegistry{FileGeneration{Nat.add(number, 1n),
-            next_bytes, 0n}, Con{FileGeneration{number, bytes, 1n+rest}, retired}}
+          GenerationRegistry{FileGeneration{Nat.add(id, 1n),
+            next_bytes, 0n}, Con{FileGeneration{id, size, 1n+rest}, retired}}
 
 def publish.registry(
   registry: GenerationRegistry,
@@ -317,6 +339,241 @@ def publish.registry(
   match registry:
     case GenerationRegistry{current, retired}:
       publish.registry.current(current, retired, next_bytes)
+
+def pin.retired.prepend(
+  id: Nat,
+  size: Nat,
+  references: Nat,
+  result: RetiredPin
+) -> RetiredPin:
+  match result:
+    case RetiredPinned{retired}:
+      RetiredPinned{Con{FileGeneration{id, size, references}, retired}}
+    case RetiredPinMissing{retired}:
+      RetiredPinMissing{Con{FileGeneration{id, size, references}, retired}}
+
+def pin.retired.loop(
+  retired: List<&2, FileGeneration>,
+  +target: Nat,
+  matches: Bool
+) -> RetiredPin:
+  match retired:
+    case Nil{}: RetiredPinMissing{Nil{}}
+    case Con{FileGeneration{+id, +size, +references}, Nil{}}:
+      match matches:
+        case True{}:
+          RetiredPinned{Con{FileGeneration{id, size,
+            Nat.add(references, 1n)}, Nil{}}}
+        case False{}:
+          RetiredPinMissing{Con{FileGeneration{id, size,
+            references}, Nil{}}}
+    case Con{FileGeneration{+id, +size, +references},
+        Con{FileGeneration{+next_id, +next_size, +next_references}, rest}}:
+      match matches:
+        case True{}:
+          RetiredPinned{Con{FileGeneration{id, size,
+            Nat.add(references, 1n)},
+            Con{FileGeneration{next_id, next_size, next_references}, rest}}}
+        case False{}:
+          pin.retired.prepend(id, size, references,
+            pin.retired.loop(Con{FileGeneration{next_id, next_size,
+              next_references}, rest}, target,
+              Nat.is_eq(next_id, target)))
+
+def pin.retired(
+  +retired: List<&2, FileGeneration>,
+  +target: Nat
+) -> RetiredPin:
+  match retired:
+    case Nil{}: RetiredPinMissing{Nil{}}
+    case Con{generation, _}:
+      match generation:
+        case FileGeneration{+id, _, _}:
+          pin.retired.loop(retired, target, Nat.is_eq(id, target))
+
+def pin.registry.retired(
+  id: Nat,
+  size: Nat,
+  references: Nat,
+  retired: RetiredPin
+) -> GenerationPinDecision:
+  match retired:
+    case RetiredPinned{retired}:
+      Pinned{GenerationRegistry{FileGeneration{id, size, references}, retired}}
+    case RetiredPinMissing{retired}:
+      MissingGeneration{GenerationRegistry{FileGeneration{id, size,
+        references}, retired}}
+
+def pin.registry.decision(
+  +id: Nat,
+  +size: Nat,
+  +references: Nat,
+  +retired: List<&2, FileGeneration>,
+  +target: Nat,
+  matches: Bool
+) -> GenerationPinDecision:
+  match matches:
+    case True{}:
+      Pinned{GenerationRegistry{FileGeneration{id, size,
+        Nat.add(references, 1n)}, retired}}
+    case False{}:
+      pin.registry.retired(id, size, references,
+        pin.retired(retired, target))
+
+def pin.registry.current(
+  current: FileGeneration,
+  retired: List<&2, FileGeneration>,
+  +target: Nat
+) -> GenerationPinDecision:
+  match current:
+    case FileGeneration{+id, +size, references}:
+      pin.registry.decision(id, size, references, retired, target,
+        Nat.is_eq(id, target))
+
+# Increments the reference count of one current or retired generation.
+def pin_generation(
+  registry: GenerationRegistry,
+  target: Nat
+) -> GenerationPinDecision:
+  match registry:
+    case GenerationRegistry{current, retired}:
+      pin.registry.current(current, retired, target)
+
+def release.retired.prepend(
+  id: Nat,
+  size: Nat,
+  references: Nat,
+  result: RetiredRelease
+) -> RetiredRelease:
+  match result:
+    case RetiredReleased{retired}:
+      RetiredReleased{Con{FileGeneration{id, size, references}, retired}}
+    case RetiredReclaimed{retired, number, bytes}:
+      RetiredReclaimed{Con{FileGeneration{id, size, references}, retired},
+        number, bytes}
+    case RetiredMissing{retired}:
+      RetiredMissing{Con{FileGeneration{id, size, references}, retired}}
+
+def release.retired.references(
+  id: Nat,
+  size: Nat,
+  references: Nat,
+  tail: List<&2, FileGeneration>
+) -> RetiredRelease:
+  match references:
+    case 0n:
+      RetiredMissing{Con{FileGeneration{id, size, references}, tail}}
+    case 1n:
+      RetiredReclaimed{tail, id, size}
+    case 1n+rest:
+      RetiredReleased{Con{FileGeneration{id, size, rest}, tail}}
+
+def release.retired.loop(
+  retired: List<&2, FileGeneration>,
+  +target: Nat,
+  matches: Bool
+) -> RetiredRelease:
+  match retired:
+    case Nil{}: RetiredMissing{Nil{}}
+    case Con{FileGeneration{+id, +size, +references}, Nil{}}:
+      match matches:
+        case True{}:
+          release.retired.references(id, size, references, Nil{})
+        case False{}:
+          RetiredMissing{Con{FileGeneration{id, size,
+            references}, Nil{}}}
+    case Con{FileGeneration{+id, +size, +references},
+        Con{FileGeneration{+next_id, +next_size, +next_references}, rest}}:
+      match matches:
+        case True{}:
+          release.retired.references(id, size, references,
+            Con{FileGeneration{next_id, next_size, next_references}, rest})
+        case False{}:
+          release.retired.prepend(id, size, references,
+            release.retired.loop(Con{FileGeneration{next_id, next_size,
+              next_references}, rest}, target,
+              Nat.is_eq(next_id, target)))
+
+def release.retired(
+  +retired: List<&2, FileGeneration>,
+  +target: Nat
+) -> RetiredRelease:
+  match retired:
+    case Nil{}: RetiredMissing{Nil{}}
+    case Con{generation, _}:
+      match generation:
+        case FileGeneration{+id, _, _}:
+          release.retired.loop(retired, target, Nat.is_eq(id, target))
+
+def release.registry.retired(
+  id: Nat,
+  size: Nat,
+  references: Nat,
+  result: RetiredRelease
+) -> GenerationReleaseDecision:
+  match result:
+    case RetiredReleased{retired}:
+      GenerationReleased{GenerationRegistry{
+        FileGeneration{id, size, references}, retired}}
+    case RetiredReclaimed{retired, number, bytes}:
+      GenerationReclaimed{GenerationRegistry{
+        FileGeneration{id, size, references}, retired}, number, bytes}
+    case RetiredMissing{retired}:
+      MissingReference{GenerationRegistry{
+        FileGeneration{id, size, references}, retired}}
+
+def release.registry.references(
+  id: Nat,
+  size: Nat,
+  references: Nat,
+  retired: List<&2, FileGeneration>
+) -> GenerationReleaseDecision:
+  match references:
+    case 0n:
+      MissingReference{GenerationRegistry{
+        FileGeneration{id, size, references}, retired}}
+    case 1n+rest:
+      GenerationReleased{GenerationRegistry{FileGeneration{id, size, rest},
+        retired}}
+
+def release.registry.decision(
+  +id: Nat,
+  +size: Nat,
+  +references: Nat,
+  +retired: List<&2, FileGeneration>,
+  +target: Nat,
+  matches: Bool
+) -> GenerationReleaseDecision:
+  match matches:
+    case True{}:
+      release.registry.references(id, size, references, retired)
+    case False{}:
+      release.registry.retired(id, size, references,
+        release.retired(retired, target))
+
+def release.registry.current(
+  current: FileGeneration,
+  retired: List<&2, FileGeneration>,
+  +target: Nat
+) -> GenerationReleaseDecision:
+  match current:
+    case FileGeneration{+id, +size, references}:
+      release.registry.decision(id, size, references, retired, target,
+        Nat.is_eq(id, target))
+
+def release_generation.in(
+  registry: GenerationRegistry,
+  target: Nat
+) -> GenerationReleaseDecision:
+  match registry:
+    case GenerationRegistry{current, retired}:
+      release.registry.current(current, retired, target)
+
+def release_generation.from_registry(
+  registry: GenerationRegistry,
+  target: Nat
+) -> GenerationReleaseDecision:
+  release_generation.in(registry, target)
 
 # Releases one reference and reclaims a retired generation after its final reader.
 def release_generation(retired: RetiredGeneration) -> RetentionDecision:

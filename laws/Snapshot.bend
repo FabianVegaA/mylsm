@@ -167,3 +167,54 @@ law publication_preserves_older_retained_generations:
     [Snapshot.FileGeneration{5n, 1024n, 2n}]}, 8192n) ==
     Snapshot.GenerationRegistry{Snapshot.FileGeneration{8n, 8192n, 0n},
       [Snapshot.FileGeneration{5n, 1024n, 2n}]} : Snapshot.GenerationRegistry}
+
+# Pins the selected retired generation without changing other reader counts.
+law pin_selected_retired_generation:
+  {Snapshot.pin_generation(Snapshot.GenerationRegistry{
+    Snapshot.FileGeneration{7n, 4096n, 0n},
+    [Snapshot.FileGeneration{5n, 1024n, 1n},
+     Snapshot.FileGeneration{3n, 512n, 2n}]}, 5n) ==
+    Snapshot.Pinned{Snapshot.GenerationRegistry{
+      Snapshot.FileGeneration{7n, 4096n, 0n},
+      [Snapshot.FileGeneration{5n, 1024n, 2n},
+       Snapshot.FileGeneration{3n, 512n, 2n}]}} : Snapshot.GenerationPinDecision}
+
+# Rejects a pin for an absent generation without changing the registry.
+law pin_missing_generation_preserves_registry:
+  {Snapshot.pin_generation(Snapshot.GenerationRegistry{
+    Snapshot.FileGeneration{7n, 4096n, 0n},
+    [Snapshot.FileGeneration{5n, 1024n, 1n}]}, 9n) ==
+    Snapshot.MissingGeneration{Snapshot.GenerationRegistry{
+      Snapshot.FileGeneration{7n, 4096n, 0n},
+      [Snapshot.FileGeneration{5n, 1024n, 1n}]}} : Snapshot.GenerationPinDecision}
+
+# Reclaims only the selected retired generation after its final reader releases it.
+law release_final_retired_generation:
+  {Snapshot.release_generation.from_registry(Snapshot.GenerationRegistry{
+    Snapshot.FileGeneration{7n, 4096n, 0n},
+    [Snapshot.FileGeneration{5n, 1024n, 1n},
+     Snapshot.FileGeneration{3n, 512n, 2n}]}, 5n) ==
+    Snapshot.GenerationReclaimed{Snapshot.GenerationRegistry{
+      Snapshot.FileGeneration{7n, 4096n, 0n},
+      [Snapshot.FileGeneration{3n, 512n, 2n}]}, 5n, 1024n} :
+    Snapshot.GenerationReleaseDecision}
+
+# Decrements one retired reader while preserving the retained files and other entries.
+law release_nonfinal_retired_generation:
+  {Snapshot.release_generation.from_registry(Snapshot.GenerationRegistry{
+    Snapshot.FileGeneration{7n, 4096n, 0n},
+    [Snapshot.FileGeneration{5n, 1024n, 2n},
+     Snapshot.FileGeneration{3n, 512n, 2n}]}, 5n) ==
+    Snapshot.GenerationReleased{Snapshot.GenerationRegistry{
+      Snapshot.FileGeneration{7n, 4096n, 0n},
+      [Snapshot.FileGeneration{5n, 1024n, 1n},
+       Snapshot.FileGeneration{3n, 512n, 2n}]}} : Snapshot.GenerationReleaseDecision}
+
+# Rejects a release for a generation without a live reference.
+law release_missing_generation_preserves_registry:
+  {Snapshot.release_generation.from_registry(Snapshot.GenerationRegistry{
+    Snapshot.FileGeneration{7n, 4096n, 0n},
+    [Snapshot.FileGeneration{5n, 1024n, 1n}]}, 9n) ==
+    Snapshot.MissingReference{Snapshot.GenerationRegistry{
+      Snapshot.FileGeneration{7n, 4096n, 0n},
+      [Snapshot.FileGeneration{5n, 1024n, 1n}]}} : Snapshot.GenerationReleaseDecision}
