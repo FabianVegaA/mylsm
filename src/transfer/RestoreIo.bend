@@ -2,6 +2,7 @@ import Base
 import ../ByteDurableDb.bend as Db
 import ../ByteMemTable.bend as ByteMemTable
 import ../ByteWal.bend as ByteWal
+import ../CrashPoint.bend as CrashPoint
 import ../Fs.bend as Fs
 import ./Restore.bend as Restore
 import ./RestorePolicy.bend as RestorePolicy
@@ -260,7 +261,10 @@ def publish.parent.synced(
       IO.pure(Result<&1, &1, Error, Unit>,
         Fail{CommitUnknown{code, "parent directory sync failed: " ++ message}})
     case Done{Unit{}}:
-      IO.pure(Result<&1, &1, Error, Unit>, Done{Unit{}})
+      do IO<Result<&1, &1, Error, Unit>>:
+        _checkpoint : Result<&1, &1, U32 & String, Unit> <-
+          CrashPoint.hit("restore.parent_synced")
+        return Done{Unit{}}
 
 def publish.renamed(
   +destination: String,
@@ -274,6 +278,8 @@ def publish.renamed(
         return Fail{Io{code, "exclusive rename failed: " ++ message}}
     case Done{Unit{}}:
       do IO<Result<&1, &1, Error, Unit>>:
+        _checkpoint : Result<&1, &1, U32 & String, Unit> <-
+          CrashPoint.hit("restore.renamed")
         synced : Result<&1, &1, U32 & String, Unit> <-
           Fs.fsync(path.clone(destination ++ "/.."))
         published : Result<&1, &1, Error, Unit> <- publish.parent.synced(synced)
@@ -291,6 +297,8 @@ def publish.synced(
         return Fail{Io{code, "staged directory sync failed: " ++ message}}
     case Done{Unit{}}:
       do IO<Result<&1, &1, Error, Unit>>:
+        _checkpoint : Result<&1, &1, U32 & String, Unit> <-
+          CrashPoint.hit("restore.before_rename")
         renamed : Result<&1, &1, U32 & String, Unit> <-
           Fs.rename_noreplace(path.clone(temporary), path.clone(destination))
         published : Result<&1, &1, Error, Unit> <- publish.renamed(destination, temporary, renamed)
