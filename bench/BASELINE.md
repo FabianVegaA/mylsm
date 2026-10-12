@@ -1,5 +1,32 @@
 # Benchmark baseline
 
+## Same-container 0.5.0.0 / 0.6.0.0 Linux comparison
+
+The 0.5 source is reconstructed from commit `6d3300e`; the candidate source is
+commit `93ac5ed`. Both use Bend 2.0.36 and Clang 18 `-O2` in the same Ubuntu
+24.04 arm64 Docker container on a LinuxKit 6.12.76 kernel, with 12 vCPUs and
+903 GiB free on the overlay filesystem. Five paired runs use
+`bench/workload/durable_api_perf.sh` (default runtime threads) and five use
+`bench/workload/phase3_metrics.sh 20485` (two threads). Each run checks
+recovery; the phase-three workload also checks first/middle/last values before
+and after recovery and measures 101 point reads.
+
+| Workload | Metric | 0.5.0.0 median | 0.6.0.0 median | Change |
+| --- | --- | ---: | ---: | ---: |
+| 1,000 overwrites, internal | elapsed | 344 ms | 319 ms | 7.3% faster |
+| 1,000 overwrites, public String | elapsed | 336 ms | 319 ms | 5.1% faster |
+| 20,485 writes + recovery + 101 reads | elapsed | 7,573 ms | 6,913 ms | 8.7% faster |
+| 20,485-write workload | recovery | 317 ms | 299 ms | 5.7% faster |
+
+All paired medians meet the 5% regression gate for these workloads. The
+20,485-write run has 1/2/2 ms read p50/p95/p99 on both versions. The 1,000
+overwrite test repeatedly replaces the same key; neither workload represents
+the full binary/UTF-8 API, batch, scan, snapshot, backup/restore, or coordinated
+client matrix. Raw samples are in `bench/results/mylsm-0.5.0.0-same-linux-performance.tsv`,
+`bench/results/mylsm-0.6.0.0-same-linux-performance.tsv`,
+`bench/results/mylsm-0.5.0.0-phase3-linux-samples.tsv`, and
+`bench/results/mylsm-0.6.0.0-phase3-linux-samples.tsv`.
+
 ## Packed binary storage 0.4.0.0 comparison
 
 Five-run before/after measurements use Bend 2.0.35 on Darwin arm64, 12 logical

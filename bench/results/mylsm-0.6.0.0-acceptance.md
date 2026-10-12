@@ -38,6 +38,17 @@ higher; both versions write 64 KiB and pass recovery. This does not establish
 the gate for binary API, batches, range scans, snapshots, backup/restore,
 coordinated clients, or larger datasets.
 
+The same baseline/candidate comparison also ran five `phase3_metrics.sh 20485`
+workloads each, with two runtime threads and 101 point reads per run. The
+baseline median elapsed is 7,573 ms and candidate median is 6,913 ms (8.7%
+faster); recovery medians are 317 and 299 ms. Both have read p50/p95/p99 of
+1/2/2 ms, and the median peak RSS is 40,710,144 / 40,861,696 B. Both write the
+same 282,839-byte WAL, 76-byte manifest, and 453,174-byte table. All ten runs
+pass first/middle/last validation before and after recovery. Raw baseline rows
+are in `mylsm-0.5.0.0-phase3-linux-samples.tsv`; candidate rows are in
+`mylsm-0.6.0.0-phase3-linux-samples.tsv`. These comparable workloads pass the
+5% median regression gate, but the other release workloads remain unmeasured.
+
 ## Executed gates
 
 | Gate | Command | Result |
@@ -64,6 +75,7 @@ coordinated clients, or larger datasets.
 | Linux resource and legacy SST gates | `resource_limits.sh`, `byte_index_budget.sh`, `legacy_sst_io.sh` | All pass on Ubuntu 24.04 arm64 |
 | Linux repeated write/recovery/read workload | `phase3_metrics.sh 20485`, five runs | Passes correctness and recovery checks; raw results are in `mylsm-0.6.0.0-phase3-linux-samples.tsv` |
 | Same-container 0.5/0.6 durable API comparison | `durable_api_perf.sh`, five runs per source tree | Pass; 1,000-overwrite median elapsed time is 344→319 ms internal and 336→319 ms public String; raw comparison samples above |
+| Same-container 0.5/0.6 20,485-write comparison | `phase3_metrics.sh 20485`, five runs per source tree, two threads | Pass; elapsed median 7,573→6,913 ms, recovery 317→299 ms, read p50/p95/p99 1/2/2 ms, correctness samples pass; raw TSVs above |
 | Write-limit cleanup | `migration_file_limit.sh`, `backup_file_limit.sh` | Pass on Darwin and Linux; these use `RLIMIT_FSIZE`, preserve source data, and remove known staging artifacts; they are not true ENOSPC |
 | True Linux filesystem-full cleanup | `migration_enospc.sh`, `backup_enospc.sh` in Docker with a full 64 KiB tmpfs | Pass; migration preserves source checksums and publishes no destination/staging paths; backup publishes no bundle/staging path and releases the source lock |
 | JavaScript Bun FFI | `bun bench/smoke/js_bun_ffi.js` | Pass on Darwin and Linux arm64; exercises real flock acquire/release and atomic no-replace rename success/collision behavior |
