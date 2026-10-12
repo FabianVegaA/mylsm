@@ -31,7 +31,7 @@ Scans return an owned cursor with `seek`, `next`, and `close`; snapshots expose 
 
 ## Key and value limits
 
-All limits count encoded bytes. The maximum encoded mutation record, including its tag and length fields, is 1 GiB, consistent with the current codec ceiling. A multi-mutation WAL frame is limited to 1 MiB; a single-mutation frame is limited to the record ceiling plus the existing 36-byte frame overhead. A public batch contains 1 to 256 mutations. Empty batches are invalid. The implementation rejects overflow and limit violations before WAL append or result publication.
+All limits count encoded bytes. Key fields are capped at 1 GiB. A single-mutation WAL frame is limited to 1 GiB plus the existing 36-byte frame overhead; a multi-mutation WAL frame is limited to 1 MiB. A public batch contains 1 to 256 mutations. Empty batches are invalid. The implementation rejects overflow and limit violations before WAL append or result publication.
 
 The empty key is valid. Empty values are valid and differ from a missing key. Embedded zero bytes and invalid UTF-8 are valid in the byte API. The UTF-8 API validates incoming text and returns `InvalidUtf8` if a stored byte key/value cannot be decoded for a text read. No conversion replaces or drops bytes.
 

@@ -47,14 +47,24 @@ lock-file convention with weaker crash guarantees.
 
 `put`, `delete`, and `write_batch` accept batches containing 1–256 mutations. Empty batches
 return `InvalidArgument`; batches over 256 mutations return `ResourceLimit` before WAL access.
-The existing WAL codec limits each encoded record to 1 GiB, including its key/value length
-fields. Multi-mutation frames are limited to 1 MiB; a single-mutation frame is bounded by the
-codec's record limit plus 36 bytes of frame overhead. The complete batch is encoded before opening the WAL, then appended,
-synced, and applied to memory. A failure to open the WAL is a rejected write before
+The key length ceiling is 1 GiB. A single-mutation WAL frame is capped at 1 GiB plus 36 bytes
+of framing; multi-mutation frames are capped at 1 MiB. The complete batch is encoded before
+opening the WAL, then appended, synced, and applied to memory. A failure to open the WAL is a rejected write before
 append. A write or sync failure after append starts returns `CommitUnknown` and poisons the
 handle; close and reopen before retrying. A successful commit returns `WriteOutcome` with
 `MaintenanceComplete` or `MaintenancePending`. A pending maintenance error does not revoke the
 commit, leaves the handle blocked for further writes, and still permits reads and close.
+
+Current bounded-resource defaults are finite: keys are at most 1 GiB; a single-mutation WAL
+frame is at most 1 GiB plus 36 bytes; multi-mutation WAL frames and SST blocks target at most
+1 MiB; batches contain at most 256 mutations; serialized-index reads use at most a 16 KiB page
+within a 64 KiB resident-buffer budget; a local materialized snapshot is at most 64 MiB; and the owner admits
+at most 64 snapshots and 64 MiB of aggregate retained roots, with at most 64 cursors per
+snapshot. Restore input is capped at 64 MiB. Backup admission is bounded by the retained
+snapshot budget, with no separate encoded-output byte cap. The owner processes one request at
+a time; its listening socket uses a backlog hint of 64, but there is no application queue,
+queue-byte budget, or queue-depth metric yet. These are implementation constants, not
+per-database user-configurable options.
 
 `stats` reports `active_bytes` as the Manifest plus the byte sizes of the SSTables named by that
 Manifest, `wal_bytes` in bytes, `memtable_entries` as an entry count across active and frozen
@@ -154,12 +164,12 @@ verified 0.5.0.0 database without modifying it and writes a new destination.
 After `CommitUnknown`, reopen and inspect the database before deciding whether to
 retry a mutation; the client never retries a dispatched write automatically.
 
-This is implementation work toward 0.6.0.0, not a release claim. `Utf8` and `Bytes`
-share the byte durable engine and storage format. Durable byte scans merge the SST block
+This is implementation work toward the 0.6.0.0 beta, not a final release claim. `Utf8` and
+`Bytes` share the byte durable engine and storage format. Durable byte scans merge the SST block
 cursor with a captured ordered delta and retain one SST head at a time; they do not clone
-the complete result set. A scan cursor owns a file reader and must be closed. The explicit
-snapshot API still materializes a bounded clone of visible entries and is not the
-retained-generation snapshot design. `Bytes.compact`
+the complete result set. A scan cursor owns a file reader and must be closed. Local direct-handle
+snapshots materialize a bounded clone of visible entries; owner-backed snapshots retain
+block-backed roots and stable generations. `Bytes.compact`
 folds the current single-run byte table, removes its tombstones, and atomically publishes
 the replacement SST/WAL checkpoint; it does not yet compact multiple levels. Block
 recovery validates one bounded block at a time and retains compact SST metadata; WAL
@@ -169,10 +179,11 @@ positioning. The serialized index and root are validated incrementally. Each pos
 read is capped at 16 KiB so its read assembly and hash inputs fit the 64 KiB resident-buffer
 budget; separator routing avoids scanning from the start for a validated lower-bound seek.
 The explicit local snapshot API still materializes a bounded clone of visible entries;
-owner-backed snapshots retain block-backed roots and route cursors through the owner.
-Deferred generation-file reclamation, coordinated writers, and safe 0.5.0.0 migration
-remain outstanding acceptance requirements. Restore validates a bounded whole exchange in
-memory before publication. `Bytes.Stats` reports canonical visible entry and payload
+owner-backed snapshots retain block-backed roots and route cursors through the owner. Physical
+reclamation after the final tracked snapshot closes, coordinated serialized writers, and
+migration from the 0.5.0.0 API are implemented. Remaining beta gaps include application-level
+queue bounds/metrics and validation of stale cursor/snapshot tokens across owner restart.
+Restore validates a bounded whole exchange in memory before publication. `Bytes.Stats` reports canonical visible entry and payload
 totals plus active owner snapshots, their retained bytes, and owner cursors. Local direct
 handles report zero for owner-managed resources; disk, buffer, queue, connection,
 operation-failure, and persistent-generation metrics remain open.
