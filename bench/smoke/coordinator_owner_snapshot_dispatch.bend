@@ -99,13 +99,36 @@ def get.snapshot(
   get.snapshot.copies(handle, snapshots,
     Protocol.u32.duplicate.triple(snapshot_id))
 
+def compact.response(
+  result: Owner.DispatchResult,
+  snapshot_id: U32
+) -> IO(Unit):
+  match result:
+    case Owner.DispatchResult{handle, snapshots, _,
+        Protocol.Response{_, _, _, Protocol.Success{}, _}}:
+      get.snapshot(handle, snapshots, snapshot_id)
+    case Owner.DispatchResult{handle, _, _, _}:
+      fail.close(handle, "owner snapshot compaction failed")
+
+def compact.snapshot(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  snapshot_id: U32
+) -> IO(Unit):
+  do IO<Unit>:
+    result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
+      snapshots, CursorStore.empty(), Protocol.Request{1, 1, 10, 5,
+        Bytes.new(0)}, 1)
+    compact.response(result, snapshot_id)
+
+
 def open.token(
   handle: ByteDb.Handle,
   snapshots: SnapshotStore.Store,
   parsed: Maybe<&2, U32>
 ) -> IO(Unit):
   match parsed:
-    case Some{snapshot_id}: get.snapshot(handle, snapshots, snapshot_id)
+    case Some{snapshot_id}: compact.snapshot(handle, snapshots, snapshot_id)
     case None{}: fail.close(handle, "owner snapshot token was malformed")
 
 def open.result(result: Owner.DispatchResult) -> IO(Unit):
@@ -123,13 +146,24 @@ def open.snapshot(handle: ByteDb.Handle) -> IO(Unit):
       Protocol.Request{1, 1, 2, 9, Bytes.new(0)}, 1)
     open.result(result)
 
-# Opens the owner snapshot after its binary fixture value is persisted.
-def written(pair: ByteDb.Handle & Result<&1, &1, ByteDb.Error, Unit>) -> IO(Unit):
+def written.flushed(
+  pair: ByteDb.Handle & Result<&1, &1, ByteDb.Error, Unit>
+) -> IO(Unit):
   match pair:
     case (handle, Done{Unit{}}): open.snapshot(handle)
+    case (handle, Fail{_}): fail.close(handle, "snapshot fixture flush failed")
+
+# Flushes the fixture value before opening the retained snapshot.
+def written(pair: ByteDb.Handle & Result<&1, &1, ByteDb.Error, Unit>) -> IO(Unit):
+  match pair:
+    case (handle, Done{Unit{}}):
+      do IO<Unit>:
+        flushed : ByteDb.Handle & Result<&1, &1, ByteDb.Error, Unit> <-
+          ByteDb.flush(handle)
+        written.flushed(flushed)
     case (handle, Fail{_}): fail.close(handle, "snapshot fixture put failed")
 
-# Seeds the fixture database before dispatching snapshot operations.
+# Creates the database and seeds its binary snapshot value.
 def created(result: Result<&1, &1, ByteDb.Error, ByteDb.Handle>) -> IO(Unit):
   match result:
     case Done{handle}:

@@ -1,5 +1,6 @@
 import Base
 import ../ByteDurableDb.bend as ByteDb
+import ../ByteMemTable.bend as ByteMemTable
 import ../scan/Snapshot.bend as Snapshot
 import ./GenerationRetentionPolicy.bend as GenerationRetention
 
@@ -24,7 +25,7 @@ type LookupResult is Type:
 
 # Reports explicit snapshot closure without discarding live child references.
 type CloseResult is Type:
-  RootClosed{store: Store}
+  RootClosed{store: Store, root: ByteDb.SnapshotRoot}
   RootCloseBusy{store: Store}
   RootCloseMissing{store: Store}
 
@@ -86,29 +87,71 @@ def empty() -> Store:
   Store{Snapshot.OwnerRegistry{Snapshot.ResourceIdAllocator{1, False{}},
     Snapshot.Registry{0n, 0n}, Nil{}, Nil{}}, Nil{}, Nil{}}
 
+def generation.references.none(
+  sst_path: Maybe<&1, String>,
+  retained_bytes: Nat,
+  delta: List<&1, ByteMemTable.Entry>,
+  rest: List<&2, U32> & List<&1, ByteDb.SnapshotRoot>
+) -> List<&2, U32> & List<&1, ByteDb.SnapshotRoot>:
+  match rest:
+    case (references, roots):
+      (references, Con{ByteDb.SnapshotRoot{sst_path, None{},
+        retained_bytes, delta}, roots})
+
+def generation.references.some(
+  sst_path: Maybe<&1, String>,
+  generation_copies: U32 & U32,
+  retained_bytes: Nat,
+  delta: List<&1, ByteMemTable.Entry>,
+  rest: List<&2, U32> & List<&1, ByteDb.SnapshotRoot>
+) -> List<&2, U32> & List<&1, ByteDb.SnapshotRoot>:
+  match generation_copies:
+    case (reference, retained):
+      match rest:
+        case (references, roots):
+          (Con{reference, references},
+            Con{ByteDb.SnapshotRoot{sst_path, Some{retained},
+              retained_bytes, delta}, roots})
+
 def generation.references(
-  roots: List<&1, ByteDb.SnapshotRoot>,
-  references: List<&2, U32>
-) -> List<&2, U32>:
+  roots: List<&1, ByteDb.SnapshotRoot>
+) -> List<&2, U32> & List<&1, ByteDb.SnapshotRoot>:
   match roots:
-    case Nil{}: references
+    case Nil{}: (Nil{}, Nil{})
     case Con{root, tail}:
       match root:
-        case ByteDb.SnapshotRoot{_, sst_generation, _, _}:
+        case ByteDb.SnapshotRoot{sst_path, sst_generation,
+            retained_bytes, delta}:
           match sst_generation:
-            case None{}: generation.references(tail, references)
+            case None{}:
+              generation.references.none(sst_path, retained_bytes, delta,
+                generation.references(tail))
             case Some{value}:
-              generation.references(tail, Con{value, references})
+              generation.references.some(sst_path,
+                Snapshot.u32.duplicate(value), retained_bytes, delta,
+                generation.references(tail))
+
+def generation.can.reclaim.restored(
+  registry: Snapshot.OwnerRegistry,
+  ids: List<&2, U32>,
+  candidate: U32,
+  published: Maybe<&1, U32>,
+  references: List<&2, U32> & List<&1, ByteDb.SnapshotRoot>
+) -> Bool & Store:
+  match references:
+    case (generations, roots):
+      (GenerationRetention.can_reclaim(candidate, published, generations),
+        Store{registry, ids, roots})
 
 def generation.can.reclaim(
   store: Store,
   candidate: U32,
   published: Maybe<&1, U32>
-) -> Bool:
+) -> Bool & Store:
   match store:
-    case Store{_, _, roots}:
-      GenerationRetention.can_reclaim(candidate, published,
-        generation.references(roots, Nil{}))
+    case Store{registry, ids, roots}:
+      generation.can.reclaim.restored(registry, ids, candidate, published,
+        generation.references(roots))
 
 def open.root.allocated(
   registry: Snapshot.OwnerRegistry,
@@ -567,10 +610,11 @@ def close.roots.busy(
 # Removes the root after the registry reservation is released.
 def close.roots.closed(
   restored: RootRestore,
-  registry: Snapshot.OwnerRegistry
+  registry: Snapshot.OwnerRegistry,
+  root: ByteDb.SnapshotRoot
 ) -> CloseResult:
   match restored:
-    case Restored{ids, roots}: RootClosed{Store{registry, ids, roots}}
+    case Restored{ids, roots}: RootClosed{Store{registry, ids, roots}, root}
 
 # Returns the original root list when the registry rejected the token.
 def close.roots.missing(
@@ -594,7 +638,7 @@ def close.roots.result.checked(
   match outcome:
     case CloseRootsClosed{}:
       close.roots.closed(root.restore(prefix_ids, prefix_roots, tail_ids,
-        tail_roots), registry)
+        tail_roots), registry, root)
     case CloseRootsBusy{}:
       close.roots.busy(root.restore(prefix_ids, prefix_roots,
         Con{id, tail_ids}, Con{root, tail_roots}), registry)

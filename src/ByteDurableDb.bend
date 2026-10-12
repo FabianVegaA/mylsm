@@ -687,6 +687,25 @@ def path.clone.pair.go(
 def path.clone.pair(path: String) -> String & String:
   path.clone.pair.go(path, (SNil{}, SNil{}))
 
+# Pairs a retained handle with an independently owned database path.
+def handle_path_copy_pair(
+  paths: String & String,
+  lock: DbLock.Lock,
+  table: ByteMemTable.Table,
+  state: HandleState,
+  base_stats: VisibleStats.Stats
+) -> Handle & String:
+  match paths:
+    case (copy, retained):
+      (Handle{retained, lock, table, state, base_stats}, copy)
+
+
+def handle.path.copy(handle: Handle) -> Handle & String:
+  match handle:
+    case Handle{root_path, lock, table, state, base_stats}:
+      handle_path_copy_pair(path.clone.pair(root_path), lock, table, state,
+        base_stats)
+
 # Combines an initial path copy with two independently rebuilt copies.
 def path.clone.triple.second(
   first: String,

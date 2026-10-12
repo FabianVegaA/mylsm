@@ -11,7 +11,7 @@ def require(valid: Bool) -> IO(Unit):
 # Verifies the second close leaves no roots or aggregate reservations.
 def closed.last(result: Store.CloseResult) -> IO(Unit):
   match result:
-    case Store.RootClosed{store}:
+    case Store.RootClosed{store, _}:
       require(Store.has.counts(store, 0n, 0n, 0n))
     case Store.RootCloseBusy{_}:
       IO.die(Unit, 1, "childless snapshot close unexpectedly returned busy")
@@ -21,7 +21,7 @@ def closed.last(result: Store.CloseResult) -> IO(Unit):
 # Closes the second token and passes its reconstructed store to the final close.
 def closed.second(result: Store.CloseResult) -> IO(Unit):
   match result:
-    case Store.RootClosed{store}:
+    case Store.RootClosed{store, _}:
       closed.last(Store.close(store, 1))
     case Store.RootCloseBusy{_}:
       IO.die(Unit, 1, "childless snapshot close unexpectedly returned busy")

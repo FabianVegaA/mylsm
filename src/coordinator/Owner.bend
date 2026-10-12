@@ -12,6 +12,8 @@ import ./OwnerCursorStore.bend as CursorStore
 import ../scan/VisibleCursor.bend as VisibleCursor
 import ../scan/RangeCursor.bend as RangeCursor
 import ../ByteMemTable.bend as ByteMemTable
+import ../ByteManifest.bend as ByteManifest
+import ../ByteManifestIo.bend as ByteManifestIo
 import ./CursorCodec.bend as CursorCodec
 import ../Fs.bend as Fs
 import ../CrashPoint.bend as CrashPoint
@@ -317,23 +319,252 @@ def snapshot.get(
   snapshot.get.lookup(handle, context, cursors, key,
     SnapshotStore.lookup.root(snapshots, snapshot_id))
 
-# Maps a close decision to success, Busy, or an unknown-token response.
+def snapshot.close.reply(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  cursors: CursorStore.Store,
+  context: ReplyContext,
+  status: Protocol.ResponseStatus
+) -> DispatchResult:
+  DispatchResult{handle, snapshots, cursors,
+    reply.response(context, status, Bytes.new(0))}
+
+def snapshot.close.cleanup.removed(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  cursors: CursorStore.Store,
+  context: ReplyContext,
+  removed: Result<&1, &1, U32 & String, Unit>
+) -> IO(DispatchResult):
+  match removed:
+    case Done{Unit{}}:
+      IO.pure(DispatchResult, snapshot.close.reply(handle, snapshots,
+        cursors, context, Protocol.Success{}))
+    case Fail{_}:
+      IO.pure(DispatchResult, snapshot.close.reply(handle, snapshots,
+        cursors, context, Protocol.IoFailure{}))
+
+def snapshot.close.cleanup.exists(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  cursors: CursorStore.Store,
+  context: ReplyContext,
+  stale_path: String,
+  exists: Result<&1, &1, U32 & String, Bool>
+) -> IO(DispatchResult):
+  match exists:
+    case Fail{_}:
+      IO.pure(DispatchResult, snapshot.close.reply(handle, snapshots,
+        cursors, context, Protocol.IoFailure{}))
+    case Done{False{}}:
+      IO.pure(DispatchResult, snapshot.close.reply(handle, snapshots,
+        cursors, context, Protocol.Success{}))
+    case Done{True{}}:
+      do IO<DispatchResult>:
+        removed : Result<&1, &1, U32 & String, Unit> <- Fs.remove(stale_path)
+        snapshot.close.cleanup.removed(handle, snapshots, cursors, context,
+          removed)
+
+def snapshot.close.cleanup.paths(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  cursors: CursorStore.Store,
+  context: ReplyContext,
+  paths: String & String
+) -> IO(DispatchResult):
+  match paths:
+    case (check_path, stale_path):
+      do IO<DispatchResult>:
+        exists : Result<&1, &1, U32 & String, Bool> <- Fs.exists(check_path)
+        snapshot.close.cleanup.exists(handle, snapshots, cursors, context,
+          stale_path, exists)
+
+def snapshot.close.cleanup(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  cursors: CursorStore.Store,
+  context: ReplyContext,
+  stale_path: String
+) -> IO(DispatchResult):
+  snapshot.close.cleanup.paths(handle, snapshots, cursors, context,
+    ByteDb.path.clone.pair(stale_path))
+
+def snapshot.close.reclaim(
+  handle: ByteDb.Handle,
+  cursors: CursorStore.Store,
+  context: ReplyContext,
+  stale_path: String,
+  decision: Bool & SnapshotStore.Store
+) -> IO(DispatchResult):
+  match decision:
+    case (False{}, snapshots):
+      IO.pure(DispatchResult, snapshot.close.reply(handle, snapshots,
+        cursors, context, Protocol.Success{}))
+    case (True{}, snapshots):
+      snapshot.close.cleanup(handle, snapshots, cursors, context, stale_path)
+
+def snapshot.close.manifest.current(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  cursors: CursorStore.Store,
+  context: ReplyContext,
+  candidate: U32,
+  stale_path: String,
+  manifest: Result<&1, &1, ByteManifestIo.Error, ByteManifest.ManifestValue>
+) -> IO(DispatchResult):
+  match manifest:
+    case Fail{ByteManifestIo.Invalid{_}}:
+      IO.pure(DispatchResult, snapshot.close.reply(handle, snapshots,
+        cursors, context, Protocol.Corruption{}))
+    case Fail{ByteManifestIo.Host{_, _}}:
+      IO.pure(DispatchResult, snapshot.close.reply(handle, snapshots,
+        cursors, context, Protocol.IoFailure{}))
+    case Done{value}:
+      match value:
+        case ByteManifest.GenerationSst{file_id}:
+          snapshot.close.reclaim(handle, cursors, context, stale_path,
+            SnapshotStore.generation.can.reclaim(snapshots, candidate,
+              Some{file_id}))
+        case _:
+          snapshot.close.reclaim(handle, cursors, context, stale_path,
+            SnapshotStore.generation.can.reclaim(snapshots, candidate,
+              None{}))
+
+def snapshot.close.manifest(
+  handle: ByteDb.Handle,
+  cursors: CursorStore.Store,
+  context: ReplyContext,
+  snapshots: SnapshotStore.Store,
+  candidate: U32,
+  stale_path: String,
+  manifest: Result<&1, &1, ByteManifestIo.Error, ByteManifest.ManifestValue>
+) -> IO(DispatchResult):
+  snapshot.close.manifest.current(handle, snapshots, cursors, context,
+    candidate, stale_path, manifest)
+
+# Reads the active manifest before deciding whether a closed root is obsolete.
+def snapshot_close_root_path_read(
+  handle: ByteDb.Handle,
+  cursors: CursorStore.Store,
+  context: ReplyContext,
+  snapshots: SnapshotStore.Store,
+  file_id: U32,
+  path: String,
+  manifest_path: String
+) -> IO(DispatchResult):
+  do IO<DispatchResult>:
+    manifest : Result<&1, &1, ByteManifestIo.Error,
+      ByteManifest.ManifestValue> <-
+        ByteManifestIo.read(manifest_path ++ "/MANIFEST")
+    snapshot.close.manifest(handle, cursors, context,
+      snapshots, file_id, path, manifest)
+
+
+
+# Preserves the database handle while reading the active manifest path.
+def snapshot_close_root_path_reclaim(
+  cursors: CursorStore.Store,
+  context: ReplyContext,
+  snapshots: SnapshotStore.Store,
+  file_id: U32,
+  path: String,
+  paths: ByteDb.Handle & String
+) -> IO(DispatchResult):
+  match paths:
+    case (retained_handle, manifest_path):
+      snapshot_close_root_path_read(retained_handle, cursors, context,
+        snapshots, file_id, path, manifest_path)
+
+
+# Skips legacy roots and checks generation references before unlinking.
+def snapshot_close_root_path_candidate_decide(
+  handle: ByteDb.Handle,
+  cursors: CursorStore.Store,
+  context: ReplyContext,
+  snapshots: SnapshotStore.Store,
+  candidate: Maybe<&1, U32>,
+  path: String
+) -> IO(DispatchResult):
+      match candidate:
+        case None{}:
+          IO.pure(DispatchResult, snapshot.close.reply(handle, snapshots,
+            cursors, context, Protocol.Success{}))
+        case Some{file_id}:
+          snapshot_close_root_path_reclaim(cursors, context, snapshots,
+            file_id, path, ByteDb.handle.path.copy(handle))
+
+
+# Checks the generation only when a closed root has a stored SST path.
+def snapshot_close_root_path_candidate_some(
+  handle: ByteDb.Handle,
+  cursors: CursorStore.Store,
+  context: ReplyContext,
+  snapshots: SnapshotStore.Store,
+  candidate: Maybe<&1, U32>,
+  path: String
+) -> IO(DispatchResult):
+      snapshot_close_root_path_candidate_decide(handle, cursors, context,
+        snapshots, candidate, path)
+
+
+# Skips filesystem cleanup for roots without a physical SST path.
+def snapshot_close_root_path_candidate(
+  handle: ByteDb.Handle,
+  cursors: CursorStore.Store,
+  context: ReplyContext,
+  snapshots: SnapshotStore.Store,
+  candidate: Maybe<&1, U32>,
+  stale_path: Maybe<&1, String>
+) -> IO(DispatchResult):
+  match stale_path:
+    case None{}:
+      IO.pure(DispatchResult, snapshot.close.reply(handle, snapshots,
+        cursors, context, Protocol.Success{}))
+    case Some{path}:
+      snapshot_close_root_path_candidate_some(handle, cursors, context,
+        snapshots, candidate, path)
+
+
+def snapshot.close.root.path(
+  handle: ByteDb.Handle,
+  cursors: CursorStore.Store,
+  context: ReplyContext,
+  snapshots: SnapshotStore.Store,
+  candidate: Maybe<&1, U32>,
+  stale_path: Maybe<&1, String>
+) -> IO(DispatchResult):
+  snapshot_close_root_path_candidate(handle, cursors, context, snapshots,
+    candidate, stale_path)
+
+
+
+def snapshot.close.root(
+  handle: ByteDb.Handle,
+  cursors: CursorStore.Store,
+  context: ReplyContext,
+  snapshots: SnapshotStore.Store,
+  root: ByteDb.SnapshotRoot
+) -> IO(DispatchResult):
+  match root:
+    case ByteDb.SnapshotRoot{sst_path, sst_generation, _, _}:
+      snapshot.close.root.path(handle, cursors, context, snapshots,
+        sst_generation, sst_path)
+
 def snapshot.close.result(
   handle: ByteDb.Handle,
   cursors: CursorStore.Store,
   context: ReplyContext,
   result: SnapshotStore.CloseResult
-) -> DispatchResult:
+) -> IO(DispatchResult):
   match result:
-    case SnapshotStore.RootClosed{store}:
-      DispatchResult{handle, store, cursors,
-        reply.response(context, Protocol.Success{}, Bytes.new(0))}
+    case SnapshotStore.RootClosed{store, root}:
+      snapshot.close.root(handle, cursors, context, store, root)
     case SnapshotStore.RootCloseBusy{store}:
-      DispatchResult{handle, store, cursors,
-        reply.response(context, Protocol.Busy{}, Bytes.new(0))}
+      IO.pure(DispatchResult, snapshot.close.reply(handle, store, cursors,
+        context, Protocol.Busy{}))
     case SnapshotStore.RootCloseMissing{store}:
-      DispatchResult{handle, store, cursors,
-        reply.response(context, Protocol.InvalidArgument{}, Bytes.new(0))}
+      IO.pure(DispatchResult, snapshot.close.reply(handle, store, cursors,
+        context, Protocol.InvalidArgument{}))
 
 # Closes one owner snapshot token through the aggregate retention registry.
 def snapshot.close(
@@ -343,8 +574,8 @@ def snapshot.close(
   context: ReplyContext,
   snapshot_id: U32
 ) -> IO(DispatchResult):
-  IO.pure(DispatchResult, snapshot.close.result(handle, cursors, context,
-    SnapshotStore.close(snapshots, snapshot_id)))
+  snapshot.close.result(handle, cursors, context,
+    SnapshotStore.close(snapshots, snapshot_id))
 
 def snapshot.cursor.open.register(
   handle: ByteDb.Handle,
