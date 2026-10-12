@@ -1,321 +1,39 @@
 # MyLSM
 
-MyLSM is an experimental durable LSM key-value store implemented in Bend 2. It
-combines a write-ahead log, MemTable, SSTables, Bloom filters, tiered compaction,
-recovery, and machine-checked laws for parts of the pure storage core.
+MyLSM is an experimental key-value database written in [Bend](https://github.com/bendlang/bend). It stores writes durably in a log, keeps sorted tables on disk, and recovers after a restart. This source release is **0.6.0.0 alpha**: it is for evaluation and development, not production data.
 
-> **Current status:** useful developer prototype and research project. It is not
-> yet a production-ready replacement for RocksDB, LevelDB, or Pebble.
+## Try it
 
-## Quick start
-
-Requirements: Bend 2.0.36 or newer. The durable filesystem adapter includes a
-small C registration shim for the cached `bend-kit-files` ABI.
+Use Bend 2.0.36 and a native C compiler. From this checkout:
 
 ```sh
-# Inspect available CPU/GPU/native capabilities
 bin/mylsm doctor
-
-# Run the durable demonstration
 bin/mylsm demo
-
-# Run the proof gate
-bin/mylsm check
-
-# Run smoke fuzzing and the benchmark harness
-bin/mylsm fuzz
-bin/mylsm bench
+bin/mylsm repl --dir ./my-data
 ```
 
-The demo writes and reads two keys, deletes one key, verifies the tombstone, and
-runs a small pure worker using Bend's GPU-call syntax. Storage IO always remains
-on the CPU. See `app/README.md` for details.
+The demo writes, reads, and deletes persistent keys. The REPL offers a small text interface; see the [CLI guide](docs/CLI.md). Run `./proofs/run.sh` to check the formal laws and their witnesses.
 
-## Use as a library (Bend hub)
+## Use the library
 
-Paste the import; the compiler fetches the package from the hub into
-`~/.bend/lib`, verifies it against its hash, and runs offline afterwards:
+Import `mylsm.bend` from this checkout. The public durable API has two views of the same database:
 
-```bend
-import mylsm-lsm-store@0.5.0.0/mylsm.bend as MyLSM
-```
+- `MyLSM.Bytes` accepts arbitrary byte keys and values. Keys sort by unsigned lexicographic byte order.
+- `MyLSM.Utf8` accepts strings, encodes them as UTF-8, and reports invalid stored text instead of replacing bytes.
 
-`create_database` and `open_database` run a session against a durable database,
-hold its exclusive `LOCK` while the session runs, and close it before returning.
-Writes are confirmed through the WAL. A session is a sequence of individually
-durable operations, not a multi-operation transaction. See
-[docs/DURABLE_API.md](docs/DURABLE_API.md) for error and lifecycle details.
+Both views support reads, writes, batches, range and prefix scans, and snapshots. Scans return cursors: read one item at a time, seek forward, and close them when finished. Snapshots keep a stable view while writes continue. Backups export a consistent view; restore verifies it before publication. A separate migration path copies a verified 0.5.0.0 database into the new format without changing the source. See the [durable API guide](docs/DURABLE_API.md) for signatures, handle lifetimes, errors, and examples, and the [format guide](docs/FORMAT_060.md) for ordering and compatibility.
 
-The explicit-handle API remains available through `create`, `open_existing`,
-`put`, `delete`, `write_batch`, `get`, `flush`, `compact`, `stats`, and `close`.
-It is useful for long-running processes that should keep ownership open across
-multiple sessions. A write or sync failure after append begins is `CommitUnknown`;
-close and reopen before retrying. Successful writes report maintenance status
-separately from commit confirmation. Durable batches accept 1–256 mutations;
-empty batches are invalid.
+One process owns each database's filesystem lock. Other local processes can use the coordinated owner over a Unix socket; callers can also wait for the lock with a timeout. Writes are durable after acknowledgment, but a lost response after a dispatched write can leave its outcome unknown. Reopen and inspect before retrying such a write.
 
-Session operations use `do` notation. `Session.put` returns a `WriteOutcome`,
-so bind it when you need the maintenance status; reads return the current value
-or absence:
+## Current limits
 
-```bend
-import Base
-import mylsm-lsm-store@0.5.0.0/mylsm.bend as MyLSM
+- The alpha has no production stability or compatibility guarantee. The normal 0.6 open path does not open 0.5.0.0 storage; use the explicit migration path.
+- Local snapshots can materialize up to 64 MiB. The coordinated owner allows at most 64 snapshots, 64 MiB of retained roots, and 64 cursors per snapshot. Restore accepts exchange files up to 64 MiB.
+- Batches contain 1–256 mutations. Multi-mutation log frames and SST blocks are capped near 1 MiB. These limits are fixed in the implementation; see the [API guide](docs/DURABLE_API.md) for exact bounds.
+- The owner handles one request at a time. It has no application-level queue budget or queue-depth metric yet. Bun supports the lock effect, but its Unix-socket owner path is not supported.
+- Linux validation covers Ubuntu 24.04 arm64 in Docker. The 64,000-record Linux cursor run exceeds the current 32 MiB absolute process-memory target, although incremental scanning adds less than 4 MiB. The complete workload and platform acceptance matrix is still open.
+- Formal laws cover pure decisions. They do not prove filesystem behavior, process locking, or the C and JavaScript host effects.
 
-def session() -> MyLSM.Session<&2, Maybe<&2, String>>:
-  do MyLSM.Session<&2, Maybe<&2, String>>:
-    outcome : MyLSM.WriteOutcome <- MyLSM.Session.put("answer", "42")
-    value : Maybe<&2, String> <- MyLSM.Session.get("answer")
-    return value
+See the [0.6 acceptance report](bench/results/mylsm-0.6.0.0-acceptance.md) for executed checks and remaining evidence. It includes five paired Linux runs against 0.5.0.0 for two durable-write workloads; the [0.6 samples](bench/results/mylsm-0.6.0.0-same-linux-performance.tsv) and [0.5 samples](bench/results/mylsm-0.5.0.0-same-linux-performance.tsv) are available for inspection. Those results do not predict other workloads. The [cursor memory report](bench/results/public-cursor-memory-2026-10-09.md) records its earlier host measurements.
 
-def main() -> IO(Result<&1, &1, MyLSM.SessionError, Maybe<&2, String>>):
-  MyLSM.create_database(&2, Maybe<&2, String>, "/scratch", session())
-```
-
-Use `MyLSM.open_database` for an existing database. Pure in-memory sessions
-remain available under `MyLSM.InMemory.Session`; they do not write to disk.
-`open_recovering` is a lower-level recovery entry point for callers that manage
-ownership themselves.
-
-Level 2 exposes the parts directly (ordered-map core, key ordering, codecs,
-tables, manifests) without a session. Reads are newest-first with
-tombstones included, so the newest write wins and a delete hides every older
-version — this snippet proves both in one run:
-
-```bend
-import Base
-import mylsm-lsm-store@0.5.0.0/mylsm.bend as MyLSM
-
-def bit(b: Bool) -> U32:
-  match b:
-    case True{}: 1
-    case False{}: 0
-
-def is_present(m: Maybe<&2, String>) -> Bool:
-  match m:
-    case Some{v}: True{}
-    case None{}: False{}
-
-def is_missing(m: Maybe<&2, String>) -> Bool:
-  match m:
-    case None{}: True{}
-    case Some{v}: False{}
-
-def main() -> U32:
-  live = MyLSM.mem_put(MyLSM.mem_put(MyLSM.mem_empty(), "k", "v1"), "k", "v2")
-  gone = MyLSM.mem_del(MyLSM.mem_empty(), "k")
-  bit(Bool.and(is_present(MyLSM.mem_get(live, "k")), is_missing(MyLSM.mem_get(gone, "k"))))
-```
-
-Pure and in-memory; durability (`bin/mylsm demo`) stays in this repo. See
-`docs/superpowers/specs/2026-09-22-mylsm-hub-facade-design.md` for the full
-API (both levels, error policy, fetch semantics).
-
-## Runtime modes
-
-Select execution with environment variables:
-
-```sh
-MYLSM_DEVICE=auto bin/mylsm demo
-MYLSM_DEVICE=cpu MYLSM_THREADS=8 bin/mylsm demo
-MYLSM_DEVICE=gpu MYLSM_GPU_MEMORY=4GB bin/mylsm demo
-```
-
-`auto` prefers a verified native GPU artifact, then native CPU using detected
-logical cores, and finally the portable Bend backend. GPU mode applies only to
-suitable pure compute; WAL, fsync, Manifest, SSTable IO, and recovery stay on
-CPU.
-
-## Building native binaries (per architecture)
-
-```sh
-bin/mylsm doctor   # check Bend, clang, GPU caps
-bin/mylsm build    # bend app/mylsm_demo.bend -o .mylsm/build/mylsm-demo
-bin/mylsm run      # native binary, or portable fallback
-```
-
-Binaries are host-native (`arm64`/`x86_64`, macOS/Linux): build on the
-target machine, there is no cross-compile flag. GPU (Metal / CUDA +
-`nvidia-smi`) is also decided at build time — without a `.gpu` artifact,
-`gpu` mode fails closed. Threads and GPU memory reach the binary as
-`--threads N` (1..256, default: logical CPUs) and `--gpu SIZE`, via
-`MYLSM_THREADS` / `MYLSM_GPU_MEMORY`. Storage IO always stays on CPU; only
-pure `!` workers are GPU-eligible.
-
-If `build` fails, read `.mylsm/build/mylsm-demo-build.log`. On macOS,
-Homebrew `llvm@19` breaks Bend's Metal prelude — use Apple clang instead
-(Bend respects `CC`):
-
-```sh
-export CC=/usr/bin/clang
-bin/mylsm build
-```
-
-Without a native binary, `demo` and `repl` use Bend's portable CPU backend.
-
-## Correctness status
-
-The modular proof suite contains witnesses for key storage transitions, codecs,
-flush, compaction, recovery, and CPU/GPU worker agreement. Run
-`./proofs/run.sh` for the bounded parallel proof gate, or target an individual
-`proofs/*Proof.bend` module while developing. The current suite passes all 22
-isolated modules on Bend 2.0.35 with no failures or
-timeouts. A timeout is not a passing proof. Closed fixtures provide concrete
-executable evidence, but some general open-input properties and all host IO
-behavior still require stronger proofs or empirical validation.
-
-Bend 2.0.35's `--verdict` currently fails with a mismatch between its
-TypeScript implementation and the formalized BendTT kernel. The passing module
-checks therefore do not establish independent kernel validation.
-
-## Packed storage 0.4.0.0
-
-Version 0.4.0.0 stores checksummed binary SST blocks, WAL frames, and a binary
-Manifest. Its disk format is incompatible with earlier releases. Back up and
-remove existing database directories before opening them with this version;
-there is no compatibility reader or migration tool.
-
-Five-run Darwin arm64 benchmarks passed the elapsed-time and peak-memory gates
-for 4,097 writes, 20,485 writes, 1,000,000 writes, and compaction. The 1M
-median fell from 252,254 ms to 156,931 ms, while peak RSS fell from
-2,502,393,856 to 942,784,512 bytes. The complete measurements and raw-sample
-links are in [the 0.4.0.0 benchmark report](bench/results/packed-storage-0.4.0.0.md).
-
-## Crash recovery testing
-
-On Darwin and Linux, run the deterministic external-crash matrix with:
-
-```sh
-MYLSM_CRASH_RESET=1 bench/fault_inject.sh .mylsm-crash-injection
-```
-
-The default executes ten WAL, flush, compaction, and Manifest publication
-checkpoints three times. Bend owns environment lookup and activation policy;
-the proof suite includes an open unset theorem plus closed mismatch/exact fixtures.
-The minimal host effect emits a marker and sends the worker `SIGSTOP`.
-The Bash harness verifies the marker and stopped state, sends external
-`kill -9`, requires signal-derived status 137, and reopens the database twice to
-verify every acknowledged deterministic key/value and the expected level shape.
-
-The harness accepts only repository-local `.mylsm-crash-*` output roots, requires
-an ownership sentinel before reset deletion, and preserves diagnostics when a
-case fails. Darwin and Linux are supported; other platforms fail closed. This matrix
-is empirical evidence for the audited host effects, operating system, filesystem,
-and hardware used by the run. It is not a Bend proof of signal delivery,
-`fsync`, rename atomicity, process death, or storage durability.
-
-## Roadmap
-
-### Phase 1 — Useful developer product
-
-Goal: make MyLSM practical to explore and operate locally.
-
-- [x] Durable put/get/delete demonstration.
-- [x] Adaptive CPU/GPU launcher and capability diagnostics.
-- [x] Proof, fuzz, and benchmark CLI commands.
-- [x] Interactive REPL with `put`, `get`, `del`, `help`, and `exit`.
-- [x] REPL commands for `scan`, `stats`, `flush`, `compact`, and `maintain`.
-- [x] `timing on|off|once` and `time <command>`.
-- [x] Runtime commands for `mode auto|cpu|gpu`, `compute`, and runtime status.
-- [x] Controlled native restart when changing thread count.
-- [x] Quoted keys and values with deterministic checksummed import/export.
-
-Exit criteria:
-
-- The REPL can execute a documented session against a persistent directory.
-- Restarting the REPL recovers every acknowledged write.
-- CPU/GPU selection and timing output identify exactly what was measured.
-
-### Phase 2 — Reliability and adversarial hardening
-
-Goal: survive corruption, crashes, and resource pressure predictably.
-
-- [x] Replace the current fault-injection scaffold with real `kill -9` phases.
-- [x] Test crashes during WAL append, flush, compaction, and Manifest publish.
-- [x] Run 1M+ mutated inputs through WAL, Manifest, and SSTable parsers.
-      (`workload/fuzz.bend`: 1,000,000 decided, 0 traps, fixed seed.)
-- [x] Test truncated files, invalid checksums, missing tables, and hostile names.
-      (`workload/fuzz_grammar.bend`: 708 directed cases on verdict.)
-- [x] Test disk-full and permission-denied behavior.
-      (`crash/diskfull.sh`: ENOSPC and all four permission cases fail closed
-      and recover with acknowledged data intact.)
-- [x] Run repeated write/crash/recover cycles and compare acknowledged state.
-      (200-case matrix with ack journals, zero mismatches; overnight recipe
-      in `crash/soak_overnight.md`.)
-- [x] Verify memory remains bounded under sustained write pressure.
-      (5×20k soak stable ±20%; growth ~3 KB/key linear, `stats` budgets.)
-- [ ] Strengthen open-input laws where Bend automation permits.
-      (Two attempts verdict-kept-closed with reasons recorded; open
-      decidability laws already cover all decoders.)
-
-Exit criteria:
-
-- No acknowledged write is lost in the crash matrix.
-- Corrupt or missing Manifest-listed data always fails closed.
-- Fuzzing and restart soak tests complete without crashes or unbounded memory.
-
-### Phase 3 — Competitive storage performance
-
-Goal: remove known algorithmic and IO bottlenecks before making comparisons.
-
-- [x] Replace linear SSTable lookup with sparse block indexes and binary search.
-      (Stored 64-entry chunks with bounded scans; binary search is N/A over
-      `List` without O(1) indexing — see the Phase 3 spec.)
-- [x] Replace quadratic table construction with balanced sorted-run construction.
-- [ ] Add block-oriented reads instead of whole-file reads.
-- [x] Add block cache and measured Bloom-filter tuning.
-- [x] Add real grouped commits and configurable batching.
-- [x] Maintain active and frozen MemTables concurrently.
-- [x] Run flush and disjoint-range compaction in the background.
-      (Non-blocking writer rotation plus parallel-let over disjoint ranges;
-      no OS threads — pure Bend has none. See the Phase 3 spec.)
-- [ ] Parallelize Bloom construction and independent compaction ranges.
-      (Compaction ranges parallelized; chunked Bloom measured slower than
-      sequential at production table sizes, GPU flat — builders stay
-      sequential. See `bench/bloom_par.bend`.)
-- [x] Measure write amplification, recovery time, memory, latency percentiles,
-      and throughput.
-- [ ] Compare identical workloads against RocksDB, LevelDB, and Pebble.
-      (Deterministic recipe in `bench/op_log.md`; no runs yet.)
-
-Exit criteria:
-
-- Benchmarks are reproducible and include machine, disk, dataset, and tuning.
-- Datasets exceed available RAM.
-- MyLSM reaches an explicitly recorded performance target without weakening
-  durability or proof gates.
-
-### Phase 4 — Production readiness
-
-Goal: provide a stable, operable database rather than a standalone experiment.
-
-- [ ] Stable embedded API and versioned on-disk format.
-- [ ] Multi-client concurrency and snapshot semantics.
-- [ ] Streaming scans and bounded iterators.
-- [ ] Backup, restore, inspection, and repair tooling.
-- [ ] Metrics for WAL, cache, flush, compaction, stalls, and errors.
-- [ ] Format migration and compatibility tests.
-- [ ] Supported-platform matrix for macOS Metal, Linux CUDA, and CPU fallback.
-- [ ] Security review, operational documentation, and release process.
-
-Exit criteria:
-
-- Compatibility, recovery, and migration suites pass across supported releases.
-- Operators can diagnose, back up, restore, and repair a database.
-- Performance and reliability claims are backed by published evidence.
-
-## Near-term priority
-
-The next highest-value work is randomized parser hardening, disk-full behavior,
-and repeated crash/recovery soak testing. GPU optimization should remain secondary to
-SSTable layout, batching, background maintenance, and IO behavior because those
-areas dominate LSM database performance.
-
-## Design documents
-
-- `docs/superpowers/specs/2026-09-17-lsm-bend-design.md`
-- `docs/superpowers/specs/2026-09-18-cli-demo-runtime-design.md`
-- `docs/superpowers/plans/2026-09-17-lsm-bend.md`
-- `docs/superpowers/plans/2026-09-18-cli-demo-runtime.md`
-- `docs/superpowers/plans/2026-09-18-phase-1-developer-product.md`
-- `docs/superpowers/plans/2026-09-21-real-crash-injection.md`
+The [0.6 design](docs/superpowers/specs/2026-10-08-mylsm-060-design.md) and [implementation plan](docs/superpowers/plans/2026-10-08-mylsm-060.md) explain the intended architecture and track unfinished acceptance work.
