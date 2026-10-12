@@ -76,6 +76,7 @@ type Bytes.Error is Data:
   Corruption{message: String}
   Io{code: U32, message: String}
   CommitUnknown{code: U32, message: String}
+  StaleOwner{}
 
 type Bytes.Stats is Data:
   ByteStats{entries: Nat, payload_bytes: Nat, snapshots: Nat, retained_bytes: Nat, cursors: Nat}
@@ -155,7 +156,7 @@ def Bytes.owner.error(error: OwnerClient.Error) -> Bytes.Error:
     case OwnerClient.RetryRead{error}: Bytes.owner.error.io(error)
     case OwnerClient.CommitUnknown{error}: Bytes.owner.error.commit(error)
     case OwnerClient.FrameTooLarge{}: ResourceLimit{}
-    case OwnerClient.StaleOwner{}: Corruption{"owner generation is stale"}
+    case OwnerClient.StaleOwner{}: StaleOwner{}
     case OwnerClient.CorrelationMismatch{}: Corruption{"owner response correlation mismatch"}
     case OwnerClient.MalformedResponse{}: Corruption{"owner response is malformed"}
     case OwnerClient.RequestIdsExhausted{}: ResourceLimit{}

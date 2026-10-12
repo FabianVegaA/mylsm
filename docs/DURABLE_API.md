@@ -109,6 +109,9 @@ Both facades also expose IO-based `snapshot`, snapshot `get`/range/prefix scans,
 when present, overlay the active delta, and retain a canonical visible-entry copy up to
 64 MiB. Owner-backed snapshots retain a block-backed root and owner-issued resource IDs;
 their cursors route reads to that owner and are bounded by its snapshot and cursor limits.
+Operations sent through a handle from an earlier owner generation return `StaleOwner`;
+open a new handle to discover the current owner. Cursor and snapshot tokens from the old
+owner are never replayed against the new generation.
 Both facades expose IO-based `backup` plus `backup_next` for bounded encoded chunks and
 `backup_to(path, handle)` for durable publication. On a local handle, `backup_to` captures
 an immutable retained root and streams it through a bounded cursor. On an owner-backed

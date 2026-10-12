@@ -53,6 +53,7 @@ def created.error(error: MyLSM.Bytes.Error) -> String:
     case MyLSM.AlreadyExists{}: "AlreadyExists"
     case MyLSM.UnsupportedPlatform{}: "UnsupportedPlatform"
     case MyLSM.UnsupportedOperation{}: "UnsupportedOperation"
+    case MyLSM.StaleOwner{}: "StaleOwner"
 
 def created.failure(
   error: MyLSM.Bytes.Error,
