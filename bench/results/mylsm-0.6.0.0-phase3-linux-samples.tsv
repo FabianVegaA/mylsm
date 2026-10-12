@@ -1,0 +1,6 @@
+workload	run	os	architecture	threads	writes	elapsed_ms	recovery_ms	p50_read_ms	p95_read_ms	p99_read_ms	throughput_ops_s	max_rss_bytes	wal_bytes	manifest_bytes	table_bytes
+phase3_lsm_write_recovery_read	1	Linux	aarch64	2	20485	6915	299	1	2	2	2962.40	40865792	282839	76	453174
+phase3_lsm_write_recovery_read	2	Linux	aarch64	2	20485	6946	297	1	2	2	2949.17	42672128	282839	76	453174
+phase3_lsm_write_recovery_read	3	Linux	aarch64	2	20485	6796	300	1	2	2	3014.27	40697856	282839	76	453174
+phase3_lsm_write_recovery_read	4	Linux	aarch64	2	20485	6913	301	1	2	2	2963.25	40861696	282839	76	453174
+phase3_lsm_write_recovery_read	5	Linux	aarch64	2	20485	6621	299	1	2	2	3093.94	40734720	282839	76	453174
