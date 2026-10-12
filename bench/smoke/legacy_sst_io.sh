@@ -4,11 +4,13 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 DB=$(mktemp -d "${TMPDIR:-/tmp}/mylsm-legacy-sst.XXXXXX")
 DEST="$DB-migrated"
+SST_DUPLICATE_DB="$DB-duplicate"
+SST_DUPLICATE_DEST="$DB-duplicate-migrated"
 CORRUPT_MIGRATION_DEST="$DB-corrupt-migrated"
 CONFLICT_DEST="$DB-conflict"
 CONFLICT_BUNDLE="$CONFLICT_DEST.migrate-060.bundle"
 AGGREGATE_DEST="$DB-aggregate-migrated"
-trap 'rm -rf "$DB" "$DEST" "$DEST.migrate-060.bundle" "$DEST.migrate-060.bundle.backup-060.tmp" "$DEST.restore-060.tmp" "$CONFLICT_DEST" "$CONFLICT_BUNDLE" "$CONFLICT_BUNDLE.backup-060.tmp" "$CONFLICT_DEST.restore-060.tmp" "$DB-aggregate" "$AGGREGATE_DEST" "$AGGREGATE_DEST.migrate-060.bundle" "$AGGREGATE_DEST.migrate-060.bundle.backup-060.tmp" "$AGGREGATE_DEST.restore-060.tmp" "$DB-corrupt" "$CORRUPT_MIGRATION_DEST" "$CORRUPT_MIGRATION_DEST.migrate-060.bundle" "$CORRUPT_MIGRATION_DEST.migrate-060.bundle.backup-060.tmp" "$CORRUPT_MIGRATION_DEST.restore-060.tmp"' EXIT
+trap 'rm -rf "$DB" "$DEST" "$DEST.migrate-060.bundle" "$DEST.migrate-060.bundle.backup-060.tmp" "$DEST.restore-060.tmp" "$SST_DUPLICATE_DB" "$SST_DUPLICATE_DEST" "$SST_DUPLICATE_DEST.migrate-060.bundle" "$SST_DUPLICATE_DEST.migrate-060.bundle.backup-060.tmp" "$SST_DUPLICATE_DEST.restore-060.tmp" "$CONFLICT_DEST" "$CONFLICT_BUNDLE" "$CONFLICT_BUNDLE.backup-060.tmp" "$CONFLICT_DEST.restore-060.tmp" "$DB-aggregate" "$AGGREGATE_DEST" "$AGGREGATE_DEST.migrate-060.bundle" "$AGGREGATE_DEST.migrate-060.bundle.backup-060.tmp" "$AGGREGATE_DEST.restore-060.tmp" "$DB-corrupt" "$CORRUPT_MIGRATION_DEST" "$CORRUPT_MIGRATION_DEST.migrate-060.bundle" "$CORRUPT_MIGRATION_DEST.migrate-060.bundle.backup-060.tmp" "$CORRUPT_MIGRATION_DEST.restore-060.tmp"' EXIT
 rmdir "$DB"
 
 MYLSM_DB_PATH="$DB" bend "$ROOT/bench/smoke/legacy_sst_io.bend"
@@ -31,6 +33,18 @@ MYLSM_DB_PATH="$DB" MYLSM_MIGRATE_DEST="$DEST" bend "$ROOT/bench/smoke/legacy_mi
 test -f "$DEST/MANIFEST"
 AFTER_MIGRATE=$(cksum "$DB/LOCK" "$DB/MANIFEST" "$DB/l0/0.tbl" "$DB/WAL")
 test "$BEFORE" = "$AFTER_MIGRATE"
+
+MYLSM_DB_PATH="$SST_DUPLICATE_DB" bend "$ROOT/bench/smoke/legacy_duplicate_sst_fixture.bend"
+DUPLICATE_BEFORE=$(find "$SST_DUPLICATE_DB" -type f -exec cksum {} \; | sort)
+MYLSM_DB_PATH="$SST_DUPLICATE_DB" bend "$ROOT/bench/smoke/legacy_sst_reject.bend"
+MYLSM_DB_PATH="$SST_DUPLICATE_DB" MYLSM_MIGRATE_DEST="$SST_DUPLICATE_DEST" \
+  bend "$ROOT/bench/smoke/legacy_migration_corrupt.bend"
+test ! -e "$SST_DUPLICATE_DEST"
+test ! -e "$SST_DUPLICATE_DEST.migrate-060.bundle"
+test ! -e "$SST_DUPLICATE_DEST.migrate-060.bundle.backup-060.tmp"
+test ! -e "$SST_DUPLICATE_DEST.restore-060.tmp"
+DUPLICATE_AFTER=$(find "$SST_DUPLICATE_DB" -type f -exec cksum {} \; | sort)
+test "$DUPLICATE_BEFORE" = "$DUPLICATE_AFTER"
 DEST_BEFORE=$(find "$DEST" -type f -exec cksum {} \; | sort)
 MYLSM_DB_PATH="$DB" MYLSM_MIGRATE_DEST="$DEST" bend "$ROOT/bench/smoke/legacy_migration_destination.bend"
 DEST_AFTER=$(find "$DEST" -type f -exec cksum {} \; | sort)

@@ -51,10 +51,34 @@ def legacy.value.read(handle: ByteDb.Handle) -> IO(Unit):
       ByteDb.get(handle, fixture.bytes(Bytes.from_hex("6c6567616379")))
     legacy.value.result(pair)
 
+def empty.sst.checked(handle: ByteDb.Handle, empty: Bool) -> IO(Unit):
+  match empty:
+    case False{}: closed.failed(handle, "migrated empty SST value changed")
+    case True{}: legacy.value.read(handle)
+
+def empty.sst.length(handle: ByteDb.Handle, pair: Bytes.Bytes & U32) -> IO(Unit):
+  match pair:
+    case (_, length): empty.sst.checked(handle, U32.is_eq(length, 0))
+
+def empty.sst.result(
+  pair: ByteDb.Handle & Result<&1, &1, ByteDb.Error, Maybe<&1, Bytes.Bytes>>
+) -> IO(Unit):
+  match pair:
+    case (handle, Fail{_}): closed.failed(handle, "migrated empty SST read failed")
+    case (handle, Done{None{}}): closed.failed(handle, "migrated empty SST key missing")
+    case (handle, Done{Some{value}}):
+      empty.sst.length(handle, Bytes.length(value))
+
+def empty.sst.read(handle: ByteDb.Handle) -> IO(Unit):
+  do IO<Unit>:
+    pair : ByteDb.Handle & Result<&1, &1, ByteDb.Error, Maybe<&1, Bytes.Bytes>> <-
+      ByteDb.get(handle, fixture.bytes(Bytes.from_hex("63")))
+    empty.sst.result(pair)
+
 def second.sst.checked(handle: ByteDb.Handle, equal: Bool) -> IO(Unit):
   match equal:
     case False{}: closed.failed(handle, "migrated SST value did not match")
-    case True{}: legacy.value.read(handle)
+    case True{}: empty.sst.read(handle)
 
 def second.sst.result(
   pair: ByteDb.Handle & Result<&1, &1, ByteDb.Error, Maybe<&1, Bytes.Bytes>>

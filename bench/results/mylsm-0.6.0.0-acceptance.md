@@ -68,6 +68,7 @@ are in `mylsm-0.5.0.0-phase3-linux-samples.tsv`; candidate rows are in
 | Migration publication matrix | `bash bench/crash/migration_publish.sh` | Pass at bundle and destination publication boundaries; source checksums remain stable |
 | Configured batch/resource limits | `bash bench/smoke/resource_limits.sh` | Pass; exact frame limits and unchanged persisted state on rejection |
 | Paged SST index and migration validation | `byte_index_budget.sh`, `legacy_sst_io.sh` | Both pass; index budget/seek checks pass, and migration corruption/collision/resource-limit cases preserve source and destination state |
+| Backup ordering and historical migration edges | `bash bench/smoke/backup_restore.sh`, `bash bench/smoke/legacy_sst_io.sh` | Pass on Darwin arm64; backup rejects duplicate/descending keys, migration preserves an empty legacy SST value, and a duplicate-key SST with valid checksums is rejected without source changes or destination/staging publication |
 | Physical snapshot generation retention | `bash bench/smoke/coordinator_owner_snapshot_dispatch.sh` | Pass on Darwin and Linux; two snapshots retain the same SST through compaction, closing the first preserves it, and closing the final snapshot removes it while the published generation remains |
 | Linux lock and owner lifecycle | `durable_lock.sh`, `coordinator_owner_socket.sh` | Pass on Ubuntu 24.04 arm64; lock test runs from container overlay as an unprivileged user, and the owner fixture verifies clients, backup/restore, shutdown, and lock reacquisition |
 | Unix socket support and permissions | `unix_socket.sh`, `unix_socket_large_write.sh`, `unix_socket_permissions.sh` | Native socket/frame transport, 70 KiB writes, and permission rejection pass on Darwin/Linux; Bun returns typed `UnsupportedPlatform` on both |
@@ -81,6 +82,8 @@ are in `mylsm-0.5.0.0-phase3-linux-samples.tsv`; candidate rows are in
 | JavaScript Bun FFI | `bun bench/smoke/js_bun_ffi.js` | Pass on Darwin and Linux arm64; exercises real flock acquire/release and atomic no-replace rename success/collision behavior |
 | JavaScript Bun owner process | `bun bench/smoke/owner_spawn_bun.js` | Pass on Darwin and Linux arm64; while the parent holds flock, the spawned child cannot inspect the lock descriptor |
 | JavaScript Node fallback | `db_lock_js_unsupported.sh`, `rename_noreplace_js_unsupported.sh`, `owner_spawn_js.sh` | Pass under Node; unsupported FFI remains explicitly reported as ENOTSUP |
+| Linux arm64 acceptance rerun | `proofs/run.sh`, legacy/backup/owner/lock/crash/ENOSPC harnesses, and Bun 1.4.3 FFI fixtures | Ubuntu 24.04 arm64 as an unprivileged user; proofs pass 82/82, migration/backup/owner/lock and publication/crash matrices pass, all six owner response-loss boundaries recover as expected, true tmpfs ENOSPC cleanup passes for migration and backup, and Bun lock/rename plus child descriptor checks pass. Cursor RSS is excluded from this rerun. |
+| Public consumer examples | `examples/utf8_basic.bend`, `examples/bytes_basic.bend`, `examples/snapshot_scan.bend` | All pass on Ubuntu 24.04 arm64 with Bend 2.0.36; they import the public facade, with the byte example also importing the bytes buffer package. |
 
 ## Cursor memory observation
 
@@ -100,6 +103,10 @@ not asymptotic memory behavior by themselves.
 
 ## Outstanding release evidence
 
+- Final Linux rerun on Ubuntu 24.04 arm64 with Bend 2.0.36: all 82 formal
+  proof modules pass; `legacy_sst_io.sh` passes the historical empty-value and
+  duplicate-key migration fixtures; `coordinator_commit_unknown.sh` passes all
+  six crash checkpoints and verifies recovery state.
 - Linux evidence currently covers Ubuntu 24.04 arm64 in Docker; other Linux
   architectures/distributions and JavaScript owner-process lifecycle remain
   unverified.

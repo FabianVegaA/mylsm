@@ -24,7 +24,8 @@ def path.clone.pair(path: String) -> String & String:
 def source.records.valid(records: List<&2, MemTable.Entry>) -> Bool:
   match records:
     case Con{MemTable.Entry{"a", Some{"one"}},
-        Con{MemTable.Entry{"b", Some{"two"}}, Nil{}}}: True{}
+        Con{MemTable.Entry{"b", Some{"two"}},
+          Con{MemTable.Entry{"c", Some{""}}, Nil{}}}}: True{}
     case _: False{}
 
 def source.wal.valid(batches: List<&2, Wal.Batch>) -> Bool:
@@ -51,7 +52,7 @@ def snapshot.valid(
         case True{}: IO.pure(Unit, Unit{})
         case False{}: fail("legacy source snapshot rejected valid WAL")
     case Fail{_}: fail("legacy source snapshot returned an unexpected error")
-    case Done{MigrateIo.LegacySourceSnapshot{records, batches, 2n, 1n, _}}:
+    case Done{MigrateIo.LegacySourceSnapshot{records, batches, 3n, 1n, _}}:
       snapshot.content.check(source.records.valid(records) &&
         source.wal.valid(batches), expect_invalid)
     case Done{_}: fail("legacy source snapshot returned unexpected counts")
@@ -73,7 +74,7 @@ def verified(
   expect_invalid: Bool
 ) -> IO(Unit):
   match result:
-    case Done{MigrateIo.LegacySourceCounts{2n, 1n, encoded_bytes}}:
+    case Done{MigrateIo.LegacySourceCounts{3n, 1n, encoded_bytes}}:
       match expect_invalid:
         case True{}: fail("combined legacy verification accepted corrupt WAL")
         case False{}:

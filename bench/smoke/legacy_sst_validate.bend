@@ -9,7 +9,7 @@ def fail(message: String) -> IO(Unit):
 # Requires the read-only SST validator to find both source records.
 def verified(result: Result<&1, &1, MigrateIo.Error, Nat>) -> IO(Unit):
   match result:
-    case Done{2n}: IO.print("LEGACY_SST_READ_ONLY_PASSED")
+    case Done{3n}: IO.print("LEGACY_SST_READ_ONLY_PASSED")
     case Done{_}: fail("legacy SST validation returned the wrong record count")
     case Fail{_}: fail("legacy SST validation rejected its valid fixture")
 

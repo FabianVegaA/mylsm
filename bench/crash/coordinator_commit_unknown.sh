@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-WORK=$(mktemp -d /private/tmp/mcu.XXXXXX)
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/mcu.XXXXXX")
 OWNER_PID=
 CLIENT_PID=
 

@@ -86,7 +86,8 @@ def directory.write(paths: String & String) -> IO(Unit):
         written : Result<&1, &1, U32 & String, Unit> <-
           SstStreamIo.write_table(table_path ++ "/l0/0.tbl",
             Con{MemTable.Entry{"a", Some{"one"}},
-              Con{MemTable.Entry{"b", Some{"two"}}, Nil{}}}, 0)
+              Con{MemTable.Entry{"b", Some{"two"}},
+                Con{MemTable.Entry{"c", Some{""}}, Nil{}}}}, 0)
         table.write(retained_path, written)
 
 # Creates the legacy L0 directory before writing the table file.
