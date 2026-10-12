@@ -2,8 +2,8 @@
 
 Status: implementation evidence is partial. Formal laws, current-host and
 Linux runtime gates, Bun FFI effects, and snapshot-generation reclamation pass.
-Release acceptance is not complete: the repeated workload matrix, Linux cursor
-memory ceiling, and a true filesystem-full migration run remain open.
+Release acceptance is not complete: the repeated workload matrix and Linux
+cursor memory ceiling remain open.
 
 ## Host and toolchain
 
@@ -39,6 +39,7 @@ memory ceiling, and a true filesystem-full migration run remain open.
 | Linux resource and legacy SST gates | `resource_limits.sh`, `byte_index_budget.sh`, `legacy_sst_io.sh` | All pass on Ubuntu 24.04 arm64 |
 | Linux repeated write/recovery/read workload | `phase3_metrics.sh 20485`, five runs | Passes correctness and recovery checks; raw results are in `mylsm-0.6.0.0-phase3-linux-samples.tsv` |
 | Write-limit cleanup | `migration_file_limit.sh`, `backup_file_limit.sh` | Pass on Darwin and Linux; these use `RLIMIT_FSIZE`, preserve source data, and remove known staging artifacts; they are not true ENOSPC |
+| True Linux filesystem-full cleanup | `migration_enospc.sh`, `backup_enospc.sh` in Docker with a full 64 KiB tmpfs | Pass; migration preserves source checksums and publishes no destination/staging paths; backup publishes no bundle/staging path and releases the source lock |
 | JavaScript Bun FFI | `bun bench/smoke/js_bun_ffi.js` | Pass on Darwin and Linux arm64; exercises real flock acquire/release and atomic no-replace rename success/collision behavior |
 | JavaScript Node fallback | `db_lock_js_unsupported.sh`, `rename_noreplace_js_unsupported.sh`, `owner_spawn_js.sh` | Pass under Node; unsupported FFI remains explicitly reported as ENOTSUP |
 
@@ -70,10 +71,9 @@ not asymptotic memory behavior by themselves.
 - The Linux cursor memory fixture exceeds its existing 32 MiB process ceiling
   at 64,000 records, even with two runtime threads. Scanning adds less than
   4 MiB over its open RSS, but the absolute process budget still fails.
-- True filesystem-full migration behavior; current file-size-limit tests are
-  not equivalent to ENOSPC.
-- A true ENOSPC fixture could not be mounted in the Linux Docker container:
-  the container has no loop devices and rejects both loopback ext4 and tmpfs
-  mounts. No ENOSPC result is claimed.
+- Linux-specific ENOSPC harnesses use a Docker-provided tmpfs and confirm the
+  filesystem is full before running the operation. The API surfaces a typed
+  operation failure; it does not currently expose the underlying `ENOSPC`
+  errno in the fixture output.
 
 No 0.6.0.0 performance baseline or release acceptance is claimed by this file.
