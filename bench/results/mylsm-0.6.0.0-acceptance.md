@@ -15,6 +15,29 @@ cursor memory ceiling remain open.
 | Linux filesystem | Container overlay for lock and permission tests; bind mount for compilation and socket/client integration |
 | Bun | 1.4.3 on Darwin arm64 and Linux arm64 |
 
+## Same-container durable API comparison
+
+The same `durable_api_perf.sh` harness ran five times against baseline commit
+`6d3300e` and five times against candidate commit `93ac5ed`. Both ran in the
+same Ubuntu 24.04 arm64 Docker container on LinuxKit kernel `6.12.76`, with 12
+vCPUs, Bend 2.0.36, Clang 18 `-O2`, the container overlay filesystem (1,007 GiB
+reported, 903 GiB available), and the harness defaults with runtime threads
+unmodified. Each measured run performs 1,000 synchronous overwrites of the same key, records peak RSS and
+disk bytes, then measures reopen recovery. This is one small comparable
+workload, not the required release matrix.
+
+| Mode | Baseline median elapsed | 0.6 median elapsed | Change | Baseline median recovery | 0.6 median recovery | Baseline / 0.6 median RSS |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Internal | 344 ms | 319 ms | 7.3% faster | 49 ms | 49 ms | 4,604 / 4,600 KiB |
+| Public String API | 336 ms | 319 ms | 5.1% faster | 53 ms | 50 ms | 4,600 / 4,724 KiB |
+
+Raw rows are in `mylsm-0.5.0.0-same-linux-performance.tsv` and
+`mylsm-0.6.0.0-same-linux-performance.tsv`. Median elapsed time is within the
+5% regression gate for this workload. The public API's median RSS is 124 KiB
+higher; both versions write 64 KiB and pass recovery. This does not establish
+the gate for binary API, batches, range scans, snapshots, backup/restore,
+coordinated clients, or larger datasets.
+
 ## Executed gates
 
 | Gate | Command | Result |
@@ -25,6 +48,7 @@ cursor memory ceiling remain open.
 | Patch whitespace | `git diff --check` | Pass |
 | Incremental cursor memory | `bash bench/smoke/public_cursor_memory.sh` | Pass at both configured dataset sizes; results below |
 | Linux incremental cursor memory | `MYLSM_THREADS=2 bash bench/smoke/public_cursor_memory.sh` | Fails the 32 MiB absolute limit at 64k: 48,197,632 B open and 46,514,176 B scanning; 16k is 24,023,040 B open and 22,609,920 B scanning |
+| Linux incremental cursor memory, one thread | `MYLSM_THREADS=1 bash bench/smoke/public_cursor_memory.sh` | Fails at 64k: 47,624,192 B open and 47,640,576 B scanning; 16k is 24,047,616 B open and 22,687,744 B scanning |
 | JavaScript host boundaries | `db_lock_js_unsupported.sh`, `rename_noreplace_js_unsupported.sh`, `owner_spawn_js.sh` | All pass under Node.js; this does not exercise Bun FFI |
 | WAL commit recovery | `bash bench/crash/durable_commit.sh` | Pass |
 | Owner response-loss matrix | `bash bench/crash/coordinator_commit_unknown.sh` outside the sandbox | Six crash boundaries pass; each recovery matches the expected absent/present commit state |
@@ -39,6 +63,7 @@ cursor memory ceiling remain open.
 | Linux crash publication | `durable_commit.sh`, `backup_publish.sh`, `migration_publish.sh`, `coordinator_commit_unknown.sh` | All pass as an unprivileged container user; the coordinator matrix covers six commit/response-loss boundaries |
 | Linux resource and legacy SST gates | `resource_limits.sh`, `byte_index_budget.sh`, `legacy_sst_io.sh` | All pass on Ubuntu 24.04 arm64 |
 | Linux repeated write/recovery/read workload | `phase3_metrics.sh 20485`, five runs | Passes correctness and recovery checks; raw results are in `mylsm-0.6.0.0-phase3-linux-samples.tsv` |
+| Same-container 0.5/0.6 durable API comparison | `durable_api_perf.sh`, five runs per source tree | Pass; 1,000-overwrite median elapsed time is 344→319 ms internal and 336→319 ms public String; raw comparison samples above |
 | Write-limit cleanup | `migration_file_limit.sh`, `backup_file_limit.sh` | Pass on Darwin and Linux; these use `RLIMIT_FSIZE`, preserve source data, and remove known staging artifacts; they are not true ENOSPC |
 | True Linux filesystem-full cleanup | `migration_enospc.sh`, `backup_enospc.sh` in Docker with a full 64 KiB tmpfs | Pass; migration preserves source checksums and publishes no destination/staging paths; backup publishes no bundle/staging path and releases the source lock |
 | JavaScript Bun FFI | `bun bench/smoke/js_bun_ffi.js` | Pass on Darwin and Linux arm64; exercises real flock acquire/release and atomic no-replace rename success/collision behavior |
