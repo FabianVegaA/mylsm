@@ -40,7 +40,7 @@
 - [ ] Run `bend proofs/CliProof.bend --verdict`; verify the new laws fail or are unavailable before implementing the policy.
 - [x] Implement the types and pure functions with one parse of each input and one runtime decision per launch. Avoid building intermediate lists of output strings or repeating probes.
 - [x] Run `bend proofs/CliProof.bend --verdict`; expect a clean proof result.
-- [ ] Commit the pure layer separately.
+- [x] Commit the pure layer separately.
 
 ### Task 2: Add the minimum process boundary needed by the existing CLI
 
@@ -52,7 +52,7 @@
 - [ ] Run the fixture and confirm it fails before the effect exists.
 - [x] Implement the paired attached-child effect. Redirect logs directly to a file and inherit interactive streams without buffering them in Bend. Base `Process.run` rejects probe output beyond its declared byte limit. Keep platform branching limited to C/JS process operations, with no CLI runtime policy there.
 - [x] Run the focused fixture in portable and native hosts. Review the C/JS files against `AGENT.md:14`: no defaults, device interpretation, fallback, argument validation, or exit-code policy.
-- [ ] Commit the host boundary separately.
+- [x] Commit the host boundary separately.
 
 ### Task 3: Replace the policy-bearing shell launcher
 
@@ -64,7 +64,7 @@
 - [ ] Run those new checks against the absent new entry point and confirm failure.
 - [x] Implement `scripts/mylsm.sh` as root resolution plus `exec bend "$ROOT/app/cli/main.bend" -- "$@"`. Implement orchestration in Bend. Preserve the documented environment contract passed to demo and REPL. Put generated demo/REPL executables in `.mylsm/bin/` and their build logs in `.mylsm/log/`.
 - [x] Run `bench/smoke/cli.sh` and the focused host fixture. Exercise help, doctor, check, fuzz, bench, build, run, CPU/auto demo, REPL persistence, thread restart, and recovery on the new entry point.
-- [ ] Commit the new entry point separately.
+- [x] Commit the new entry point separately.
 
 ### Task 4: Group applications and switch all live references
 
@@ -73,7 +73,7 @@
 - [x] Search all live references to old source and entry paths with `rg`; adjust `AGENT.md`'s width check to include nested `app/**/*.bend` files using portable enumeration.
 - [x] Move files without splitting the existing parser or executor. Update imports and live scripts/docs. Preserve the owner executable as a separate application.
 - [x] Run `DemoProof --verdict`, the normal `ReplProof`, both owner smoke scripts, and the full CLI smoke. Confirm no live reference uses `bin/mylsm`, the former flat `app/` paths, or `.mylsm/build/mylsm-{demo,repl}`. `ReplProof --verdict` remains blocked by a Bend TypeScript/kernel mismatch.
-- [ ] Commit the path migration separately.
+- [x] Commit the path migration separately.
 
 ### Task 5: Complete repository verification and documentation
 
@@ -82,8 +82,8 @@
 - [x] Run `./proofs/run.sh`; require `FAIL=0` and `TIMEOUT=0` across the complete suite.
 - [x] Run the existing Bolt gate from `AGENT.md` and the revised 200-character width check; require no findings. Run `git diff --check` and `sh -n scripts/mylsm.sh`.
 - [x] Run the CLI and owner smoke checks after the final behavior changes. Review the changes for comments, ticket identifiers, unnecessary copying, extra host policy, and accidental changes outside the CLI migration.
-- [ ] Commit any final documentation/check fixes. Report the exact verification results and any platform behavior that could not be exercised locally.
+- [x] Commit the final documentation/check record. Report the exact verification results and platform behavior that could not be exercised locally.
 
 ## Execution note
 
-The user reviewed the plan before implementation and requested a branch in the current checkout rather than a worktree. The new entry point passed the CLI smoke test before the old launcher was removed. Base `Process.run` supplies bounded process probes and rejects oversized output, so the paired `Attached` effect is limited to inherited standard streams, child waiting, environment overrides, and optional log redirection. The owner smoke tests require permission to bind local Unix sockets outside the sandbox. `ReplProof` passes in normal mode; this Bend release reports a TypeScript/kernel mismatch under `--verdict`, while the complete repository proof suite passes.
+The user reviewed the plan before implementation and requested a branch in the current checkout rather than a worktree. The new entry point passed the CLI smoke test before the old launcher was removed. Base `Process.run` supplies bounded process probes and rejects oversized output, so the paired `Attached` effect is limited to inherited standard streams, child waiting, environment overrides, and optional log redirection. The owner smoke tests require permission to bind local Unix sockets outside the sandbox. `ReplProof` passes in normal mode; this Bend release reports a TypeScript/kernel mismatch under `--verdict`, while the complete repository proof suite passes. Final gates: proofs `PASS=82 FAIL=0 TIMEOUT=0`, Bolt zero findings after the documented `S002` filter, all 200-character width checks empty, `git diff --check`, shell syntax, CLI smoke, focused portable/native process fixture, both owner smokes, and `DemoProof --verdict` passed. Native builds used the system Apple Clang and macOS 26 SDK because the default Homebrew Clang/SDK pairing failed independently of this refactor.
