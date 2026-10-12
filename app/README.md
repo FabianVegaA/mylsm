@@ -1,20 +1,20 @@
 # MyLSM demonstration app
 
-The entry point is `app/mylsm_demo.bend`. The filename intentionally avoids
+The entry point is `app/demo/mylsm_demo.bend`. The filename intentionally avoids
 `demo.bend` because macOS filesystems are commonly case-insensitive and Bend
 module names are case-sensitive.
 
 Run the portable demo:
 
 ```sh
-bend app/mylsm_demo.bend
+bend app/demo/mylsm_demo.bend
 ```
 
 Or use the adaptive launcher:
 
 ```sh
-bin/mylsm doctor
-bin/mylsm demo
+scripts/mylsm.sh doctor
+scripts/mylsm.sh demo
 ```
 
 The app opens `.mylsm-demo-data`, performs durable puts, reads both values,
@@ -25,7 +25,7 @@ call syntax and falls back to CPU when no GPU runtime is available.
 ## Interactive REPL
 
 ```sh
-bin/mylsm repl --dir ./my-data
+scripts/mylsm.sh repl --dir ./my-data
 ```
 
 Commands:

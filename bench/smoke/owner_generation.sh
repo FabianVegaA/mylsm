@@ -10,7 +10,7 @@ trap 'if [[ -n "$OWNER_PID" ]]; then kill "$OWNER_PID" 2>/dev/null || true; wait
 bend "$ROOT/bench/smoke/owner_generation_create.bend" -o "$WORK/create"
 bend "$ROOT/bench/smoke/owner_generation_client.bend" -o "$WORK/client"
 bend "$ROOT/bench/smoke/owner_generation_stale.bend" -o "$WORK/stale-client"
-bend "$ROOT/app/mylsm_owner.bend" -o "$WORK/owner"
+bend "$ROOT/app/owner/mylsm_owner.bend" -o "$WORK/owner"
 MYLSM_DB_PATH="$DB" "$WORK/create"
 
 start_owner() {

@@ -1,8 +1,8 @@
 # bench/ map
 
-- `smoke/bench.bend` — single-put smoke (`bin/mylsm bench`).
+- `smoke/bench.bend` — single-put smoke (`scripts/mylsm.sh bench`).
 - `smoke/{effs,console,crash_point}.bend`, `smoke/cli.sh` — effect, console, crash-point, and CLI smokes.
-- `workload/fuzz.bend` (`bin/mylsm fuzz`) — decoder fuzz, must print FUZZ CLEAN.
+- `workload/fuzz.bend` (`scripts/mylsm.sh fuzz`) — decoder fuzz, must print FUZZ CLEAN.
 - `workload/fuzz_grammar.bend` — directed adversarial corpus with expected verdicts.
 - `workload/million_writes.sh [N] [dir]` — durable acceptance, shape-gated.
 - `workload/phase3_metrics.sh [N] [dir]` — write amplification, recovery, percentiles.

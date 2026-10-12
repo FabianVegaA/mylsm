@@ -1,6 +1,6 @@
 # MyLSM CLI Reference
 
-MyLSM provides a developer CLI at `bin/mylsm`. The project remains an
+MyLSM provides a developer CLI at `scripts/mylsm.sh`. The project remains an
 experimental prototype: this interface is intended for demonstrations, local
 experiments, and validation, not production operations.
 
@@ -26,21 +26,21 @@ experiments, and validation, not production operations.
 Run commands from the repository root:
 
 ```sh
-bin/mylsm [command]
+scripts/mylsm.sh [command]
 ```
 
 With no command, the launcher runs `demo`.
 
 ```sh
-bin/mylsm --help
-bin/mylsm doctor
-bin/mylsm demo
-bin/mylsm repl --dir ./my-data
-bin/mylsm check
-bin/mylsm fuzz
-bin/mylsm bench
-bin/mylsm build
-bin/mylsm run
+scripts/mylsm.sh --help
+scripts/mylsm.sh doctor
+scripts/mylsm.sh demo
+scripts/mylsm.sh repl --dir ./my-data
+scripts/mylsm.sh check
+scripts/mylsm.sh fuzz
+scripts/mylsm.sh bench
+scripts/mylsm.sh build
+scripts/mylsm.sh run
 ```
 
 ## Environment configuration
@@ -55,9 +55,9 @@ bin/mylsm run
 Examples:
 
 ```sh
-MYLSM_DEVICE=cpu MYLSM_THREADS=4 bin/mylsm demo
-MYLSM_DEVICE=gpu MYLSM_GPU_MEMORY=4GB bin/mylsm demo
-MYLSM_DEVICE=auto bin/mylsm repl --dir ./data
+MYLSM_DEVICE=cpu MYLSM_THREADS=4 scripts/mylsm.sh demo
+MYLSM_DEVICE=gpu MYLSM_GPU_MEMORY=4GB scripts/mylsm.sh demo
+MYLSM_DEVICE=auto scripts/mylsm.sh repl --dir ./data
 ```
 
 ## Runtime selection
@@ -76,7 +76,7 @@ pure workers called with Bend's `!` notation are GPU eligible.
 ## `doctor`
 
 ```sh
-bin/mylsm doctor
+scripts/mylsm.sh doctor
 ```
 
 Reports:
@@ -94,7 +94,7 @@ builds the `.gpu` artifact and the native runtime executes successfully.
 ## `demo`
 
 ```sh
-bin/mylsm demo
+scripts/mylsm.sh demo
 ```
 
 The demo:
@@ -111,8 +111,8 @@ Acknowledged mutations pass through WAL append, `fsync`, and the MemTable update
 ## Interactive REPL
 
 ```sh
-bin/mylsm repl
-bin/mylsm repl --dir ./my-data
+scripts/mylsm.sh repl
+scripts/mylsm.sh repl --dir ./my-data
 ```
 
 The REPL opens the selected directory through `Recover.open_db` and threads one

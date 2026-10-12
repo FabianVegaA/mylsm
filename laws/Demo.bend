@@ -1,5 +1,5 @@
 import Base
-import ../app/demo_helpers.bend as Demo
+import ../app/demo/demo_helpers.bend as Demo
 
 # --- Demo worker (CLI/demo plan) ---
 law demo_worker_zero:

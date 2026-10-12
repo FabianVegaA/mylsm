@@ -21,7 +21,7 @@ cleanup() {
 trap cleanup EXIT
 
 bend "$ROOT/bench/smoke/coordinator_owner_socket.bend" -o "$WORK/initial-owner"
-bend "$ROOT/app/mylsm_owner.bend" -o "$WORK/owner"
+bend "$ROOT/app/owner/mylsm_owner.bend" -o "$WORK/owner"
 bend "$ROOT/bench/smoke/coordinator_owner_client.bend" -o "$WORK/client"
 bend "$ROOT/bench/smoke/coordinator_owner_reacquire.bend" -o "$WORK/reacquire"
 

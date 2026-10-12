@@ -1,7 +1,7 @@
 import Base
-import ../src/Console.bend as Console
-import ../src/Db.bend as Db
-import ../src/Recover.bend as Recover
+import ../../src/Console.bend as Console
+import ../../src/Db.bend as Db
+import ../../src/Recover.bend as Recover
 import ./repl_types.bend as Repl
 import ./repl_parser.bend as Parser
 import ./repl_exec.bend as Exec

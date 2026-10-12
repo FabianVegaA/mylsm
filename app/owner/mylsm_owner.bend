@@ -1,16 +1,16 @@
 import Base
-import ../src/ByteDurableDb.bend as ByteDb
-import ../src/ByteMemTable.bend as ByteMemTable
-import ../src/Console.bend as Console
-import ../src/DbLock.bend as DbLock
-import ../src/Fs.bend as Fs
-import ../src/coordinator/EndpointPath.bend as EndpointPath
-import ../src/coordinator/Owner.bend as Owner
-import ../src/coordinator/OwnerCursorStore.bend as OwnerCursorStore
-import ../src/coordinator/OwnerSnapshotStore.bend as OwnerSnapshots
-import ../src/coordinator/OwnerGenerationIo.bend as OwnerGenerationIo
-import ../src/coordinator/UnixSocketIo.bend as UnixSocket
-import ../src/scan/VisibleStats.bend as VisibleStats
+import ../../src/ByteDurableDb.bend as ByteDb
+import ../../src/ByteMemTable.bend as ByteMemTable
+import ../../src/Console.bend as Console
+import ../../src/DbLock.bend as DbLock
+import ../../src/Fs.bend as Fs
+import ../../src/coordinator/EndpointPath.bend as EndpointPath
+import ../../src/coordinator/Owner.bend as Owner
+import ../../src/coordinator/OwnerCursorStore.bend as OwnerCursorStore
+import ../../src/coordinator/OwnerSnapshotStore.bend as OwnerSnapshots
+import ../../src/coordinator/OwnerGenerationIo.bend as OwnerGenerationIo
+import ../../src/coordinator/UnixSocketIo.bend as UnixSocket
+import ../../src/scan/VisibleStats.bend as VisibleStats
 
 # Closes the database handle before terminating owner startup or service.
 def stop(handle: ByteDb.Handle, message: String) -> IO(Unit):

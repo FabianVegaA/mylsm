@@ -7,9 +7,9 @@ MyLSM is an experimental key-value database written in [Bend](https://github.com
 Use Bend 2.0.36 and a native C compiler. From this checkout:
 
 ```sh
-bin/mylsm doctor
-bin/mylsm demo
-bin/mylsm repl --dir ./my-data
+scripts/mylsm.sh doctor
+scripts/mylsm.sh demo
+scripts/mylsm.sh repl --dir ./my-data
 ```
 
 The demo writes, reads, and deletes persistent keys. The REPL offers a small text interface; see the [CLI guide](docs/CLI.md). Run `./proofs/run.sh` to check the formal laws and their witnesses.

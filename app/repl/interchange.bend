@@ -1,6 +1,6 @@
 import Base
-import ../src/MemTable.bend as MemTable
-import ../src/Wal.bend as Wal
+import ../../src/MemTable.bend as MemTable
+import ../../src/Wal.bend as Wal
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # Handle the format version for marker in the portable interchange format.

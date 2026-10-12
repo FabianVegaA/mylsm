@@ -1,10 +1,10 @@
 import Base
 import ../src/MemTable.bend as MemTable
-import ../app/repl_types.bend as Repl
-import ../app/repl_parser.bend as ReplParser
-import ../app/repl_policy.bend as ReplExec
-import ../app/repl_lexer.bend as ReplLexer
-import ../app/interchange.bend as Interchange
+import ../app/repl/repl_types.bend as Repl
+import ../app/repl/repl_parser.bend as ReplParser
+import ../app/repl/repl_policy.bend as ReplExec
+import ../app/repl/repl_lexer.bend as ReplLexer
+import ../app/repl/interchange.bend as Interchange
 import ../src/Wal.bend as Wal
 # --- Phase 1 REPL parser and timing policy ---
 law repl_parse_put:

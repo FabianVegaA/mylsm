@@ -1,7 +1,7 @@
 import Base
-import ../src/Db.bend as Db
-import ../src/DbIo.bend as DbIo
-import ../src/Recover.bend as Recover
+import ../../src/Db.bend as Db
+import ../../src/DbIo.bend as DbIo
+import ../../src/Recover.bend as Recover
 import ./demo_helpers.bend as Demo
 
 # Open or die for the database demo commands.
