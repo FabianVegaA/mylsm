@@ -23,6 +23,8 @@ Import `mylsm.bend` from this checkout. The public durable API has two views of 
 
 Both views support reads, writes, batches, range and prefix scans, and snapshots. Scans return cursors: read one item at a time, seek forward, and close them when finished. Snapshots keep a stable view while writes continue. Backups export a consistent view; restore verifies it before publication. A separate migration path copies a verified 0.5.0.0 database into the new format without changing the source. See the [durable API guide](docs/DURABLE_API.md) for signatures, handle lifetimes, errors, and examples, and the [format guide](docs/FORMAT_060.md) for ordering and compatibility.
 
+Start with the [runnable examples](examples/README.md), ordered from a text write to a stable snapshot scan.
+
 One process owns each database's filesystem lock. Other local processes can use the coordinated owner over a Unix socket; callers can also wait for the lock with a timeout. Writes are durable after acknowledgment, but a lost response after a dispatched write can leave its outcome unknown. Reopen and inspect before retrying such a write.
 
 ## Current limits
