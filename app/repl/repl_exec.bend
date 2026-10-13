@@ -365,7 +365,7 @@ def execute_go(command: Repl.Command, session: Session) -> IO(LoopState):
         _u2 : Unit <- IO.print("timing <on|off|once> mode <cpu|gpu|auto> compute <fuel>")
         _u3 : Unit <- IO.print("import <path> export <path> help exit")
         return Running{session}
-    case Repl.Exit{}:
+    case Repl.ExitCommand{}:
       do IO<LoopState>:
         _u : Unit <- IO.print("bye")
         return Stopped{}
@@ -455,5 +455,5 @@ def run_command(command: Repl.Command, session: Session) -> IO(LoopState):
     case Repl.Import{path}: run_regular(Repl.Import{path}, session)
     case Repl.Export{path}: run_regular(Repl.Export{path}, session)
     case Repl.Help{}: run_regular(Repl.Help{}, session)
-    case Repl.Exit{}: run_regular(Repl.Exit{}, session)
+    case Repl.ExitCommand{}: run_regular(Repl.ExitCommand{}, session)
     case Repl.Invalid{message}: run_regular(Repl.Invalid{message}, session)

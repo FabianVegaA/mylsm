@@ -208,7 +208,7 @@ def parse_time(tokens: List<&2, String>) -> Repl.Command:
 def dispatch_exit(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
   match hit:
     case True{}:
-      parse_no_args(tokens, Repl.Exit{}, "usage: exit")
+      parse_no_args(tokens, Repl.ExitCommand{}, "usage: exit")
     case False{}:
       Repl.Invalid{"unknown command: " ++ cmd}
 

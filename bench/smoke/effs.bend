@@ -28,6 +28,13 @@ def main() -> IO(Unit):
     _su : Unit <- IO.try(Unit, Fs.fsync("smoke-data/a.txt"))
     _mu : Unit <- IO.try(Unit, Fs.chmod("smoke-data/a.txt", 384))
     _nu : Unit <- IO.try(Unit, Fs.rename("smoke-data/a.txt", "smoke-data/b.txt"))
+    size : Nat <- IO.try(Nat, Fs.file_size("smoke-data/b.txt"))
+    clock : Nat <- IO.try(Nat, Fs.clock_monotonic())
+    _checked : Unit <- IO.try(Unit,
+      IO.pure(Result<&1, &1, U32 & String, Unit>,
+        Bool.pick(Result<&1, &1, U32 & String, Unit>,
+          Nat.is_eq(size, 5n) && Nat.is_gt(clock, 0n),
+          Done{Unit{}}, Fail{(1, "invalid Nat host effect value")})))
     names : List<String> <- IO.try(List<String>, Fs.read_dir("smoke-data"))
     IO.print("listed:")
     print_all(names)

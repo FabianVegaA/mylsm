@@ -5,7 +5,7 @@ function read_dir_count(path) {
   try {
     const names = fs.readdirSync(Buffer.from(io_bytes(path))).map(String)
       .filter((s) => s !== "." && s !== ".." && !s.includes("\n"));
-    return io_done(BigInt(names.length));
+    return io_done(names.length);
   } catch (e) {
     return io_fail(Math.abs(e.errno ?? 5));
   }

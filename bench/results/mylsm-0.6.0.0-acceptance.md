@@ -10,7 +10,7 @@ cursor memory ceiling remain open.
 | Attribute | Observed value |
 | --- | --- |
 | Host | Darwin 25.6.0, arm64 |
-| Bend | 2.0.36 (`tools/toolchain.json`) |
+| Bend | 2.0.37 (`tools/toolchain.json`, current host validation) |
 | Linux runtime | Ubuntu 24.04 arm64 in Docker, Bend 2.0.36, Clang 18 |
 | Linux filesystem | Container overlay for lock and permission tests; bind mount for compilation and socket/client integration |
 | Bun | 1.4.3 on Darwin arm64 and Linux arm64 |
@@ -53,6 +53,7 @@ are in `mylsm-0.5.0.0-phase3-linux-samples.tsv`; candidate rows are in
 
 | Gate | Command | Result |
 | --- | --- | --- |
+| Bend 2.0.37 upgrade, Darwin arm64 | `bend update`; `bash bench/smoke/cli.sh`; focused JS effects and Bun/Node consumer smokes | Pin and docs updated; formal proofs pass 82/82 and fuzz decides 1,000,000 inputs. CLI smoke reaches the native REPL but exits 1 because Clang cannot build SDK modules (CoreFoundation/Foundation/Metal) in this host environment; JS effects pass on Node and native Bend, Bun FFI and owner-spawn smokes pass, and public examples pass. `ReplProof` typechecks, while `--verdict` reports a backend/kernel mismatch; the 2.0.36 Docker image lacks Lean, so the mismatch could not be compared against the prior release. |
 | Formal laws and witnesses | `bash proofs/run.sh` | `PASS=81 FAIL=0 TIMEOUT=0 TOTAL=81` |
 | Bolt lint | `../bolt/bin/bolt.bin 2>&1 | grep -v ' S002: ' | grep -E 'error:|warning:'` | No findings printed; `grep` returns 1 when the result is empty |
 | Source width | Repository command from `AGENT.md` | No lines over 200 columns |
@@ -83,7 +84,7 @@ are in `mylsm-0.5.0.0-phase3-linux-samples.tsv`; candidate rows are in
 | JavaScript Bun owner process | `bun bench/smoke/owner_spawn_bun.js` | Pass on Darwin and Linux arm64; while the parent holds flock, the spawned child cannot inspect the lock descriptor |
 | JavaScript Node fallback | `db_lock_js_unsupported.sh`, `rename_noreplace_js_unsupported.sh`, `owner_spawn_js.sh` | Pass under Node; unsupported FFI remains explicitly reported as ENOTSUP |
 | Linux arm64 acceptance rerun | `proofs/run.sh`, legacy/backup/owner/lock/crash/ENOSPC harnesses, and Bun 1.4.3 FFI fixtures | Ubuntu 24.04 arm64 as an unprivileged user; proofs pass 82/82, migration/backup/owner/lock and publication/crash matrices pass, all six owner response-loss boundaries recover as expected, true tmpfs ENOSPC cleanup passes for migration and backup, and Bun lock/rename plus child descriptor checks pass. Cursor RSS is excluded from this rerun. |
-| Public consumer examples | `examples/utf8_basic.bend`, `examples/bytes_basic.bend`, `examples/snapshot_scan.bend` | All pass on Ubuntu 24.04 arm64 with Bend 2.0.36; they import the public facade, with the byte example also importing the bytes buffer package. |
+| Public consumer examples | `examples/utf8_basic.bend`, `examples/bytes_basic.bend`, `examples/snapshot_scan.bend` | Historical Linux run: all pass on Ubuntu 24.04 arm64 with Bend 2.0.36; they import the public facade, with the byte example also importing the bytes buffer package. |
 
 ## Cursor memory observation
 

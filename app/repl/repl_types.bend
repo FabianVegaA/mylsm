@@ -32,5 +32,5 @@ type Command is Data:
   Export{path: String}
   Time{inner: String}
   Help{}
-  Exit{}
+  ExitCommand{}
   Invalid{message: String}

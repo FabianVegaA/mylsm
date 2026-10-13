@@ -4,7 +4,7 @@ MyLSM is an experimental key-value database written in [Bend](https://github.com
 
 ## Try it
 
-Use Bend 2.0.36 and a native C compiler. From this checkout:
+Use Bend 2.0.37 and a native C compiler. From this checkout:
 
 ```sh
 scripts/mylsm.sh doctor

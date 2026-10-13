@@ -1,6 +1,6 @@
 # Examples
 
-These Bend programs use the public `mylsm.bend` API. Run them from the repository root with Bend 2.0.36. Each program creates a new database at `MYLSM_DB_PATH`, so give it a path that does not exist yet.
+These Bend programs use the public `mylsm.bend` API. Run them from the repository root with Bend 2.0.37. Each program creates a new database at `MYLSM_DB_PATH`, so give it a path that does not exist yet.
 
 ```sh
 db=$(mktemp -d)
