@@ -10,6 +10,9 @@ def Laws.empty_legacy_wal_is_valid():
 def Laws.one_complete_frame_is_valid():
   {==}
 
+def Laws.one_frame_replays_its_batch():
+  {==}
+
 def Laws.multiple_complete_frames_are_valid():
   {==}
 

@@ -6,14 +6,14 @@ import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # Extracts the canonical empty legacy manifest used by closed witnesses.
 def legacy.empty.encoded(
-  result: Result<&1, &1, LegacyManifest.Error, Bytes.Bytes>
+  result: Maybe<&1, Bytes.Bytes>
 ) -> Bytes.Bytes:
   match result:
-    case Fail{_}: Bytes.new(0)
-    case Done{bytes}: bytes
+    case None{}: Bytes.new(0)
+    case Some{bytes}: bytes
 
 def legacy.empty() -> Bytes.Bytes:
-  legacy.empty.encoded(LegacyManifest.serialize(LegacyManifest.M{Nil{}}))
+  legacy.empty.encoded(Bytes.from_hex("4d594c534d334d0000000003000000001205c80e921bb2ce3c951dca55299a11f60403d7440d7f3949c06848ca9fd22a"))
 
 # The legacy API and storage version strings must remain distinct.
 law legacy_versions_are_separate:

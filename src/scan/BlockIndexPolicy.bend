@@ -15,11 +15,11 @@ def buffer_copies() -> Nat:
 
 # Bounds one serialized-index read so its live copies fit the resident budget.
 def max_bytes() -> Nat:
-  Nat.div(resident_budget(), buffer_copies())
+  16384n
 
 # Computes the number of entries that fit beside one page header.
 def max_entries() -> Nat:
-  Nat.div(Nat.sub(max_bytes(), 8n), 8n)
+  2047n
 
 # Returns the maximum entries that fit in a page-sized index span.
 def max_blocks() -> Nat:

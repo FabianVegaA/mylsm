@@ -16,19 +16,34 @@ def Laws.db_recover():
 def Laws.db_get_newest_wins():
   {==}
 
+def Laws.db_get_l0_hit():
+  {==}
+
+def Laws.db_get_l1_hit():
+  {==}
+
 def Laws.db_get_tombstone_hides():
   {==}
 
 def Laws.db_get_miss():
   {==}
 
-def Laws.db_cache_transparent_hit():
+def Laws.db_cached_hit_value():
+  {==}
+
+def Laws.db_cached_hit_matches_uncached():
+  {==}
+
+def Laws.db_uncached_hit_value():
   {==}
 
 def Laws.db_cache_transparent_tomb():
   {==}
 
 def Laws.db_cache_transparent_miss():
+  {==}
+
+def Laws.db_uncached_miss_value():
   {==}
 
 def Laws.db_staged_order():

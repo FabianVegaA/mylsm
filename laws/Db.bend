@@ -79,6 +79,16 @@ def two_level_db() -> Db.Db:
   Db.Db{"/d", MemTable.MT{Con{MemTable.Entry{"m", Some{"mv"}}, Nil{}}}, MemTable.MT{Nil{}}, 1n, Nil{}, Con{Con{Sstable.build(Con{MemTable.Entry{"l0", Some{"l0v"}}, Nil{}}, 0n, 1n),
   Nil{}}, Con{Con{Sstable.build(Con{MemTable.Entry{"l1", Some{"l1v"}}, Nil{}}, 0n, 1n), Nil{}}, Nil{}}}, 2n, "", 1n, 0n}
 
+# Uses short keys and values across memory, L0, and L1.
+def small_two_level_db() -> Db.Db:
+  Db.Db{"/d", MemTable.MT{Con{MemTable.Entry{"a", Some{"1"}}, Nil{}}}, MemTable.MT{Nil{}}, 1n, Nil{}, Con{Con{Sstable.build(Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}, 0n, 1n),
+  Nil{}}, Con{Con{Sstable.build(Con{MemTable.Entry{"c", Some{"3"}}, Nil{}}, 0n, 1n), Nil{}}, Nil{}}}, 2n, "", 1n, 0n}
+
+# Keeps one SST entry for cached and uncached read checks.
+def one_table_db() -> Db.Db:
+  Db.Db{"/d", MemTable.MT{Nil{}}, MemTable.MT{Nil{}}, 1n, Nil{},
+    Con{Con{Sstable.build(Con{MemTable.Entry{"a", Some{"1"}}, Nil{}}, 0n, 1n), Nil{}}, Nil{}}, 1n, "", 0n, 0n}
+
 # Handle tomb db in the database laws.
 def tomb_db() -> Db.Db:
   Db.Db{"/d", MemTable.MT{Con{MemTable.Entry{"x", None{}}, Nil{}}}, MemTable.MT{Nil{}}, 1n, Nil{}, Con{Con{Sstable.build(Con{MemTable.Entry{"x", Some{"old"}}, Nil{}}, 0n, 1n),
@@ -86,8 +96,15 @@ def tomb_db() -> Db.Db:
 
 # LAW: mem shadows L0 shadows L1 (closed)
 law db_get_newest_wins:
-  {(Db.db_get(two_level_db(), "m"), Db.db_get(two_level_db(), "l0"), Db.db_get(two_level_db(), "l1")) == (Some{"mv"}, Some{"l0v"}, Some{"l1v"}) : Maybe<&2, String> & Maybe<&2,
-  String> & Maybe<&2, String>}
+  {Db.db_get(small_two_level_db(), "a") == Some{"1"} : Maybe<&2, String>}
+
+# Reads a key stored only in L0.
+law db_get_l0_hit:
+  {Db.db_get(small_two_level_db(), "b") == Some{"2"} : Maybe<&2, String>}
+
+# Reads a key stored only in L1.
+law db_get_l1_hit:
+  {Db.db_get(small_two_level_db(), "c") == Some{"3"} : Maybe<&2, String>}
 
 # LAW: mem tombstone hides the L0 value (closed)
 law db_get_tombstone_hides:
@@ -95,7 +112,7 @@ law db_get_tombstone_hides:
 
 # LAW: absent key misses everywhere (closed)
 law db_get_miss:
-  {Db.db_get(two_level_db(), "zzz") == None{} : Maybe<&2, String>}
+  {Db.db_get(small_two_level_db(), "z") == None{} : Maybe<&2, String>}
 
 # --- db_get_cached transparency (Phase A3): closed vectors ---
 
@@ -110,8 +127,16 @@ def cached_val(+db: Db.Db, +key: String) -> Maybe<&2, String>:
   cached_snd(Db.db_get_cached(db, key))
 
 # LAW: cached reads agree with uncached reads (closed)
-law db_cache_transparent_hit:
-  {cached_val(two_level_db(), "l0") == Db.db_get(two_level_db(), "l0") : Maybe<&2, String>}
+law db_cached_hit_value:
+  {cached_val(one_table_db(), "a") == Some{"1"} : Maybe<&2, String>}
+
+# Cached and uncached reads agree on the stored key.
+law db_cached_hit_matches_uncached:
+  {cached_val(one_table_db(), "a") == Db.db_get(one_table_db(), "a") : Maybe<&2, String>}
+
+# Reads the stored key through the uncached path.
+law db_uncached_hit_value:
+  {Db.db_get(one_table_db(), "a") == Some{"1"} : Maybe<&2, String>}
 
 # LAW: cached tombstone still hides (closed)
 law db_cache_transparent_tomb:
@@ -119,7 +144,11 @@ law db_cache_transparent_tomb:
 
 # LAW: cached miss agrees (closed)
 law db_cache_transparent_miss:
-  {cached_val(two_level_db(), "zzz") == Db.db_get(two_level_db(), "zzz") : Maybe<&2, String>}
+  {cached_val(one_table_db(), "z") == None{} : Maybe<&2, String>}
+
+# Confirms the uncached path misses for an absent key.
+law db_uncached_miss_value:
+  {Db.db_get(one_table_db(), "z") == None{} : Maybe<&2, String>}
 
 # --- grouped commits (Phase B1): closed vectors ---
 

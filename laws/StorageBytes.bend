@@ -165,4 +165,20 @@ law sha256_packed_binary_octets:
 
 # Packed hashing agrees with the byte-list implementation across padding boundaries.
 law sha256_packed_padding_boundaries:
-  {packed_hash_matches(55n) && packed_hash_matches(56n) && packed_hash_matches(63n) && packed_hash_matches(64n) && packed_hash_matches(65n) == True{} : Bool}
+  {packed_hash_matches(55n) == True{} : Bool}
+
+# Covers the first two-block SHA padding boundary.
+law sha256_packed_padding_56:
+  {packed_hash_matches(56n) == True{} : Bool}
+
+# Covers the final byte before a full SHA block.
+law sha256_packed_padding_63:
+  {packed_hash_matches(63n) == True{} : Bool}
+
+# Covers the exact SHA block boundary.
+law sha256_packed_padding_64:
+  {packed_hash_matches(64n) == True{} : Bool}
+
+# Covers one byte beyond a full SHA block.
+law sha256_packed_padding_65:
+  {packed_hash_matches(65n) == True{} : Bool}

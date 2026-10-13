@@ -3,7 +3,11 @@ import ../src/scan/BlockIndexPolicy.bend as Policy
 
 # Accepts the maximum number of entries in one resident page.
 law accepts_the_page_budget_boundary:
-  {Policy.accepts(Policy.max_blocks()) == True{} : Bool}
+  {Policy.accepts(2047n) == True{} : Bool}
+
+# Pins the page bound used by the resident index budget.
+law page_budget_matches_max_blocks:
+  {Policy.max_blocks() == 2047n : Nat}
 
 # Rejects one block beyond the fixed metadata bound.
 law rejects_one_entry_over_the_page_budget:

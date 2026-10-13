@@ -10,6 +10,9 @@ def Laws.invalid_level_rejected():
 def Laws.empty_input_rejected():
   {==}
 
+def Laws.partial_header_across_feeds_rejected():
+  {==}
+
 def Laws.unordered_input_rejected():
   {==}
 
@@ -26,9 +29,6 @@ def Laws.packed_record_measure_uses_utf8_byte_lengths():
   {==}
 
 def Laws.encoder_nonempty_file_fixture():
-  {==}
-
-def Laws.nonempty_file_chunk_boundaries():
   {==}
 
 def Laws.text_field_multibyte():

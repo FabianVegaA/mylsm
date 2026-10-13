@@ -74,6 +74,10 @@ def cp_kept() -> List<&2, MemTable.Entry>:
 def cp_out() -> Sstable.Table:
   Sstable.from_sorted_unique(cp_kept(), 1n)
 
+# Builds an empty table whose cached key range stays outside the test table.
+def cp_out_bounds() -> Sstable.Table:
+  Sstable.Tbl{Nil{}, Sstable.bloom_new(0n), 0n, Some{"a"}, Some{"z"}, 7n, Nil{}, Nil{}}
+
 # Handle cp u2 in the compaction laws.
 def cp_u2() -> Sstable.Table:
   Sstable.build(cp_e1("zz", "vzz"), 1n, 1n)
@@ -95,19 +99,33 @@ law compact_live:
 # u1 was absorbed in round 2 by the widened hull — multi-round closure
 # working as designed — so the witness is a fresh out-of-range table)
 law compact_disjoint:
-  {Compact.table_overlap(cp_out(), cp_u2()) == False{} : Bool}
+  {Compact.table_overlap(cp_out_bounds(), cp_u2()) == False{} : Bool}
 
 # LAW: absorbed table did overlap the L0 hull (closed sanity: closure fired)
 law compact_absorbed:
   {Compact.table_overlap(cp_t2(), cp_u0()) == True{} : Bool}
 
+# Keeps a live value and tombstone in one compacted table.
+def cp_read_table() -> Sstable.Table:
+  Sstable.Tbl{Con{MemTable.Entry{"a", Some{"v1"}}, Con{MemTable.Entry{"x", None{}}, Nil{}}},
+    Sstable.Blm{Sstable.bit_set(0n, Sstable.bits_new(1n)), 0n}, 0n, Some{"a"}, Some{"x"}, 2n,
+    Con{Con{MemTable.Entry{"a", Some{"v1"}}, Con{MemTable.Entry{"x", None{}}, Nil{}}}, Nil{}}, Con{"a", Nil{}}}
+
+# Keeps the older value that must remain hidden by the tombstone.
+def cp_old_table() -> Sstable.Table:
+  Sstable.Tbl{Con{MemTable.Entry{"x", Some{"vold"}}, Nil{}},
+    Sstable.Blm{Sstable.bit_set(0n, Sstable.bits_new(1n)), 0n}, 0n, Some{"x"}, Some{"x"}, 1n,
+    Con{Con{MemTable.Entry{"x", Some{"vold"}}, Nil{}}, Nil{}}, Con{"x", Nil{}}}
+
 # Handle cp db pre in the compaction laws.
 def cp_db_pre() -> Db.Db:
-  Db.Db{"/d", MemTable.MT{Nil{}}, MemTable.MT{Nil{}}, 1n, Nil{}, cp_levels(), 5n, "", 0n, 0n}
+  Db.Db{"/d", MemTable.MT{Nil{}}, MemTable.MT{Nil{}}, 1n, Nil{},
+    Con{Con{cp_read_table(), Nil{}}, Con{Con{cp_old_table(), Nil{}}, Nil{}}}, 5n, "", 0n, 0n}
 
 # Handle cp db post in the compaction laws.
 def cp_db_post() -> Db.Db:
-  Db.Db{"/d", MemTable.MT{Nil{}}, MemTable.MT{Nil{}}, 1n, Nil{}, cp_post(), 6n, "", 0n, 0n}
+  Db.Db{"/d", MemTable.MT{Nil{}}, MemTable.MT{Nil{}}, 1n, Nil{},
+    Con{Nil{}, Con{Con{cp_read_table(), Nil{}}, Con{Con{cp_old_table(), Nil{}}, Nil{}}}}, 6n, "", 0n, 0n}
 
 # LAW: post-compaction hit pinned (closed; anti-vacuity)
 law compact_hit:

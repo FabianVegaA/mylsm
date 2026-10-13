@@ -4,7 +4,10 @@ import ../laws/ByteManifest.bend as Laws
 def Laws.empty_manifest_round_trips():
   {==}
 
-def Laws.sst_manifest_round_trips():
+def Laws.sst_manifest_encodes():
+  {==}
+
+def Laws.sst_manifest_decodes():
   {==}
 
 def Laws.generation_manifest_round_trips():

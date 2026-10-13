@@ -7,8 +7,15 @@ law empty_manifest_round_trips:
   {Manifest.decode(Manifest.encode(Manifest.Empty{})) == Done{Manifest.Empty{}} : Result<&1, &1, Manifest.Error, Manifest.ManifestValue>}
 
 # The one-SST generation-four manifest preserves its decoded state.
-law sst_manifest_round_trips:
-  {Manifest.decode(Manifest.encode(Manifest.HasSst{})) == Done{Manifest.HasSst{}} : Result<&1, &1, Manifest.Error, Manifest.ManifestValue>}
+law sst_manifest_encodes:
+  {Manifest.encode(Manifest.HasSst{}) == Manifest.literal(Bytes.from_hex(
+    "4d594c534d344d000000000400000001000000010000000100000003535354e796524d9c675c1254252cb9ef7b6e8cc882cf896d79d0f777afbd52e6c9ca04")) : Bytes.Bytes}
+
+# Decodes the fixed byte vector for a one-SST generation-four manifest.
+law sst_manifest_decodes:
+  {Manifest.decode(Manifest.literal(Bytes.from_hex(
+    "4d594c534d344d000000000400000001000000010000000100000003535354e796524d9c675c1254252cb9ef7b6e8cc882cf896d79d0f777afbd52e6c9ca04"))) ==
+    Done{Manifest.HasSst{}} : Result<&1, &1, Manifest.Error, Manifest.ManifestValue>}
 
 # The empty generation-five manifest preserves its layout.
 law generation_manifest_round_trips:

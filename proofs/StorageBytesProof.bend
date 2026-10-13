@@ -72,3 +72,15 @@ def Laws.sha256_packed_binary_octets():
 
 def Laws.sha256_packed_padding_boundaries():
   {==}
+
+def Laws.sha256_packed_padding_56():
+  {==}
+
+def Laws.sha256_packed_padding_63():
+  {==}
+
+def Laws.sha256_packed_padding_64():
+  {==}
+
+def Laws.sha256_packed_padding_65():
+  {==}

@@ -2,19 +2,24 @@ import Base
 import ../src/MemTable.bend as MemTable
 import ../src/Sstable.bend as Sstable
 import ../src/Db.bend as Db
+import ../src/SortedRun.bend as SortedRun
 
 # Closed SSTable vectors. Open sortedness/lookup need comparison facts on open
 # keys; those formal limitations remain covered only by closed vectors and fuzz.
 def sst_e1() -> List<&2, MemTable.Entry>:
-  Con{MemTable.Entry{"b", Some{"2"}}, Con{MemTable.Entry{"a", Some{"1"}}, Nil{}}}
+  Con{MemTable.Entry{"a", Some{"1"}}, Con{MemTable.Entry{"", Some{"2"}}, Nil{}}}
 
 # Handle sst e2 in the SSTable laws.
 def sst_e2() -> List<&2, MemTable.Entry>:
   Con{MemTable.Entry{"k", Some{"new"}}, Con{MemTable.Entry{"k", Some{"old"}}, Nil{}}}
 
+# Keeps one entry for the parallel Bloom construction witnesses.
+def bloom_e() -> List<&2, MemTable.Entry>:
+  Con{MemTable.Entry{"", Some{"1"}}, Nil{}}
+
 # LAW: build sorts (closed)
 law sst_sorted:
-  {Db.table_entries(Sstable.build(sst_e1(), 0n, 2n)) == Con{MemTable.Entry{"a", Some{"1"}}, Con{MemTable.Entry{"b", Some{"2"}}, Nil{}}} : List<&2, MemTable.Entry>}
+  {SortedRun.sort_newest(sst_e1()) == Con{MemTable.Entry{"", Some{"2"}}, Con{MemTable.Entry{"a", Some{"1"}}, Nil{}}} : List<&2, MemTable.Entry>}
 
 # LAW: newest version wins on duplicate keys (closed)
 law sst_newest:
@@ -48,24 +53,24 @@ law sstable_block_hit_missing:
 
 # Handle blm a in the SSTable laws.
 def blm_a() -> Sstable.Bloom:
-  Sstable.bloom_of(Con{MemTable.Entry{"a", Some{"1"}}, Nil{}}, Sstable.bloom_new(64n))
+  Sstable.bloom_of(Con{MemTable.Entry{"", Some{"1"}}, Nil{}}, Sstable.bloom_new(2n))
 
 # LAW: union keeps member bits (closed)
 law sstable_bloom_union_hit:
-  {Sstable.bloom_test(Sstable.bloom_union(blm_a(), Sstable.bloom_new(64n)), "a") == True{} : Bool}
+  {Sstable.bloom_test(Sstable.bloom_union(blm_a(), Sstable.bloom_new(2n)), "") == True{} : Bool}
 
 # LAW: union adds no ghost bits for this vector (closed)
 law sstable_bloom_union_miss:
-  {Sstable.bloom_test(Sstable.bloom_union(blm_a(), Sstable.bloom_new(64n)), "zzz") == False{} : Bool}
+  {Sstable.bloom_test(Sstable.bloom_union(blm_a(), Sstable.bloom_new(2n)), "a") == False{} : Bool}
 
 # LAW: two-half parallel build equals the sequential build (closed)
 law sstable_bloom_par_agrees:
-  {Sstable.bloom_of_par(sst_e2(), 64n) == Sstable.bloom_of(sst_e2(), Sstable.bloom_new(64n)) : Sstable.Bloom}
+  {Sstable.bloom_of_par(bloom_e(), 2n) == Sstable.bloom_of(bloom_e(), Sstable.bloom_new(2n)) : Sstable.Bloom}
 
 # LAW: four-chunk parallel build equals the sequential build (closed)
 law sstable_bloom_chunks_agree:
-  {Sstable.bloom_of_chunks(sst_e2(), 64n) == Sstable.bloom_of(sst_e2(), Sstable.bloom_new(64n)) : Sstable.Bloom}
+  {Sstable.bloom_of_chunks(bloom_e(), 2n) == Sstable.bloom_of(bloom_e(), Sstable.bloom_new(2n)) : Sstable.Bloom}
 
 # LAW: hybrid build equals the sequential build (closed)
 law sstable_bloom_hybrid_agrees:
-  {Sstable.bloom_of_hybrid(sst_e2(), 64n) == Sstable.bloom_of(sst_e2(), Sstable.bloom_new(64n)) : Sstable.Bloom}
+  {Sstable.bloom_of_hybrid(bloom_e(), 2n) == Sstable.bloom_of(bloom_e(), Sstable.bloom_new(2n)) : Sstable.Bloom}

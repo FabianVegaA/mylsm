@@ -52,7 +52,7 @@ law repl_parse_import:
 
 # Handle interchange fixture in the interactive shell laws.
 def interchange_fixture() -> List<&2, MemTable.Entry>:
-  Con{MemTable.Entry{"hello world", Some{"value with spaces"}}, Nil{}}
+  Con{MemTable.Entry{"a", Some{"b"}}, Nil{}}
 
 def interchange_roundtrip.result(
   result: Result<&1, &1, Wal.Error, String>

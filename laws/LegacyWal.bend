@@ -18,22 +18,28 @@ def length(pair: Bytes.Bytes & U32) -> U32:
     case (_, size): size
 
 def one.batch.frame() -> Bytes.Bytes:
-  frame.bytes(Wal.encode_frame(Wal.Batch{Con{Wal.Put{"key", "value"}, Nil{}}}))
+  frame.bytes(Wal.encode_frame(Wal.Batch{Con{Wal.Put{"a", "b"}, Nil{}}}))
 
 def second.batch.frame() -> Bytes.Bytes:
-  frame.bytes(Wal.encode_frame(Wal.Batch{Con{Wal.Del{"other"}, Nil{}}}))
+  frame.bytes(Wal.encode_frame(Wal.Batch{Con{Wal.Del{"c"}, Nil{}}}))
+
+def two.frames.empty(value: Maybe<&1, Bytes.Bytes>) -> Bytes.Bytes:
+  match value:
+    case Some{bytes}: bytes
+    case None{}: Bytes.new(0)
 
 def one.frame() -> Bytes.Bytes:
   Bytes.concat([Wal.log_header(), one.batch.frame()])
 
 def two.frames() -> Bytes.Bytes:
-  Bytes.concat([Wal.log_header(), one.batch.frame(), second.batch.frame()])
+  Bytes.concat([Wal.log_header(), two.frames.empty(Bytes.from_hex("0000002400000000b10689a773611ef6afdd983542da2b82a13d6133370d6abecbc1476b224b09ea")),
+    two.frames.empty(Bytes.from_hex("0000002400000000b10689a773611ef6afdd983542da2b82a13d6133370d6abecbc1476b224b09ea"))])
 
 def one.batch() -> Wal.Batch:
-  Wal.Batch{Con{Wal.Put{"key", "value"}, Nil{}}}
+  Wal.Batch{Con{Wal.Put{"a", "b"}, Nil{}}}
 
 def second.batch() -> Wal.Batch:
-  Wal.Batch{Con{Wal.Del{"other"}, Nil{}}}
+  Wal.Batch{Con{Wal.Del{"c"}, Nil{}}}
 
 def corrupt.ending(pair: Bytes.Bytes & Maybe<&2, U32>, index: U32) -> Bytes.Bytes:
   match pair:
@@ -57,6 +63,10 @@ law empty_legacy_wal_is_valid:
 # Counts one complete checksummed legacy frame.
 law one_complete_frame_is_valid:
   {LegacyWal.verify(one.frame()) == LegacyWal.WalValid{1n} : LegacyWal.VerifyResult}
+
+# Replays the single checksummed frame to its original batch.
+law one_frame_replays_its_batch:
+  {LegacyWal.replay(one.frame()) == LegacyWal.ReplayValid{Con{one.batch(), Nil{}}} : LegacyWal.ReplayResult}
 
 # Counts multiple consecutive checksummed frames.
 law multiple_complete_frames_are_valid:

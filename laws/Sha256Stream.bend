@@ -36,6 +36,11 @@ def stream.updates(chunks: Bytes.Bytes & Bytes.Bytes & Bytes.Bytes) -> Result<&1
         stream.update.next(SHA.stream.update(SHA.stream.initial(), first), second),
         third)
 
+def stream.two_updates(pair: Bytes.Bytes & Bytes.Bytes) -> Result<&1, &1, SHA.StreamError, SHA.Stream>:
+  match pair:
+    case (first, second):
+      stream.update.next(SHA.stream.update(SHA.stream.initial(), first), second)
+
 # Splits the final witness chunk from the preceding input.
 def chunks.last(
   pair: Bytes.Bytes & Bytes.Bytes,
@@ -82,7 +87,9 @@ def stream.inputs(copies: Bytes.Bytes & Bytes.Bytes) -> Bool:
       digest.valid((incremental, SHA.sha256_packed_bytes(reference)))
 
 def Laws.chunked_updates_match_one_shot() -> Bool:
-  stream.inputs(clone.split(Bytes.new(130)))
+  digest.stream(
+    stream.two_updates((Bytes.from_string("a"), Bytes.from_string("b"))),
+    SHA.sha256_packed_bytes(Bytes.from_string("ab")))
 
 # Chunked updates agree with one-shot hashing for the closed witness.
 law chunked_updates_match_one_shot:

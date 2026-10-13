@@ -4,6 +4,9 @@ import ../laws/BlockIndexPolicy.bend as Laws
 def Laws.accepts_the_page_budget_boundary():
   {==}
 
+def Laws.page_budget_matches_max_blocks():
+  {==}
+
 def Laws.rejects_one_entry_over_the_page_budget():
   {==}
 

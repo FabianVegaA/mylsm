@@ -106,7 +106,7 @@ run_with_timeout() {
   log_file=$2
   timeout_marker=$3
 
-  bend "$proof_file" > "$log_file" 2>&1 &
+  bend "$proof_file" --verdict > "$log_file" 2>&1 &
   bend_pid=$!
   (
     sleep "$TIMEOUT"

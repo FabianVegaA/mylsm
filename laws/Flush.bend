@@ -6,7 +6,7 @@ import ../src/FlushPolicy.bend as Flush
 
 # Small local fixture duplicated from the merge-iterator domain.
 def scan_mem() -> List<&2, MemTable.Entry>:
-  Con{MemTable.Entry{"b", Some{"v2"}}, Con{MemTable.Entry{"a", Some{"v1"}}, Nil{}}}
+  Con{MemTable.Entry{"a", Some{"1"}}, Nil{}}
 
 # Handle fl pre in the flush laws.
 def fl_pre() -> Db.Db:
@@ -14,15 +14,19 @@ def fl_pre() -> Db.Db:
 
 # Handle fl post in the flush laws.
 def fl_post() -> Db.Db:
-  Db.Db{"/d", MemTable.MT{Nil{}}, MemTable.MT{Nil{}}, 1n, Nil{}, Con{Con{Sstable.build(scan_mem(), 0n, 2n), Nil{}}, Nil{}}, 1n, "", 0n, 0n}
+  Db.Db{"/d", MemTable.MT{Nil{}}, MemTable.MT{Nil{}}, 1n, Nil{},
+    Con{Con{Sstable.Tbl{scan_mem(), Sstable.Blm{Sstable.bit_set(0n,
+      Sstable.bits_new(1n)), 0n}, 0n, Some{"a"}, Some{"a"}, 1n,
+      Con{scan_mem(), Nil{}}, Con{"a", Nil{}}}, Nil{}}, Nil{}},
+    1n, "", 0n, 0n}
 
 # LAW: pre-flush read hits (closed; kills vacuity for the pair below)
 law flush_hit_pre:
-  {Db.db_get(fl_pre(), "a") == Some{"v1"} : Maybe<&2, String>}
+  {Db.db_get(fl_pre(), "a") == Some{"1"} : Maybe<&2, String>}
 
 # LAW: post-flush read hits identically (closed)
 law flush_hit_post:
-  {Db.db_get(fl_post(), "a") == Some{"v1"} : Maybe<&2, String>}
+  {Db.db_get(fl_post(), "a") == Some{"1"} : Maybe<&2, String>}
 
 # LAW: flush preservation shape — reads equal across the transition (closed)
 law flush_preserve:

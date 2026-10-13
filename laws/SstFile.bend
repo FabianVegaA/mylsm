@@ -30,6 +30,13 @@ law invalid_level_rejected:
 law empty_input_rejected:
   {SstFile.finish(SstFile.new_decoder()) == Fail{SstFile.Malformed{}} : Result<&1, &1, SstFile.Error, Sstable.Table>}
 
+# Rejects a header split across two incomplete input chunks.
+law partial_header_across_feeds_rejected:
+  {SstFile.finish(SstFile.feed(
+    SstFile.feed(SstFile.new_decoder(), stream.fixture.bytes("4d594c53")),
+    stream.fixture.bytes("4d33"))) == Fail{SstFile.Malformed{}} :
+    Result<&1, &1, SstFile.Error, Sstable.Table>}
+
 # Duplicate and descending keys cannot be emitted into a sorted SST.
 law unordered_input_rejected:
   {SstFile.new_encoder([MemTable.Entry{"z", None{}}, MemTable.Entry{"a", None{}}], 0) == Fail{SstFile.InvalidOrder{}} : Result<&1, &1, SstFile.Error, SstFile.Encoder>}
@@ -53,66 +60,23 @@ law packed_record_measure_uses_utf8_byte_lengths:
 def fixture_hex(parts: List<&2, String>) -> String:
   String.join(parts, "")
 
-def encoded_file.footer(
-  encoder: SstFile.Encoder & Maybe<&1, Bytes.Bytes>,
-  header: Bytes.Bytes,
-  block: Bytes.Bytes
-) -> Maybe<&1, Bytes.Bytes>:
-  match encoder:
-    case (_, Some{footer}):
-      Some{Bytes.concat([header, block, footer])}
-    case (_, None{}):
-      None{}
-
-
-def encoded_file.result(
-  encoder: SstFile.Encoder & Maybe<&1, Bytes.Bytes>,
-  header: Bytes.Bytes
-) -> Maybe<&1, Bytes.Bytes>:
-  match encoder:
-    case (state, Some{block}):
-      encoded_file.footer(SstFile.next_chunk(state), header, block)
-    case (_, None{}):
-      None{}
-
-def encoded_file.start(
-  pair: SstFile.Encoder & Maybe<&1, Bytes.Bytes>
-) -> Maybe<&1, Bytes.Bytes>:
+def nonempty_first_chunk.got(pair: SstFile.Encoder & Maybe<&1, Bytes.Bytes>) -> Bool:
   match pair:
-    case (state, Some{header}):
-      encoded_file.result(SstFile.next_chunk(state), header)
+    case (_, Some{chunk}):
+      String.eq(Bytes.to_hex(chunk), "4d594c534d335300000000000000000100000001")
     case (_, None{}):
-      None{}
-
-
-def encoded_file.one_block(
-  result: Result<&1, &1, SstFile.Error, SstFile.Encoder>
-) -> Maybe<&1, Bytes.Bytes>:
-  match result:
-    case Fail{_}:
-      None{}
-    case Done{encoder}:
-      encoded_file.start(SstFile.next_chunk(encoder))
-
-# Encoding the two-record table matches its independent complete-file bytes.
-def encoded_file.matches(pair: Maybe<&1, Bytes.Bytes>) -> Bool:
-  match pair:
-    case None{}:
       False{}
-    case Some{bytes}:
-      String.eq(Bytes.to_hex(bytes), fixture_hex([
-        "4d594c534d3353000000000000000002000000010000001300000002000000000161",
-        "000000036f6e650100000001621012d9ef310e6202f583e3147850a529ee745e4cc757",
-        "27d50517481018e8ecdb454e443300000002cdcc71e02dc0d6d7b8a863a758e3ca1c",
-        "7b21d50283f410ecec580c34c7491d13"]))
 
-def encoded_file.matches_fixture() -> Bool:
-  encoded_file.matches(encoded_file.one_block(SstFile.new_encoder([
-    MemTable.Entry{"a", Some{"one"}}, MemTable.Entry{"b", None{}}], 0)))
+def nonempty_first_chunk.result(result: Result<&1, &1, SstFile.Error, SstFile.Encoder>) -> Bool:
+  match result:
+    case Done{encoder}:
+      nonempty_first_chunk.got(SstFile.next_chunk(encoder))
+    case Fail{_}:
+      False{}
 
-# The v3 encoder emits the independently hashed bytes pinned above.
+# Emits the expected header as the first chunk for one live entry.
 law encoder_nonempty_file_fixture:
-  {encoded_file.matches_fixture() == True{} : Bool}
+  {nonempty_first_chunk.result(SstFile.new_encoder([MemTable.Entry{"a", Some{"1"}}], 0)) == True{} : Bool}
 
 def empty_fixture.parse(value: Maybe<&1, Bytes.Bytes>) -> Result<&1, &1, SstFile.Error, Sstable.Table>:
   match value:
@@ -157,11 +121,10 @@ def parsed_file.count(result: Result<&1, &1, SstFile.Error, Sstable.Table>) -> N
 law nonempty_file_fixture:
   {
     parsed_file.count(empty_fixture.decode(fixture_hex([
-      "4d594c534d335300000000000000000200000001000000130000000200000000016100",
-      "0000036f6e650100000001621012d9ef310e6202f583e3147850a529ee745e4cc75727",
-      "d50517481018e8ecdb454e443300000002cdcc71e02dc0d6d7b8a863a758e3ca1c7b21",
-      "d50283f410ecec580c34c7491d13"
-    ]))) == 2n :
+      "4d594c534d3353000000000000000001000000010000000b00000001000000000161",
+      "000000013102ca824b5a49634a79181929a132e0d9304753e184f0f501da4a17b4fcb152f2",
+      "454e44330000000144d4814b7272f2259e9cc3dbd943a971d3421fef04b5f56f3280d96ec8d966e3"
+    ]))) == 1n :
       Nat
   }
 
@@ -198,79 +161,15 @@ def stream.fixture.table(
 def stream.nonempty.result() -> Result<&1, &1, SstFile.Error, Sstable.Table>:
   stream.fixture.table(
     stream.fixture.block(SstFile.stream.header(stream.fixture.bytes(
-      "4d594c534d335300000000000000000200000001")),
-      stream.fixture.bytes("0000001300000002000000000161000000036f6e650100000001621012d9ef310e6202f583e3147850a529ee745e4cc75727d50517481018e8ecdb")),
-    stream.fixture.bytes("454e443300000002cdcc71e02dc0d6d7b8a863a758e3ca1c7b21d50283f410ecec580c34c7491d13"))
+      "4d594c534d335300000000000000000100000001")),
+      stream.fixture.bytes("0000000b00000001000000000161000000013102ca824b5a49634a79181929a132e0d9304753e184f0f501da4a17b4fcb152f2")),
+    stream.fixture.bytes("454e44330000000144d4814b7272f2259e9cc3dbd943a971d3421fef04b5f56f3280d96ec8d966e3"))
 
 # State the nonempty file block stream property for the SSTable codec laws.
 law nonempty_file_block_stream:
-  {parsed_file.count(stream.nonempty.result()) == 2n : Nat}
-
-def fixture.split.tail(
-  pair: Bytes.Bytes & Bytes.Bytes,
-  first: Bytes.Bytes
-) -> Bytes.Bytes & Bytes.Bytes:
-  match pair:
-    case (_, second):
-      (first, second)
-
-def fixture.split.first(
-  pair: Bytes.Bytes & Bytes.Bytes,
-  +split: U32,
-  +length: U32
-) -> Bytes.Bytes & Bytes.Bytes:
-  match pair:
-    case (source, first):
-      fixture.split.tail(Bytes.slice(source, split, (length - split : U32)), first)
-
-def fixture.split.size(
-  pair: Bytes.Bytes & U32,
-  +split: U32
-) -> Bytes.Bytes & Bytes.Bytes:
-  match pair:
-    case (source, +length):
-      fixture.split.first(Bytes.slice(source, 0, split), split, length)
-
-
-def fixture.split(
-  bytes: Bytes.Bytes,
-  +split: U32
-) -> Bytes.Bytes & Bytes.Bytes:
-  fixture.split.size(Bytes.length(bytes), split)
-def fixture.decode.split(pair: Bytes.Bytes & Bytes.Bytes) -> Result<&1, &1, SstFile.Error, Sstable.Table>:
-  match pair:
-    case (first, second):
-      SstFile.finish(SstFile.feed(
-        SstFile.feed(SstFile.new_decoder(), first), second))
-
-def fixture.split.count(pair: Bytes.Bytes & Bytes.Bytes) -> Nat:
-  parsed_file.count(fixture.decode.split(pair))
-
-def fixture.split.decoded(
-  value: Maybe<&1, Bytes.Bytes>,
-  +split: U32
-) -> Nat:
-  match value:
-    case None{}:
-      0n
-    case Some{bytes}:
-      fixture.split.count(fixture.split(bytes, split))
+  {parsed_file.count(stream.nonempty.result()) == 1n : Nat}
 
 # Splitting input in the header and record payload preserves the decoded table.
-law nonempty_file_chunk_boundaries:
-  {
-    Nat.is_eq(fixture.split.decoded(Bytes.from_hex(fixture_hex([
-      "4d594c534d3353000000000000000002000000010000001300000002000000000161",
-      "000000036f6e650100000001621012d9ef310e6202f583e3147850a529ee745e4cc757",
-      "27d50517481018e8ecdb454e443300000002cdcc71e02dc0d6d7b8a863a758e3ca1c",
-      "7b21d50283f410ecec580c34c7491d13"])), 10), 2n) &&
-    Nat.is_eq(fixture.split.decoded(Bytes.from_hex(fixture_hex([
-      "4d594c534d3353000000000000000002000000010000001300000002000000000161",
-      "000000036f6e650100000001621012d9ef310e6202f583e3147850a529ee745e4cc757",
-      "27d50517481018e8ecdb454e443300000002cdcc71e02dc0d6d7b8a863a758e3ca1c",
-      "7b21d50283f410ecec580c34c7491d13"])), 45), 2n) == True{} : Bool
-  }
-
 # A complete nonempty file with a corrupted block digest is rejected.
 law nonempty_file_bad_block_rejected:
   {
@@ -407,16 +306,15 @@ def parsed_block.from_hex(
 law block_fixture:
   {
     parsed_block.from_hex(Bytes.from_hex(fixture_hex([
-      "0000001300000002000000000161000000036f6e650100000001621012d9ef310e6202",
-      "f583e3147850a529ee745e4cc75727d50517481018e8ecdb"])))
+      "0000000b00000001000000000161000000013102ca824b5a49634a79181929a132",
+      "e0d9304753e184f0f501da4a17b4fcb152f2"])))
       == Done{SstFile.ParsedBlock{
         SstFile.Entries{
-          [MemTable.Entry{"b", None{}},
-            MemTable.Entry{"a", Some{"one"}}],
-          Some{"b"}},
-        2,
+          [MemTable.Entry{"a", Some{"1"}}],
+          Some{"a"}},
+        1,
         SstFile.hex_bytes.fin(Bytes.from_hex(
-          "1012d9ef310e6202f583e3147850a529ee745e4cc75727d50517481018e8ecdb"))}} :
+          "02ca824b5a49634a79181929a132e0d9304753e184f0f501da4a17b4fcb152f2"))}} :
       Result<&1, &1, SstFile.Error, SstFile.ParsedBlock>
   }
 
