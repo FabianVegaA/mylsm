@@ -1,0 +1,15 @@
+mode=baseline
+commit=d9ea63a0f360d921943cb4b3a85639b241a55f59
+dirty=false
+bend=bend 2.0.37
+compiler=Homebrew clang version 19.1.7
+compiler_flags=bend-native-default
+os=Darwin
+arch=arm64
+machine_model=arm64
+threads=1
+cases=maintenance
+device=/dev/disk3s5
+disk_total_kib=482797652
+disk_free_kib=95578944
+disk_free_percent=19

@@ -1,0 +1,1 @@
+scenario=maintenance_phases,count=16000,value_bytes=32,phase=sst_read,elapsed_ms=3168,checksum=16000,result=pass

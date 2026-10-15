@@ -27,6 +27,23 @@ def Laws.reverse_insertions_materialize_in_byte_order():
 def Laws.materialization_keeps_newest_duplicate_value():
   {==}
 
+def Laws.materialization_matches_binary_overwrite_and_tombstone_order():
+  {==}
+
+def Laws.materialization_keeps_newest_final_tombstone():
+  {==}
+
+def Laws.ordered_merge_takes_newer_for_non_greater_comparison(order):
+  match order:
+    case LT{}: {==}
+    case EQ{}: {==}
+    case GT{}: {==}
+
+def Laws.entry_live_keep_matches_open_presence(entry):
+  match entry:
+    case ByteMemTable.Entry{key, None{}}: {==}
+    case ByteMemTable.Entry{key, Some{value}}: {==}
+
 def Laws.compaction_drops_tombstones():
   {==}
 

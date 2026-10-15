@@ -1,0 +1,1 @@
+scenario=scan_delta,count=1024,value_bytes=4096,phase=scan_next,elapsed_ms=0,checksum=4202496,result=pass

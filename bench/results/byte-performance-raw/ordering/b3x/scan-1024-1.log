@@ -1,0 +1,1 @@
+scenario=scan_open,count=1024,value_bytes=32,phase=scan_open,elapsed_ms=2,checksum=1024,result=pass

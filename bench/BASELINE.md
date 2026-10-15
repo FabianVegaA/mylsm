@@ -1,5 +1,9 @@
 # Benchmark baseline
 
+## Byte API performance experiments (2026-10-15)
+
+The isolated `MyLSM.Bytes` measurements use Bend 2.0.37 on Darwin arm64 and a separate clean ABBA/BAAB harness. They are not comparable to the historical String-engine Linux rows below. See the [Byte API report](results/byte-performance-2026-10-15.md) and its raw samples.
+
 ## Same-container 0.5.0.0 / 0.6.0.0 Linux comparison
 
 The 0.5 source is reconstructed from commit `6d3300e`; the candidate source is

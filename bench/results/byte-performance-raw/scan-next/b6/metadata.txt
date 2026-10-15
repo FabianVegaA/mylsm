@@ -1,0 +1,9 @@
+mode=baseline
+commit=06a91cf52fd85c48c3c36c88705319f910db4641
+dirty=false
+bend=bend 2.0.37
+os=Darwin
+arch=arm64
+threads=1
+cases=scans
+disk_free_percent=19

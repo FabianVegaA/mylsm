@@ -1,0 +1,5 @@
+sample	scenario	count	value_bytes	phase	elapsed_ms	checksum	peak_rss_bytes	bytes_on_disk	result
+1	flush	4096	32	flush	5442	20096	25067520	1781760	pass
+2	flush	4096	32	flush	5427	20096	25034752	1781760	pass
+1	compact	4096	32	compact	5476	20096	24985600	1781760	pass
+2	compact	4096	32	compact	5420	20096	25100288	1781760	pass

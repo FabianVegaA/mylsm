@@ -1,0 +1,9 @@
+mode=candidate
+commit=55b5ddde95254cb3a2594ba2e3a84635f85f7889
+dirty=false
+bend=bend 2.0.37
+os=Darwin
+arch=arm64
+threads=1
+cases=all
+disk_free_percent=19

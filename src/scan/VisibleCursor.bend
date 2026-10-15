@@ -128,25 +128,23 @@ def delta.head.checked(
 ) -> DeltaHead:
   delta.head.result(ByteRange.at_or_after_upper(key, upper), entry, tail)
 
-def delta.head.cloned(
-  entries: ByteMemTable.Entry & ByteMemTable.Entry,
+def delta.head.copied(
+  entries: ByteMemTable.Entry & Bytes.Bytes,
   tail: List<&1, ByteMemTable.Entry>,
   bounds: RangeCursor.Bounds
 ) -> DeltaHead:
   match entries:
-    case (entry, copied):
-      match copied:
-        case ByteMemTable.Entry{key, _}:
-          match bounds:
-            case RangeCursor.Bounds{_, upper, _}:
-              delta.head.checked(entry, tail, key, upper)
+    case (entry, key):
+      match bounds:
+        case RangeCursor.Bounds{_, upper, _}:
+          delta.head.checked(entry, tail, key, upper)
 
 def delta.head(
   entry: ByteMemTable.Entry,
   tail: List<&1, ByteMemTable.Entry>,
   bounds: RangeCursor.Bounds
 ) -> DeltaHead:
-  delta.head.cloned(ByteMemTable.entry.clone(entry), tail, bounds)
+  delta.head.copied(ByteMemTable.entry.key.copy(entry), tail, bounds)
 
 def delta.next(entries: List<&1, ByteMemTable.Entry>, bounds: RangeCursor.Bounds) -> DeltaHead:
   match entries:
@@ -159,22 +157,6 @@ def base.result(result: SstCursor.Step) -> BaseResult:
     case SstCursor.Skip{cursor}: BaseSkip{cursor}
     case SstCursor.End{}: BaseDone{}
     case SstCursor.Error{error}: BaseError{error}
-
-def delta.visible.key(
-  key: Bytes.Bytes & Bytes.Bytes,
-  bounds: RangeCursor.Bounds
-) -> Bool:
-  RangeCursor.matches.key(key, bounds)
-
-def delta.visible(entry: ByteMemTable.Entry, bounds: RangeCursor.Bounds) -> Bool:
-  match entry:
-    case ByteMemTable.Entry{key, _}:
-      delta.visible.key(ByteMemTable.bytes.clone(key), bounds)
-
-def delta.live(value: Maybe<&1, Bytes.Bytes>) -> Bool:
-  match value:
-    case Some{_}: True{}
-    case None{}: False{}
 
 def delta.output.result(
   visible: Bool,
@@ -194,32 +176,52 @@ def delta.output.result(
 
 def delta.output.checks(
   entry: ByteMemTable.Entry,
-  checks: ByteMemTable.Entry & ByteMemTable.Entry,
+  live: Bool,
+  key: Bytes.Bytes,
   base: Maybe<&1, SstCursor.Cursor>,
   pending: Maybe<&1, ByteMemTable.Entry>,
   tail: List<&1, ByteMemTable.Entry>,
   copies: RangeCursor.Bounds & RangeCursor.Bounds
 ) -> Step:
-  match checks:
-    case (visible_entry, live_entry):
-      match live_entry:
-        case ByteMemTable.Entry{_, value}:
-          match copies:
-            case (checked, retained):
-              delta.output.result(delta.visible(visible_entry, checked),
-                delta.live(value), entry, base, pending, tail, retained)
+  match copies:
+    case (checked, retained):
+      delta.output.result(RangeCursor.matches.key(ByteMemTable.bytes.clone(key), checked), live,
+        entry, base, pending, tail, retained)
 
-def delta.output.bounds(
-  entries: ByteMemTable.Entry & ByteMemTable.Entry,
+def delta.output.live.kept(
+  pair: ByteMemTable.Entry & Bool,
+  key: Bytes.Bytes,
   base: Maybe<&1, SstCursor.Cursor>,
   pending: Maybe<&1, ByteMemTable.Entry>,
   tail: List<&1, ByteMemTable.Entry>,
   copies: RangeCursor.Bounds & RangeCursor.Bounds
 ) -> Step:
-  match entries:
-    case (entry, checked_entry):
-      delta.output.checks(entry, ByteMemTable.entry.clone(checked_entry),
-        base, pending, tail, copies)
+  match pair:
+    case (retained, live):
+      delta.output.checks(retained, live, key, base, pending, tail, copies)
+
+def delta.output.live(
+  entry: ByteMemTable.Entry,
+  key: Bytes.Bytes,
+  base: Maybe<&1, SstCursor.Cursor>,
+  pending: Maybe<&1, ByteMemTable.Entry>,
+  tail: List<&1, ByteMemTable.Entry>,
+  copies: RangeCursor.Bounds & RangeCursor.Bounds
+) -> Step:
+  delta.output.live.kept(ByteMemTable.entry.live.keep(entry), key,
+    base, pending, tail, copies)
+
+def delta.output.copied(
+  pair: ByteMemTable.Entry & Bytes.Bytes,
+  base: Maybe<&1, SstCursor.Cursor>,
+  pending: Maybe<&1, ByteMemTable.Entry>,
+  tail: List<&1, ByteMemTable.Entry>,
+  bounds: RangeCursor.Bounds
+) -> Step:
+  match pair:
+    case (retained, key):
+      delta.output.live(retained, key, base, pending, tail,
+        RangeCursor.bounds.clone(bounds))
 
 def delta.output(
   entry: ByteMemTable.Entry,
@@ -228,8 +230,8 @@ def delta.output(
   tail: List<&1, ByteMemTable.Entry>,
   bounds: RangeCursor.Bounds
 ) -> Step:
-  delta.output.bounds(ByteMemTable.entry.clone(entry), base, pending, tail,
-    RangeCursor.bounds.clone(bounds))
+  delta.output.copied(ByteMemTable.entry.key.copy(entry), base, pending,
+    tail, bounds)
 
 def decision.step(
   decision: ScanMerge.Decision,
@@ -278,31 +280,27 @@ def compare.final(
 def compare.delta.copied(
   base: Maybe<&1, SstCursor.Cursor>,
   base_entry: ByteMemTable.Entry,
-  delta_entries: ByteMemTable.Entry & ByteMemTable.Entry,
+  delta_entries: ByteMemTable.Entry & Bytes.Bytes,
   delta_tail: List<&1, ByteMemTable.Entry>,
   bounds: RangeCursor.Bounds,
   base_key: Bytes.Bytes
 ) -> CompareState:
   match delta_entries:
-    case (delta_entry, delta_probe):
-      match delta_probe:
-        case ByteMemTable.Entry{key, _}:
-          compare.final(base, base_entry, delta_entry, delta_tail, bounds,
-            base_key, key)
+    case (delta_entry, delta_key):
+      compare.final(base, base_entry, delta_entry, delta_tail, bounds,
+        base_key, delta_key)
 
 def compare.base.copied(
   base: Maybe<&1, SstCursor.Cursor>,
-  base_entries: ByteMemTable.Entry & ByteMemTable.Entry,
+  base_entries: ByteMemTable.Entry & Bytes.Bytes,
   delta_entry: ByteMemTable.Entry,
   delta_tail: List<&1, ByteMemTable.Entry>,
   bounds: RangeCursor.Bounds
 ) -> CompareState:
   match base_entries:
-    case (base_entry, base_probe):
-      match base_probe:
-        case ByteMemTable.Entry{key, _}:
-          compare.delta.copied(base, base_entry,
-            ByteMemTable.entry.clone(delta_entry), delta_tail, bounds, key)
+    case (base_entry, base_key):
+      compare.delta.copied(base, base_entry,
+        ByteMemTable.entry.key.copy(delta_entry), delta_tail, bounds, base_key)
 
 # Clones source heads and computes their canonical byte ordering.
 def compare(
@@ -312,28 +310,25 @@ def compare(
   delta_tail: List<&1, ByteMemTable.Entry>,
   bounds: RangeCursor.Bounds
 ) -> CompareState:
-  compare.base.copied(base, ByteMemTable.entry.clone(base_entry),
+  compare.base.copied(base, ByteMemTable.entry.key.copy(base_entry),
     delta_entry, delta_tail, bounds)
 
 def resolve.delta.pair(
   state: ResolveState,
-  delta_entries: ByteMemTable.Entry & ByteMemTable.Entry
+  delta_entry: ByteMemTable.Entry & Bool
 ) -> Step:
   match state:
     case Resolve{base, base_entry, delta_tail, bounds, order}:
-      match delta_entries:
-        case (delta_entry, delta_probe):
-          match delta_probe:
-            case ByteMemTable.Entry{_, value}:
-              decision.step(ScanMerge.choose(True{}, True{},
-                delta.live(value), order), base, base_entry, delta_entry,
-                delta_tail, bounds)
+      match delta_entry:
+        case (entry, live):
+          decision.step(ScanMerge.choose(True{}, True{}, live, order),
+            base, base_entry, entry, delta_tail, bounds)
 
 def resolve.compared(state: CompareState) -> Step:
   match state:
     case Compare{base, base_entry, delta_entry, delta_tail, bounds, order}:
       resolve.delta.pair(Resolve{base, base_entry, delta_tail, bounds, order},
-        ByteMemTable.entry.clone(delta_entry))
+        ByteMemTable.entry.live.keep(delta_entry))
 
 # Applies the shared newest-wins decision to the current source heads.
 def resolve(

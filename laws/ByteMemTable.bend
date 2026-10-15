@@ -57,6 +57,40 @@ def ordered.replacement() -> ByteMemTable.Table:
 def ordered.replacement.materialized() -> ByteMemTable.Table:
   ByteMemTable.Table{ByteMemTable.ordered_entries(ordered.replacement())}
 
+def ordered.canonical.fixture() -> ByteMemTable.Table:
+  ByteMemTable.put(
+    ByteMemTable.put(
+      ByteMemTable.del(
+        ByteMemTable.put(
+          ByteMemTable.put(
+            ByteMemTable.put(ByteMemTable.empty(),
+              bytes.fixture(Bytes.from_hex("ff")), bytes.fixture(Bytes.from_hex("01"))),
+            bytes.fixture(Bytes.from_hex("00")), bytes.fixture(Bytes.from_hex("02"))),
+          bytes.fixture(Bytes.from_hex("ff")), bytes.fixture(Bytes.from_hex("03"))),
+        bytes.fixture(Bytes.from_hex("00"))),
+      bytes.fixture(Bytes.from_hex("0000")), bytes.fixture(Bytes.from_hex("04"))),
+    bytes.fixture(Bytes.from_hex("")), bytes.fixture(Bytes.from_hex("05")))
+
+def ordered.canonical.expected() -> List<&1, ByteMemTable.Entry>:
+  [ByteMemTable.Entry{bytes.fixture(Bytes.from_hex("")),
+      Some{bytes.fixture(Bytes.from_hex("05"))}},
+    ByteMemTable.Entry{bytes.fixture(Bytes.from_hex("00")), None{}},
+    ByteMemTable.Entry{bytes.fixture(Bytes.from_hex("0000")),
+      Some{bytes.fixture(Bytes.from_hex("04"))}},
+    ByteMemTable.Entry{bytes.fixture(Bytes.from_hex("ff")),
+      Some{bytes.fixture(Bytes.from_hex("03"))}}]
+
+def ordered.final.tombstone.fixture() -> ByteMemTable.Table:
+  ByteMemTable.del(ordered.canonical.fixture(), bytes.fixture(Bytes.from_hex("ff")))
+
+def ordered.final.tombstone.expected() -> List<&1, ByteMemTable.Entry>:
+  [ByteMemTable.Entry{bytes.fixture(Bytes.from_hex("")),
+      Some{bytes.fixture(Bytes.from_hex("05"))}},
+    ByteMemTable.Entry{bytes.fixture(Bytes.from_hex("00")), None{}},
+    ByteMemTable.Entry{bytes.fixture(Bytes.from_hex("0000")),
+      Some{bytes.fixture(Bytes.from_hex("04"))}},
+    ByteMemTable.Entry{bytes.fixture(Bytes.from_hex("ff")), None{}}]
+
 # A byte put contributes one mutation regardless of key or value encoding.
 law put_increments_count:
   for key: Bytes.Bytes
@@ -94,6 +128,27 @@ law reverse_insertions_materialize_in_byte_order:
 law materialization_keeps_newest_duplicate_value:
   {ordered.replacement.visible(ByteMemTable.get(ordered.replacement.materialized(),
     bytes.fixture(Bytes.from_hex("62")))) == True{} : Bool}
+
+# Materialization orders binary keys and keeps the newest value or tombstone.
+law materialization_matches_binary_overwrite_and_tombstone_order:
+  {ByteMemTable.ordered_entries(ordered.canonical.fixture()) ==
+    ordered.canonical.expected() : List<&1, ByteMemTable.Entry>}
+
+# Materialization keeps the newest deletion for a key.
+law materialization_keeps_newest_final_tombstone:
+  {ByteMemTable.ordered_entries(ordered.final.tombstone.fixture()) ==
+    ordered.final.tombstone.expected() : List<&1, ByteMemTable.Entry>}
+
+# Equal keys prefer the newer run during ordered merging.
+law ordered_merge_takes_newer_for_non_greater_comparison:
+  for order: Cmp
+  {ByteMemTable.ordered.merge.take_newer(order) ==
+    Bool.or(Cmp.is_lt(order), Cmp.is_eq(order)) : Bool}
+
+# Presence inspection preserves the entry and reports whether it is live.
+law entry_live_keep_matches_open_presence:
+  for entry: ByteMemTable.Entry
+  {ByteMemTable.entry.live.matches(ByteMemTable.entry.live.keep(entry)) == True{} : Bool}
 
 # A one-run compaction keeps live values and removes tombstones.
 law compaction_drops_tombstones:

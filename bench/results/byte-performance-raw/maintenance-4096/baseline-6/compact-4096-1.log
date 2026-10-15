@@ -1,0 +1,1 @@
+scenario=compact,count=4096,value_bytes=32,phase=compact,elapsed_ms=5394,checksum=20096,result=pass

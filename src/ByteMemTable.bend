@@ -25,8 +25,8 @@ type Search is Type:
   Search{query: Bytes.Bytes, entries: List<&1, Entry>, prefix: List<&1, Entry>, order: Cmp}
 
 # Carries the pending entry through a unique-key insertion into sorted entries.
-type OrderedSearch is Type:
-  OrderedSearch{pending: Entry, entries: List<&1, Entry>, prefix: List<&1, Entry>, order: Cmp}
+type OrderedMergeState is Type:
+  OrderedMergeState{newer: List<&1, Entry>, older: List<&1, Entry>, reversed: List<&1, Entry>}
 
 # Creates a byte table with no mutations.
 def empty() -> Table:
@@ -117,6 +117,35 @@ def entry.clone(entry: Entry) -> Entry & Entry:
     case Entry{key, val}:
       entry.clone.fields(bytes.clone(key), value.clone(val))
 
+def entry.key.copy.pair(
+  copies: Bytes.Bytes & Bytes.Bytes,
+  value: Maybe<&1, Bytes.Bytes>
+) -> Entry & Bytes.Bytes:
+  match copies:
+    case (key, probe): (Entry{key, value}, probe)
+
+def entry.key.copy(entry: Entry) -> Entry & Bytes.Bytes:
+  match entry:
+    case Entry{key, value}:
+      entry.key.copy.pair(bytes.clone(key), value)
+
+def entry.key.copy.matches(pair: Entry & Bytes.Bytes) -> Bool:
+  match pair:
+    case (Entry{key, _}, probe): Keys.Bytes.eq(key, probe)
+
+def entry.live.keep(entry: Entry) -> Entry & Bool:
+  match entry:
+    case Entry{key, value}:
+      match value:
+        case None{}: (Entry{key, None{}}, False{})
+        case Some{bytes}: (Entry{key, Some{bytes}}, True{})
+
+def entry.live.matches(pair: Entry & Bool) -> Bool:
+  match pair:
+    case (Entry{_, None{}}, False{}): True{}
+    case (Entry{_, Some{_}}, True{}): True{}
+    case _: False{}
+
 # Prepends cloned heads to the corresponding entry lists.
 def entries.clone.push(
   head: Entry & Entry,
@@ -143,7 +172,6 @@ def append(left: List<&1, Entry>, right: List<&1, Entry>) -> List<&1, Entry>:
     case Con{head, tail}:
       Con{head, append(tail, right)}
 
-# Rebuilds table order and returns the optional visible value.
 def lookup.result(
   prefix: List<&1, Entry>,
   remaining: List<&1, Entry>,
@@ -375,132 +403,6 @@ def retained_bytes.keep(table: Table) -> Table & Nat:
     case Table{entries}:
       retained_bytes.keep.finish(retained_bytes.keep.go(entries, Nil{}, 0n))
 
-# Restores a sorted list after reaching the end or insertion point.
-def ordered.finish(
-  prefix: List<&1, Entry>,
-  entries: List<&1, Entry>,
-  pending: Maybe<&1, Entry>
-) -> List<&1, Entry>:
-  match pending:
-    case None{}:
-      append(List.reverse(&1, Entry, prefix), entries)
-    case Some{entry}:
-      append(List.reverse(&1, Entry, prefix), Con{entry, entries})
-
-# Rebuilds the search state with comparator-owned keys restored to entries.
-def ordered.state(
-  pending_value: Maybe<&1, Bytes.Bytes>,
-  head_value: Maybe<&1, Bytes.Bytes>,
-  tail: List<&1, Entry>,
-  prefix: List<&1, Entry>,
-  comparison: Bytes.Bytes & Bytes.Bytes & Cmp
-) -> OrderedSearch:
-  match comparison:
-    case (head_key, query_key, order):
-      OrderedSearch{Entry{query_key, pending_value},
-        Con{Entry{head_key, head_value}, tail}, prefix, order}
-
-# Compares the current sorted key with the pending key without losing buffers.
-def ordered.compare(
-  pending: Entry,
-  head: Entry,
-  tail: List<&1, Entry>,
-  prefix: List<&1, Entry>
-) -> OrderedSearch:
-  match pending head:
-    case Entry{query_key, pending_value} Entry{head_key, head_value}:
-      ordered.state(pending_value, head_value, tail, prefix,
-        Keys.Bytes.cmp.with_inputs(head_key, query_key))
-
-# Begins comparison at the next sorted key after a smaller one was visited.
-def ordered.first(
-  pending: Entry,
-  entries: List<&1, Entry>,
-  prefix: List<&1, Entry>
-) -> OrderedSearch:
-  match entries:
-    case Nil{}:
-      OrderedSearch{pending, Nil{}, prefix, EQ{}}
-    case Con{head, tail}:
-      ordered.compare(pending, head, tail, prefix)
-
-# Inserts one entry into a sorted unique list; an existing key wins.
-def ordered.insert.go(fuel: Nat, state: OrderedSearch) -> List<&1, Entry>:
-  match fuel:
-    case 0n:
-      match state:
-        case OrderedSearch{pending, entries, prefix, _}:
-          ordered.finish(prefix, entries, Some{pending})
-    case 1n+rest:
-      match state:
-        case OrderedSearch{pending, entries, prefix, order}:
-          match entries:
-            case Nil{}:
-              ordered.finish(prefix, Nil{}, Some{pending})
-            case Con{head, tail}:
-              match order:
-                case LT{}:
-                  ordered.insert.go(rest, ordered.first(pending, tail, Con{head, prefix}))
-                case EQ{}:
-                  ordered.finish(prefix, Con{head, tail}, None{})
-                case GT{}:
-                  ordered.finish(prefix, Con{head, tail}, Some{pending})
-
-# Starts a bounded insertion using the sorted list length as fuel.
-def ordered.insert.counted(
-  pending: Entry,
-  entries: List<&1, Entry>,
-  count: Nat
-) -> List<&1, Entry>:
-  match entries:
-    case Nil{}:
-      Con{pending, Nil{}}
-    case Con{head, tail}:
-      ordered.insert.go(Nat.add(count, 1n), ordered.compare(pending, head, tail, Nil{}))
-
-# Unpacks the sorted list and its preserved length before insertion.
-def ordered.insert.measured(
-  pending: Entry,
-  measured: List<&1, Entry> & Nat
-) -> List<&1, Entry>:
-  match measured:
-    case (entries, count):
-      ordered.insert.counted(pending, entries, count)
-
-# Inserts an entry while preserving the list needed by the length bound.
-def ordered.insert(pending: Entry, entries: List<&1, Entry>) -> List<&1, Entry>:
-  ordered.insert.measured(pending, count.keep(entries))
-
-# Collapses newest-first mutations into sorted unique keys, retaining tombstones.
-def ordered.fold.go(
-  fuel: Nat,
-  mutations: List<&1, Entry>,
-  entries: List<&1, Entry>
-) -> List<&1, Entry>:
-  match fuel:
-    case 0n:
-      entries
-    case 1n+rest:
-      match mutations:
-        case Nil{}:
-          entries
-        case Con{mutation, tail}:
-          ordered.fold.go(rest, tail, ordered.insert(mutation, entries))
-
-# Unpacks the mutation log and its bounded fold count.
-def ordered.fold.measured(
-  mutations: List<&1, Entry> & Nat
-) -> List<&1, Entry>:
-  match mutations:
-    case (entries, count):
-      ordered.fold.go(Nat.add(count, 1n), entries, Nil{})
-
-# Produces strict byte-ordered unique entries with newest mutations winning.
-def ordered_entries(table: Table) -> List<&1, Entry>:
-  match table:
-    case Table{entries}:
-      ordered.fold.measured(count.keep(entries))
-
 # Drops tombstones after all older byte runs have been folded into one table.
 def compact.live(entries: List<&1, Entry>) -> List<&1, Entry>:
   match entries:
@@ -518,6 +420,12 @@ def ordered.strict.order(comparison: Bytes.Bytes & Bytes.Bytes & Cmp) -> Bool:
       True{}
     case _:
       False{}
+
+def ordered.merge.take_newer(order: Cmp) -> Bool:
+  match order:
+    case LT{}: True{}
+    case EQ{}: True{}
+    case GT{}: False{}
 
 # Checks strict key order with fuel derived from the number of entries.
 def ordered.strict.go(fuel: Nat, entries: List<&1, Entry>) -> Bool:
@@ -543,3 +451,142 @@ def ordered.strict.counted(measured: List<&1, Entry> & Nat) -> Bool:
 # Checks that a sorted entry list is strictly increasing by byte key.
 def ordered.strict(entries: List<&1, Entry>) -> Bool:
   ordered.strict.counted(count.keep(entries))
+
+def ordered.merge.decisions(+order: Cmp) -> Bool & Bool:
+  (ordered.merge.take_newer(order), Cmp.is_eq(order))
+
+def ordered.merge.resolve(
+  decisions: Bool & Bool,
+  newer: List<&1, Entry>,
+  older: List<&1, Entry>,
+  reversed: List<&1, Entry>,
+  newer_key: Bytes.Bytes,
+  newer_value: Maybe<&1, Bytes.Bytes>,
+  older_key: Bytes.Bytes,
+  older_value: Maybe<&1, Bytes.Bytes>
+) -> OrderedMergeState:
+  match decisions:
+    case (take_newer, equal):
+      match take_newer:
+        case True{}:
+          match equal:
+            case True{}:
+              OrderedMergeState{newer, older,
+                Con{Entry{newer_key, newer_value}, reversed}}
+            case False{}:
+              OrderedMergeState{newer,
+                Con{Entry{older_key, older_value}, older},
+                Con{Entry{newer_key, newer_value}, reversed}}
+        case False{}:
+          OrderedMergeState{
+            Con{Entry{newer_key, newer_value}, newer}, older,
+            Con{Entry{older_key, older_value}, reversed}}
+
+def ordered.merge.compared(
+  state: OrderedMergeState,
+  newer_value: Maybe<&1, Bytes.Bytes>,
+  older_value: Maybe<&1, Bytes.Bytes>,
+  retained_keys: Bytes.Bytes & Bytes.Bytes,
+  comparison: Bytes.Bytes & Bytes.Bytes & Cmp
+) -> OrderedMergeState:
+  match state:
+    case OrderedMergeState{newer, older, reversed}:
+      match retained_keys:
+        case (newer_key, older_key):
+          match comparison:
+            case (_, _, order):
+              ordered.merge.resolve(ordered.merge.decisions(order),
+                newer, older, reversed, newer_key, newer_value, older_key, older_value)
+
+def ordered.merge.cloned(
+  state: OrderedMergeState,
+  newer_value: Maybe<&1, Bytes.Bytes>,
+  older_value: Maybe<&1, Bytes.Bytes>,
+  copies: (Bytes.Bytes & Bytes.Bytes) & (Bytes.Bytes & Bytes.Bytes)
+) -> OrderedMergeState:
+  match copies:
+    case ((newer_key, newer_probe), (older_key, older_probe)):
+      ordered.merge.compared(state, newer_value, older_value,
+        (newer_key, older_key), Keys.Bytes.cmp.with_inputs(newer_probe, older_probe))
+
+def ordered.merge.compare(
+  state: OrderedMergeState,
+  newer: Entry,
+  older: Entry
+) -> OrderedMergeState:
+  match newer older:
+    case Entry{newer_key, newer_value} Entry{older_key, older_value}:
+      ordered.merge.cloned(state, newer_value, older_value,
+        (bytes.clone(newer_key), bytes.clone(older_key)))
+
+def ordered.merge.finish(state: OrderedMergeState) -> List<&1, Entry>:
+  match state:
+    case OrderedMergeState{newer, older, reversed}:
+      List.reverse.go(&1, Entry, reversed, append(newer, older))
+
+def ordered.merge.go(fuel: Nat, state: OrderedMergeState) -> List<&1, Entry>:
+  match fuel:
+    case 0n: ordered.merge.finish(state)
+    case 1n+rest:
+      match state:
+        case OrderedMergeState{newer, older, reversed}:
+          match newer older:
+            case Nil{} _: List.reverse.go(&1, Entry, reversed, older)
+            case _ Nil{}: List.reverse.go(&1, Entry, reversed, newer)
+            case Con{newer_head, newer_tail} Con{older_head, older_tail}:
+              ordered.merge.go(rest, ordered.merge.compare(
+                OrderedMergeState{newer_tail, older_tail, reversed},
+                newer_head, older_head))
+
+def ordered.merge.counted(
+  newer: List<&1, Entry> & Nat,
+  older: List<&1, Entry> & Nat
+) -> List<&1, Entry>:
+  match newer:
+    case (newer_entries, newer_count):
+      match older:
+        case (older_entries, older_count):
+          fuel = Nat.add(Nat.add(newer_count, older_count), 1n)
+          ordered.merge.go(fuel, OrderedMergeState{newer_entries, older_entries, Nil{}})
+
+def ordered.merge_newer(newer: List<&1, Entry>, older: List<&1, Entry>) -> List<&1, Entry>:
+  ordered.merge.counted(count.keep(newer), count.keep(older))
+
+def ordered.singleton_runs(entries: List<&1, Entry>) -> List<&1, List<&1, Entry>>:
+  match entries:
+    case Nil{}: Nil{}
+    case Con{entry, rest}:
+      Con{Con{entry, Nil{}}, ordered.singleton_runs(rest)}
+
+def ordered.merge_round(runs: List<&1, List<&1, Entry>>) -> List<&1, List<&1, Entry>>:
+  match runs:
+    case Nil{}: Nil{}
+    case Con{newer, Nil{}}: Con{newer, Nil{}}
+    case Con{newer, Con{older, rest}}:
+      Con{ordered.merge_newer(newer, older), ordered.merge_round(rest)}
+
+def ordered.merge_many.go(fuel: Nat, runs: List<&1, List<&1, Entry>>) -> List<&1, Entry>:
+  match fuel:
+    case 0n:
+      match runs:
+        case Nil{}: Nil{}
+        case Con{run, _}: run
+    case 1n+rest_fuel:
+      match runs:
+        case Nil{}: Nil{}
+        case Con{run, Nil{}}: run
+        case Con{newer, Con{older, rest}}:
+          ordered.merge_many.go(rest_fuel,
+            Con{ordered.merge_newer(newer, older), ordered.merge_round(rest)})
+
+def ordered.materialize.measured(measured: List<&1, Entry> & Nat) -> List<&1, Entry>:
+  match measured:
+    case (entries, +count):
+      ordered.merge_many.go(Nat.add(count, 1n),
+        ordered.singleton_runs(entries))
+
+# Produces strict byte-ordered unique entries with newest mutations winning.
+def ordered_entries(table: Table) -> List<&1, Entry>:
+  match table:
+    case Table{entries}:
+      ordered.materialize.measured(count.keep(entries))

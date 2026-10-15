@@ -1,0 +1,7 @@
+sample	scenario	count	value_bytes	phase	elapsed_ms	checksum	peak_rss_bytes	bytes_on_disk	result
+1	maintenance_phases	16000	32	sst_read	3168	16000	17022976	798720	pass
+2	maintenance_phases	16000	32	sst_read	3073	16000	17006592	798720	pass
+1	maintenance_phases	4096	32	ordered_entries	27	4096	2523136	798720	pass
+2	maintenance_phases	4096	32	ordered_entries	31	4096	2523136	798720	pass
+1	maintenance_phases	16000	32	encode_file	21	784176	11960320	798720	pass
+2	maintenance_phases	16000	32	encode_file	17	784176	11960320	798720	pass

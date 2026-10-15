@@ -1,0 +1,8 @@
+sample	scenario	count	value_bytes	phase	elapsed_ms	checksum	peak_rss_bytes	result
+1	scan_open	0	32	scan_open	1	0	2375680	pass
+1	scan_open	1024	32	scan_open	1	1024	2932736	pass
+1	scan_open	4096	32	scan_open	33	4096	3850240	pass
+1	scan_delta	1024	32	scan_next	1	40960	3047424	pass
+1	scan_delta	1024	4096	scan_next	9	4202496	17219584	pass
+1	scan_delta	4096	32	scan_next	2	163840	3948544	pass
+1	scan_delta	4096	4096	scan_next	40	16809984	44433408	pass

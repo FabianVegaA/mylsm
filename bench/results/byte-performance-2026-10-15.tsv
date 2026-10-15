@@ -1,0 +1,465 @@
+experiment	run	mode	sample	scenario	count	value_bytes	phase	elapsed_ms	checksum	peak_rss_bytes	bytes_on_disk	result	commit	bend	compiler	compiler_flags	os	arch	machine_model	threads	device	disk_free_percent
+ordering	b1	baseline	1	order_unique	256	32	ordered_entries	0	256	1998848	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b1	baseline	1	order_unique	256	4096	ordered_entries	0	256	3063808	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b1	baseline	1	order_unique	1024	32	ordered_entries	2	1024	2080768	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b1	baseline	1	order_unique	1024	4096	ordered_entries	2	1024	6258688	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b1	baseline	1	order_unique	4096	32	ordered_entries	28	4096	2539520	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b1	baseline	1	order_unique	4096	4096	ordered_entries	35	4096	19202048	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b1	baseline	1	order_unique	8192	32	ordered_entries	124	8192	3129344	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b1	baseline	1	order_unique	8192	4096	ordered_entries	145	8192	36438016	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b1	baseline	1	scan_open	0	32	scan_open	1	0	2375680	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b1	baseline	1	scan_open	1024	32	scan_open	2	1024	2932736	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b1	baseline	1	scan_open	4096	32	scan_open	34	4096	3833856	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b1	baseline	1	scan_delta	1024	32	scan_next	0	40960	3031040	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b1	baseline	1	scan_delta	1024	4096	scan_next	10	4202496	17235968	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b1	baseline	1	scan_delta	4096	32	scan_next	2	163840	3948544	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b1	baseline	1	scan_delta	4096	4096	scan_next	43	16809984	44548096	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	c1	candidate	1	order_unique	256	32	ordered_entries	0	256	1916928	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c1	candidate	1	order_unique	256	4096	ordered_entries	0	256	2981888	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c1	candidate	1	order_unique	1024	32	ordered_entries	0	1024	2031616	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c1	candidate	1	order_unique	1024	4096	ordered_entries	1	1024	6209536	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c1	candidate	1	order_unique	4096	32	ordered_entries	1	4096	2605056	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c1	candidate	1	order_unique	4096	4096	ordered_entries	2	4096	19267584	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c1	candidate	1	order_unique	8192	32	ordered_entries	6	8192	3375104	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c1	candidate	1	order_unique	8192	4096	ordered_entries	6	8192	36683776	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c1	candidate	1	scan_open	0	32	scan_open	0	0	2408448	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c1	candidate	1	scan_open	1024	32	scan_open	0	1024	2965504	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c1	candidate	1	scan_open	4096	32	scan_open	2	4096	3948544	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c1	candidate	1	scan_delta	1024	32	scan_next	1	40960	3014656	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c1	candidate	1	scan_delta	1024	4096	scan_next	16	4202496	17317888	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c1	candidate	1	scan_delta	4096	32	scan_next	2	163840	3768320	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c1	candidate	1	scan_delta	4096	4096	scan_next	41	16809984	44384256	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c2	candidate	1	order_unique	256	32	ordered_entries	0	256	1933312	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c2	candidate	1	order_unique	256	4096	ordered_entries	1	256	2981888	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c2	candidate	1	order_unique	1024	32	ordered_entries	0	1024	2031616	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c2	candidate	1	order_unique	1024	4096	ordered_entries	0	1024	6209536	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c2	candidate	1	order_unique	4096	32	ordered_entries	2	4096	2605056	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c2	candidate	1	order_unique	4096	4096	ordered_entries	3	4096	19267584	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c2	candidate	1	order_unique	8192	32	ordered_entries	2	8192	3375104	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c2	candidate	1	order_unique	8192	4096	ordered_entries	4	8192	36683776	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c2	candidate	1	scan_open	0	32	scan_open	1	0	2392064	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c2	candidate	1	scan_open	1024	32	scan_open	1	1024	2768896	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c2	candidate	1	scan_open	4096	32	scan_open	1	4096	3637248	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c2	candidate	1	scan_delta	1024	32	scan_next	1	40960	3014656	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c2	candidate	1	scan_delta	1024	4096	scan_next	10	4202496	17219584	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c2	candidate	1	scan_delta	4096	32	scan_next	2	163840	4014080	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c2	candidate	1	scan_delta	4096	4096	scan_next	41	16809984	44630016	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	b2	baseline	1	order_unique	256	32	ordered_entries	0	256	1998848	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b2	baseline	1	order_unique	256	4096	ordered_entries	0	256	3063808	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b2	baseline	1	order_unique	1024	32	ordered_entries	2	1024	2080768	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b2	baseline	1	order_unique	1024	4096	ordered_entries	2	1024	6258688	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b2	baseline	1	order_unique	4096	32	ordered_entries	27	4096	2539520	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b2	baseline	1	order_unique	4096	4096	ordered_entries	38	4096	19202048	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b2	baseline	1	order_unique	8192	32	ordered_entries	126	8192	3129344	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b2	baseline	1	order_unique	8192	4096	ordered_entries	143	8192	36438016	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b2	baseline	1	scan_open	0	32	scan_open	0	0	2375680	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b2	baseline	1	scan_open	1024	32	scan_open	2	1024	2916352	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b2	baseline	1	scan_open	4096	32	scan_open	34	4096	3833856	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b2	baseline	1	scan_delta	1024	32	scan_next	0	40960	3063808	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b2	baseline	1	scan_delta	1024	4096	scan_next	9	4202496	17268736	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b2	baseline	1	scan_delta	4096	32	scan_next	2	163840	3964928	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b2	baseline	1	scan_delta	4096	4096	scan_next	46	16809984	44318720	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	c3x	candidate	1	order_unique	256	32	ordered_entries	1	256	1916928	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c3x	candidate	1	order_unique	256	4096	ordered_entries	0	256	2981888	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c3x	candidate	1	order_unique	1024	32	ordered_entries	0	1024	2031616	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c3x	candidate	1	order_unique	1024	4096	ordered_entries	0	1024	6209536	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c3x	candidate	1	order_unique	4096	32	ordered_entries	1	4096	2605056	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c3x	candidate	1	order_unique	4096	4096	ordered_entries	1	4096	19267584	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c3x	candidate	1	order_unique	8192	32	ordered_entries	3	8192	3375104	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c3x	candidate	1	order_unique	8192	4096	ordered_entries	3	8192	36683776	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c3x	candidate	1	scan_open	0	32	scan_open	0	0	2392064	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c3x	candidate	1	scan_open	1024	32	scan_open	0	1024	2965504	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c3x	candidate	1	scan_open	4096	32	scan_open	2	4096	3948544	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c3x	candidate	1	scan_delta	1024	32	scan_next	1	40960	3047424	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c3x	candidate	1	scan_delta	1024	4096	scan_next	20	4202496	17301504	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c3x	candidate	1	scan_delta	4096	32	scan_next	2	163840	3670016	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c3x	candidate	1	scan_delta	4096	4096	scan_next	48	16809984	44236800	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	b3x	baseline	1	order_unique	256	32	ordered_entries	0	256	1998848	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b3x	baseline	1	order_unique	256	4096	ordered_entries	0	256	3063808	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b3x	baseline	1	order_unique	1024	32	ordered_entries	2	1024	2080768	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b3x	baseline	1	order_unique	1024	4096	ordered_entries	1	1024	6258688	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b3x	baseline	1	order_unique	4096	32	ordered_entries	27	4096	2539520	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b3x	baseline	1	order_unique	4096	4096	ordered_entries	31	4096	19202048	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b3x	baseline	1	order_unique	8192	32	ordered_entries	124	8192	3129344	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b3x	baseline	1	order_unique	8192	4096	ordered_entries	146	8192	36438016	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b3x	baseline	1	scan_open	0	32	scan_open	0	0	2375680	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b3x	baseline	1	scan_open	1024	32	scan_open	2	1024	2932736	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b3x	baseline	1	scan_open	4096	32	scan_open	33	4096	3833856	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b3x	baseline	1	scan_delta	1024	32	scan_next	0	40960	3047424	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b3x	baseline	1	scan_delta	1024	4096	scan_next	10	4202496	17235968	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b3x	baseline	1	scan_delta	4096	32	scan_next	2	163840	3981312	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b3x	baseline	1	scan_delta	4096	4096	scan_next	44	16809984	44564480	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b4x	baseline	1	order_unique	256	32	ordered_entries	1	256	1998848	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b4x	baseline	1	order_unique	256	4096	ordered_entries	0	256	3063808	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b4x	baseline	1	order_unique	1024	32	ordered_entries	2	1024	2080768	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b4x	baseline	1	order_unique	1024	4096	ordered_entries	2	1024	6258688	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b4x	baseline	1	order_unique	4096	32	ordered_entries	27	4096	2539520	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b4x	baseline	1	order_unique	4096	4096	ordered_entries	30	4096	19202048	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b4x	baseline	1	order_unique	8192	32	ordered_entries	121	8192	3129344	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b4x	baseline	1	order_unique	8192	4096	ordered_entries	141	8192	36438016	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b4x	baseline	1	scan_open	0	32	scan_open	0	0	2375680	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b4x	baseline	1	scan_open	1024	32	scan_open	2	1024	2916352	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b4x	baseline	1	scan_open	4096	32	scan_open	33	4096	3833856	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b4x	baseline	1	scan_delta	1024	32	scan_next	1	40960	3031040	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b4x	baseline	1	scan_delta	1024	4096	scan_next	9	4202496	17235968	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b4x	baseline	1	scan_delta	4096	32	scan_next	2	163840	3964928	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b4x	baseline	1	scan_delta	4096	4096	scan_next	43	16809984	44531712	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	c4x	candidate	1	order_unique	256	32	ordered_entries	0	256	1916928	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c4x	candidate	1	order_unique	256	4096	ordered_entries	0	256	2981888	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c4x	candidate	1	order_unique	1024	32	ordered_entries	1	1024	2031616	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c4x	candidate	1	order_unique	1024	4096	ordered_entries	0	1024	6209536	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c4x	candidate	1	order_unique	4096	32	ordered_entries	1	4096	2605056	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c4x	candidate	1	order_unique	4096	4096	ordered_entries	2	4096	19267584	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c4x	candidate	1	order_unique	8192	32	ordered_entries	3	8192	3391488	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c4x	candidate	1	order_unique	8192	4096	ordered_entries	4	8192	36683776	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c4x	candidate	1	scan_open	0	32	scan_open	0	0	2408448	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c4x	candidate	1	scan_open	1024	32	scan_open	0	1024	2949120	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c4x	candidate	1	scan_open	4096	32	scan_open	1	4096	3948544	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c4x	candidate	1	scan_delta	1024	32	scan_next	0	40960	3031040	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c4x	candidate	1	scan_delta	1024	4096	scan_next	9	4202496	17170432	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c4x	candidate	1	scan_delta	4096	32	scan_next	2	163840	4014080	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c4x	candidate	1	scan_delta	4096	4096	scan_next	42	16809984	44597248	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	b5x	baseline	1	order_unique	256	32	ordered_entries	1	256	1998848	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b5x	baseline	1	order_unique	256	4096	ordered_entries	0	256	3063808	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b5x	baseline	1	order_unique	1024	32	ordered_entries	2	1024	2080768	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b5x	baseline	1	order_unique	1024	4096	ordered_entries	1	1024	6258688	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b5x	baseline	1	order_unique	4096	32	ordered_entries	26	4096	2539520	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b5x	baseline	1	order_unique	4096	4096	ordered_entries	30	4096	19202048	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b5x	baseline	1	order_unique	8192	32	ordered_entries	120	8192	3129344	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b5x	baseline	1	order_unique	8192	4096	ordered_entries	141	8192	36438016	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b5x	baseline	1	scan_open	0	32	scan_open	0	0	2375680	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b5x	baseline	1	scan_open	1024	32	scan_open	2	1024	2916352	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b5x	baseline	1	scan_open	4096	32	scan_open	33	4096	3833856	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b5x	baseline	1	scan_delta	1024	32	scan_next	1	40960	3031040	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b5x	baseline	1	scan_delta	1024	4096	scan_next	9	4202496	17137664	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b5x	baseline	1	scan_delta	4096	32	scan_next	2	163840	3948544	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b5x	baseline	1	scan_delta	4096	4096	scan_next	40	16809984	44531712	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	c5x	candidate	1	order_unique	256	32	ordered_entries	0	256	1916928	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c5x	candidate	1	order_unique	256	4096	ordered_entries	1	256	2981888	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c5x	candidate	1	order_unique	1024	32	ordered_entries	0	1024	2031616	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c5x	candidate	1	order_unique	1024	4096	ordered_entries	0	1024	6209536	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c5x	candidate	1	order_unique	4096	32	ordered_entries	2	4096	2605056	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c5x	candidate	1	order_unique	4096	4096	ordered_entries	2	4096	19267584	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c5x	candidate	1	order_unique	8192	32	ordered_entries	3	8192	3375104	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c5x	candidate	1	order_unique	8192	4096	ordered_entries	3	8192	36683776	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c5x	candidate	1	scan_open	0	32	scan_open	1	0	2392064	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c5x	candidate	1	scan_open	1024	32	scan_open	1	1024	2949120	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c5x	candidate	1	scan_open	4096	32	scan_open	1	4096	3948544	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c5x	candidate	1	scan_delta	1024	32	scan_next	0	40960	3014656	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c5x	candidate	1	scan_delta	1024	4096	scan_next	9	4202496	17137664	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c5x	candidate	1	scan_delta	4096	32	scan_next	2	163840	3997696	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c5x	candidate	1	scan_delta	4096	4096	scan_next	41	16809984	44597248	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c6x	candidate	1	order_unique	256	32	ordered_entries	0	256	1933312	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c6x	candidate	1	order_unique	256	4096	ordered_entries	0	256	2981888	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c6x	candidate	1	order_unique	1024	32	ordered_entries	0	1024	2031616	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c6x	candidate	1	order_unique	1024	4096	ordered_entries	0	1024	6209536	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c6x	candidate	1	order_unique	4096	32	ordered_entries	1	4096	2605056	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c6x	candidate	1	order_unique	4096	4096	ordered_entries	1	4096	19267584	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c6x	candidate	1	order_unique	8192	32	ordered_entries	2	8192	3375104	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c6x	candidate	1	order_unique	8192	4096	ordered_entries	2	8192	36683776	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c6x	candidate	1	scan_open	0	32	scan_open	0	0	2392064	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c6x	candidate	1	scan_open	1024	32	scan_open	0	1024	2949120	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c6x	candidate	1	scan_open	4096	32	scan_open	1	4096	3948544	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c6x	candidate	1	scan_delta	1024	32	scan_next	0	40960	3031040	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c6x	candidate	1	scan_delta	1024	4096	scan_next	10	4202496	17203200	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c6x	candidate	1	scan_delta	4096	32	scan_next	2	163840	4014080	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c6x	candidate	1	scan_delta	4096	4096	scan_next	41	16809984	44515328	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	b6x	baseline	1	order_unique	256	32	ordered_entries	1	256	1998848	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b6x	baseline	1	order_unique	256	4096	ordered_entries	1	256	3063808	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b6x	baseline	1	order_unique	1024	32	ordered_entries	2	1024	2080768	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b6x	baseline	1	order_unique	1024	4096	ordered_entries	2	1024	6258688	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b6x	baseline	1	order_unique	4096	32	ordered_entries	26	4096	2539520	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b6x	baseline	1	order_unique	4096	4096	ordered_entries	28	4096	19202048	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b6x	baseline	1	order_unique	8192	32	ordered_entries	121	8192	3129344	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b6x	baseline	1	order_unique	8192	4096	ordered_entries	142	8192	36438016	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b6x	baseline	1	scan_open	0	32	scan_open	0	0	2375680	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b6x	baseline	1	scan_open	1024	32	scan_open	2	1024	2916352	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b6x	baseline	1	scan_open	4096	32	scan_open	34	4096	3850240	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b6x	baseline	1	scan_delta	1024	32	scan_next	0	40960	3063808	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b6x	baseline	1	scan_delta	1024	4096	scan_next	9	4202496	17137664	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b6x	baseline	1	scan_delta	4096	32	scan_next	2	163840	3948544	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b6x	baseline	1	scan_delta	4096	4096	scan_next	41	16809984	44531712	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	c7x	candidate	1	order_unique	256	32	ordered_entries	1	256	1916928	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c7x	candidate	1	order_unique	256	4096	ordered_entries	0	256	2981888	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c7x	candidate	1	order_unique	1024	32	ordered_entries	1	1024	2031616	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c7x	candidate	1	order_unique	1024	4096	ordered_entries	0	1024	6209536	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c7x	candidate	1	order_unique	4096	32	ordered_entries	1	4096	2605056	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c7x	candidate	1	order_unique	4096	4096	ordered_entries	1	4096	19267584	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c7x	candidate	1	order_unique	8192	32	ordered_entries	3	8192	3375104	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c7x	candidate	1	order_unique	8192	4096	ordered_entries	3	8192	36683776	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c7x	candidate	1	scan_open	0	32	scan_open	0	0	2392064	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c7x	candidate	1	scan_open	1024	32	scan_open	0	1024	2949120	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c7x	candidate	1	scan_open	4096	32	scan_open	2	4096	3948544	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c7x	candidate	1	scan_delta	1024	32	scan_next	0	40960	3014656	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c7x	candidate	1	scan_delta	1024	4096	scan_next	10	4202496	17186816	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c7x	candidate	1	scan_delta	4096	32	scan_next	2	163840	4014080	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c7x	candidate	1	scan_delta	4096	4096	scan_next	41	16809984	44515328	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	b7x	baseline	1	order_unique	256	32	ordered_entries	0	256	1998848	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b7x	baseline	1	order_unique	256	4096	ordered_entries	0	256	3063808	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b7x	baseline	1	order_unique	1024	32	ordered_entries	2	1024	2080768	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b7x	baseline	1	order_unique	1024	4096	ordered_entries	2	1024	6258688	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b7x	baseline	1	order_unique	4096	32	ordered_entries	26	4096	2539520	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b7x	baseline	1	order_unique	4096	4096	ordered_entries	30	4096	19202048	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b7x	baseline	1	order_unique	8192	32	ordered_entries	121	8192	3129344	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b7x	baseline	1	order_unique	8192	4096	ordered_entries	142	8192	36438016	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b7x	baseline	1	scan_open	0	32	scan_open	0	0	2375680	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b7x	baseline	1	scan_open	1024	32	scan_open	2	1024	2932736	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b7x	baseline	1	scan_open	4096	32	scan_open	36	4096	3850240	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b7x	baseline	1	scan_delta	1024	32	scan_next	0	40960	3047424	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b7x	baseline	1	scan_delta	1024	4096	scan_next	10	4202496	17219584	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b7x	baseline	1	scan_delta	4096	32	scan_next	2	163840	3964928	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b7x	baseline	1	scan_delta	4096	4096	scan_next	40	16809984	44531712	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b8x	baseline	1	order_unique	256	32	ordered_entries	1	256	1998848	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b8x	baseline	1	order_unique	256	4096	ordered_entries	1	256	3063808	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b8x	baseline	1	order_unique	1024	32	ordered_entries	1	1024	2080768	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b8x	baseline	1	order_unique	1024	4096	ordered_entries	2	1024	6258688	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b8x	baseline	1	order_unique	4096	32	ordered_entries	26	4096	2539520	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b8x	baseline	1	order_unique	4096	4096	ordered_entries	30	4096	19202048	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b8x	baseline	1	order_unique	8192	32	ordered_entries	120	8192	3129344	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b8x	baseline	1	order_unique	8192	4096	ordered_entries	143	8192	36438016	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b8x	baseline	1	scan_open	0	32	scan_open	0	0	2375680	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b8x	baseline	1	scan_open	1024	32	scan_open	2	1024	2916352	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b8x	baseline	1	scan_open	4096	32	scan_open	33	4096	3850240	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b8x	baseline	1	scan_delta	1024	32	scan_next	0	40960	3047424	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b8x	baseline	1	scan_delta	1024	4096	scan_next	10	4202496	17235968	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b8x	baseline	1	scan_delta	4096	32	scan_next	2	163840	3964928	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	b8x	baseline	1	scan_delta	4096	4096	scan_next	41	16809984	44531712	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+ordering	c8x	candidate	1	order_unique	256	32	ordered_entries	0	256	1916928	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c8x	candidate	1	order_unique	256	4096	ordered_entries	0	256	2981888	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c8x	candidate	1	order_unique	1024	32	ordered_entries	0	1024	2031616	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c8x	candidate	1	order_unique	1024	4096	ordered_entries	0	1024	6209536	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c8x	candidate	1	order_unique	4096	32	ordered_entries	1	4096	2605056	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c8x	candidate	1	order_unique	4096	4096	ordered_entries	1	4096	19267584	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c8x	candidate	1	order_unique	8192	32	ordered_entries	3	8192	3375104	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c8x	candidate	1	order_unique	8192	4096	ordered_entries	3	8192	36683776	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c8x	candidate	1	scan_open	0	32	scan_open	0	0	2392064	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c8x	candidate	1	scan_open	1024	32	scan_open	0	1024	2949120	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c8x	candidate	1	scan_open	4096	32	scan_open	2	4096	3932160	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c8x	candidate	1	scan_delta	1024	32	scan_next	0	40960	3014656	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c8x	candidate	1	scan_delta	1024	4096	scan_next	10	4202496	17121280	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c8x	candidate	1	scan_delta	4096	32	scan_next	2	163840	3997696	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+ordering	c8x	candidate	1	scan_delta	4096	4096	scan_next	40	16809984	44597248	0	pass	55b5ddde95254cb3a2594ba2e3a84635f85f7889	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b1	baseline	1	scan_open	0	32	scan_open	1	0	2375680	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		20
+scan-next	b1	baseline	1	scan_open	1024	32	scan_open	2	1024	2949120	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		20
+scan-next	b1	baseline	1	scan_open	4096	32	scan_open	34	4096	3833856	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		20
+scan-next	b1	baseline	1	scan_delta	1024	32	scan_next	0	40960	3063808	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		20
+scan-next	b1	baseline	1	scan_delta	1024	4096	scan_next	10	4202496	17235968	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		20
+scan-next	b1	baseline	1	scan_delta	4096	32	scan_next	2	163840	3948544	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		20
+scan-next	b1	baseline	1	scan_delta	4096	4096	scan_next	41	16809984	44580864	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		20
+scan-next	c1	candidate	1	scan_open	0	32	scan_open	0	0	2408448	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c1	candidate	1	scan_open	1024	32	scan_open	1	1024	2965504	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c1	candidate	1	scan_open	4096	32	scan_open	2	4096	3883008	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c1	candidate	1	scan_delta	1024	32	scan_next	1	40960	3031040	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c1	candidate	1	scan_delta	1024	4096	scan_next	0	4202496	17235968	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c1	candidate	1	scan_delta	4096	32	scan_next	1	163840	3735552	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c1	candidate	1	scan_delta	4096	4096	scan_next	3	16809984	44597248	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c2	candidate	1	scan_open	0	32	scan_open	0	0	2408448	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c2	candidate	1	scan_open	1024	32	scan_open	1	1024	2981888	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c2	candidate	1	scan_open	4096	32	scan_open	2	4096	3964928	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c2	candidate	1	scan_delta	1024	32	scan_next	0	40960	3014656	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c2	candidate	1	scan_delta	1024	4096	scan_next	0	4202496	17252352	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c2	candidate	1	scan_delta	4096	32	scan_next	2	163840	3997696	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c2	candidate	1	scan_delta	4096	4096	scan_next	2	16809984	44580864	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b2	baseline	1	scan_open	0	32	scan_open	4	0	2375680	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b2	baseline	1	scan_open	1024	32	scan_open	2	1024	2916352	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b2	baseline	1	scan_open	4096	32	scan_open	33	4096	3833856	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b2	baseline	1	scan_delta	1024	32	scan_next	1	40960	3031040	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b2	baseline	1	scan_delta	1024	4096	scan_next	10	4202496	17137664	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b2	baseline	1	scan_delta	4096	32	scan_next	2	163840	3948544	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b2	baseline	1	scan_delta	4096	4096	scan_next	42	16809984	44531712	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c3	candidate	1	scan_open	0	32	scan_open	0	0	2408448	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c3	candidate	1	scan_open	1024	32	scan_open	1	1024	2965504	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c3	candidate	1	scan_open	4096	32	scan_open	1	4096	3964928	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c3	candidate	1	scan_delta	1024	32	scan_next	0	40960	3080192	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c3	candidate	1	scan_delta	1024	4096	scan_next	0	4202496	17203200	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c3	candidate	1	scan_delta	4096	32	scan_next	1	163840	3997696	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c3	candidate	1	scan_delta	4096	4096	scan_next	2	16809984	44597248	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b3	baseline	1	scan_open	0	32	scan_open	1	0	2375680	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b3	baseline	1	scan_open	1024	32	scan_open	2	1024	2949120	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b3	baseline	1	scan_open	4096	32	scan_open	34	4096	3883008	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b3	baseline	1	scan_delta	1024	32	scan_next	0	40960	3031040	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b3	baseline	1	scan_delta	1024	4096	scan_next	10	4202496	17235968	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b3	baseline	1	scan_delta	4096	32	scan_next	2	163840	3981312	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b3	baseline	1	scan_delta	4096	4096	scan_next	40	16809984	44564480	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b4	baseline	1	scan_open	0	32	scan_open	0	0	2375680	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b4	baseline	1	scan_open	1024	32	scan_open	1	1024	2916352	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b4	baseline	1	scan_open	4096	32	scan_open	35	4096	3833856	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b4	baseline	1	scan_delta	1024	32	scan_next	0	40960	3063808	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b4	baseline	1	scan_delta	1024	4096	scan_next	9	4202496	17235968	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b4	baseline	1	scan_delta	4096	32	scan_next	2	163840	3964928	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b4	baseline	1	scan_delta	4096	4096	scan_next	41	16809984	44548096	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c4	candidate	1	scan_open	0	32	scan_open	2	0	2408448	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c4	candidate	1	scan_open	1024	32	scan_open	1	1024	2965504	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c4	candidate	1	scan_open	4096	32	scan_open	2	4096	3932160	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c4	candidate	1	scan_delta	1024	32	scan_next	0	40960	3031040	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c4	candidate	1	scan_delta	1024	4096	scan_next	0	4202496	17137664	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c4	candidate	1	scan_delta	4096	32	scan_next	1	163840	4014080	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c4	candidate	1	scan_delta	4096	4096	scan_next	1	16809984	44597248	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b5	baseline	1	scan_open	0	32	scan_open	0	0	2375680	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b5	baseline	1	scan_open	1024	32	scan_open	2	1024	2932736	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b5	baseline	1	scan_open	4096	32	scan_open	33	4096	3866624	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b5	baseline	1	scan_delta	1024	32	scan_next	1	40960	3047424	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b5	baseline	1	scan_delta	1024	4096	scan_next	10	4202496	17235968	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b5	baseline	1	scan_delta	4096	32	scan_next	2	163840	3964928	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b5	baseline	1	scan_delta	4096	4096	scan_next	41	16809984	44531712	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c5	candidate	1	scan_open	0	32	scan_open	0	0	2408448	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c5	candidate	1	scan_open	1024	32	scan_open	0	1024	2949120	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c5	candidate	1	scan_open	4096	32	scan_open	1	4096	3964928	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c5	candidate	1	scan_delta	1024	32	scan_next	1	40960	3031040	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c5	candidate	1	scan_delta	1024	4096	scan_next	0	4202496	17235968	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c5	candidate	1	scan_delta	4096	32	scan_next	1	163840	3997696	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c5	candidate	1	scan_delta	4096	4096	scan_next	2	16809984	44580864	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c6	candidate	1	scan_open	0	32	scan_open	0	0	2408448	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c6	candidate	1	scan_open	1024	32	scan_open	0	1024	2965504	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c6	candidate	1	scan_open	4096	32	scan_open	1	4096	3932160	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c6	candidate	1	scan_delta	1024	32	scan_next	0	40960	3031040	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c6	candidate	1	scan_delta	1024	4096	scan_next	0	4202496	17154048	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c6	candidate	1	scan_delta	4096	32	scan_next	1	163840	4014080	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c6	candidate	1	scan_delta	4096	4096	scan_next	1	16809984	44580864	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b6	baseline	1	scan_open	0	32	scan_open	1	0	2375680	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b6	baseline	1	scan_open	1024	32	scan_open	2	1024	2932736	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b6	baseline	1	scan_open	4096	32	scan_open	33	4096	3833856	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b6	baseline	1	scan_delta	1024	32	scan_next	1	40960	3031040	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b6	baseline	1	scan_delta	1024	4096	scan_next	9	4202496	17219584	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b6	baseline	1	scan_delta	4096	32	scan_next	2	163840	3964928	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b6	baseline	1	scan_delta	4096	4096	scan_next	40	16809984	44531712	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c7	candidate	1	scan_open	0	32	scan_open	0	0	2408448	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c7	candidate	1	scan_open	1024	32	scan_open	0	1024	2965504	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c7	candidate	1	scan_open	4096	32	scan_open	2	4096	3932160	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c7	candidate	1	scan_delta	1024	32	scan_next	1	40960	3014656	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c7	candidate	1	scan_delta	1024	4096	scan_next	1	4202496	17203200	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c7	candidate	1	scan_delta	4096	32	scan_next	1	163840	3997696	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c7	candidate	1	scan_delta	4096	4096	scan_next	2	16809984	44597248	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b7	baseline	1	scan_open	0	32	scan_open	0	0	2375680	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b7	baseline	1	scan_open	1024	32	scan_open	2	1024	2916352	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b7	baseline	1	scan_open	4096	32	scan_open	33	4096	3866624	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b7	baseline	1	scan_delta	1024	32	scan_next	1	40960	3047424	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b7	baseline	1	scan_delta	1024	4096	scan_next	10	4202496	17235968	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b7	baseline	1	scan_delta	4096	32	scan_next	2	163840	3981312	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b7	baseline	1	scan_delta	4096	4096	scan_next	40	16809984	44564480	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b8	baseline	1	scan_open	0	32	scan_open	1	0	2375680	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b8	baseline	1	scan_open	1024	32	scan_open	1	1024	2932736	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b8	baseline	1	scan_open	4096	32	scan_open	33	4096	3850240	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b8	baseline	1	scan_delta	1024	32	scan_next	1	40960	3047424	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b8	baseline	1	scan_delta	1024	4096	scan_next	9	4202496	17219584	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b8	baseline	1	scan_delta	4096	32	scan_next	2	163840	3948544	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	b8	baseline	1	scan_delta	4096	4096	scan_next	40	16809984	44433408	0	pass	06a91cf52fd85c48c3c36c88705319f910db4641	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c8	candidate	1	scan_open	0	32	scan_open	0	0	2408448	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c8	candidate	1	scan_open	1024	32	scan_open	1	1024	2965504	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c8	candidate	1	scan_open	4096	32	scan_open	2	4096	3932160	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c8	candidate	1	scan_delta	1024	32	scan_next	0	40960	3014656	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c8	candidate	1	scan_delta	1024	4096	scan_next	1	4202496	17252352	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c8	candidate	1	scan_delta	4096	32	scan_next	2	163840	3997696	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+scan-next	c8	candidate	1	scan_delta	4096	4096	scan_next	2	16809984	44580864	0	pass	4a381863ca4e21a852337db3832738d870783346	bend 2.0.37			Darwin	arm64		1		19
+maintenance-128	baseline-1	baseline	1	flush	128	32	flush	5197	16128	22642688	1585152	pass	d9ea63a0f360d921943cb4b3a85639b241a55f59	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	baseline-1	baseline	2	flush	128	32	flush	5168	16128	22626304	1585152	pass	d9ea63a0f360d921943cb4b3a85639b241a55f59	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	baseline-1	baseline	1	compact	128	32	compact	5162	16128	22626304	1585152	pass	d9ea63a0f360d921943cb4b3a85639b241a55f59	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	baseline-1	baseline	2	compact	128	32	compact	5216	16128	22249472	1585152	pass	d9ea63a0f360d921943cb4b3a85639b241a55f59	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	candidate-2	candidate	1	flush	128	32	flush	90	16128	22659072	1585152	pass	1fe526dbac49997c125b71b6f0c455e20cdc422f	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	candidate-2	candidate	2	flush	128	32	flush	79	16128	22642688	1585152	pass	1fe526dbac49997c125b71b6f0c455e20cdc422f	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	candidate-2	candidate	1	compact	128	32	compact	75	16128	22626304	1585152	pass	1fe526dbac49997c125b71b6f0c455e20cdc422f	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	candidate-2	candidate	2	compact	128	32	compact	77	16128	22659072	1585152	pass	1fe526dbac49997c125b71b6f0c455e20cdc422f	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	candidate-3	candidate	1	flush	128	32	flush	83	16128	22642688	1585152	pass	1fe526dbac49997c125b71b6f0c455e20cdc422f	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	candidate-3	candidate	2	flush	128	32	flush	79	16128	22642688	1585152	pass	1fe526dbac49997c125b71b6f0c455e20cdc422f	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	candidate-3	candidate	1	compact	128	32	compact	81	16128	22659072	1585152	pass	1fe526dbac49997c125b71b6f0c455e20cdc422f	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	candidate-3	candidate	2	compact	128	32	compact	77	16128	22659072	1585152	pass	1fe526dbac49997c125b71b6f0c455e20cdc422f	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	baseline-4	baseline	1	flush	128	32	flush	5206	16128	22609920	1585152	pass	d9ea63a0f360d921943cb4b3a85639b241a55f59	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	baseline-4	baseline	2	flush	128	32	flush	5218	16128	22642688	1585152	pass	d9ea63a0f360d921943cb4b3a85639b241a55f59	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	baseline-4	baseline	1	compact	128	32	compact	5221	16128	22298624	1585152	pass	d9ea63a0f360d921943cb4b3a85639b241a55f59	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	baseline-4	baseline	2	compact	128	32	compact	5241	16128	22659072	1585152	pass	d9ea63a0f360d921943cb4b3a85639b241a55f59	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	candidate-5	candidate	1	flush	128	32	flush	78	16128	22626304	1585152	pass	1fe526dbac49997c125b71b6f0c455e20cdc422f	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	candidate-5	candidate	2	flush	128	32	flush	89	16128	22642688	1585152	pass	1fe526dbac49997c125b71b6f0c455e20cdc422f	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	candidate-5	candidate	1	compact	128	32	compact	84	16128	22757376	1585152	pass	1fe526dbac49997c125b71b6f0c455e20cdc422f	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	candidate-5	candidate	2	compact	128	32	compact	86	16128	22691840	1585152	pass	1fe526dbac49997c125b71b6f0c455e20cdc422f	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	baseline-6	baseline	1	flush	128	32	flush	5274	16128	22249472	1585152	pass	d9ea63a0f360d921943cb4b3a85639b241a55f59	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	baseline-6	baseline	2	flush	128	32	flush	5284	16128	22282240	1585152	pass	d9ea63a0f360d921943cb4b3a85639b241a55f59	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	baseline-6	baseline	1	compact	128	32	compact	5274	16128	22233088	1585152	pass	d9ea63a0f360d921943cb4b3a85639b241a55f59	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	baseline-6	baseline	2	compact	128	32	compact	5416	16128	22331392	1585152	pass	d9ea63a0f360d921943cb4b3a85639b241a55f59	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-128	baseline-7	baseline	1	flush	128	32	flush	5340	16128	22216704	1585152	pass	d9ea63a0f360d921943cb4b3a85639b241a55f59	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	20
+maintenance-128	baseline-7	baseline	2	flush	128	32	flush	5437	16128	22331392	1585152	pass	d9ea63a0f360d921943cb4b3a85639b241a55f59	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	20
+maintenance-128	baseline-7	baseline	1	compact	128	32	compact	5329	16128	22331392	1585152	pass	d9ea63a0f360d921943cb4b3a85639b241a55f59	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	20
+maintenance-128	baseline-7	baseline	2	compact	128	32	compact	5432	16128	22249472	1585152	pass	d9ea63a0f360d921943cb4b3a85639b241a55f59	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	20
+maintenance-128	candidate-8	candidate	1	flush	128	32	flush	81	16128	22642688	1585152	pass	1fe526dbac49997c125b71b6f0c455e20cdc422f	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	20
+maintenance-128	candidate-8	candidate	2	flush	128	32	flush	80	16128	22626304	1585152	pass	1fe526dbac49997c125b71b6f0c455e20cdc422f	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	20
+maintenance-128	candidate-8	candidate	1	compact	128	32	compact	81	16128	22691840	1585152	pass	1fe526dbac49997c125b71b6f0c455e20cdc422f	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	20
+maintenance-128	candidate-8	candidate	2	compact	128	32	compact	79	16128	22642688	1585152	pass	1fe526dbac49997c125b71b6f0c455e20cdc422f	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	20
+maintenance-4096	baseline-1	baseline	1	flush	4096	32	flush	5398	20096	25116672	1781760	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	baseline-1	baseline	2	flush	4096	32	flush	5453	20096	25051136	1781760	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	baseline-1	baseline	1	compact	4096	32	compact	5625	20096	25001984	1781760	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	baseline-1	baseline	2	compact	4096	32	compact	5401	20096	25001984	1781760	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	candidate-2	candidate	1	flush	4096	32	flush	85	20096	25427968	1781760	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	candidate-2	candidate	2	flush	4096	32	flush	82	20096	25427968	1781760	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	candidate-2	candidate	1	compact	4096	32	compact	81	20096	25444352	1781760	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	candidate-2	candidate	2	compact	4096	32	compact	90	20096	25444352	1781760	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	candidate-3	candidate	1	flush	4096	32	flush	83	20096	25411584	1781760	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	candidate-3	candidate	2	flush	4096	32	flush	80	20096	25427968	1781760	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	candidate-3	candidate	1	compact	4096	32	compact	82	20096	25427968	1781760	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	candidate-3	candidate	2	compact	4096	32	compact	79	20096	25444352	1781760	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	baseline-4	baseline	1	flush	4096	32	flush	5396	20096	25001984	1781760	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	baseline-4	baseline	2	flush	4096	32	flush	5486	20096	25034752	1781760	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	baseline-4	baseline	1	compact	4096	32	compact	5369	20096	25034752	1781760	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	baseline-4	baseline	2	compact	4096	32	compact	5433	20096	24969216	1781760	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	candidate-5	candidate	1	flush	4096	32	flush	82	20096	25411584	1781760	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	candidate-5	candidate	2	flush	4096	32	flush	82	20096	25460736	1781760	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	candidate-5	candidate	1	compact	4096	32	compact	81	20096	25444352	1781760	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	candidate-5	candidate	2	compact	4096	32	compact	85	20096	25460736	1781760	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	baseline-6	baseline	1	flush	4096	32	flush	5427	20096	24985600	1781760	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	baseline-6	baseline	2	flush	4096	32	flush	5421	20096	25018368	1781760	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	baseline-6	baseline	1	compact	4096	32	compact	5394	20096	25018368	1781760	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	baseline-6	baseline	2	compact	4096	32	compact	5423	20096	25001984	1781760	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	baseline-7	baseline	1	flush	4096	32	flush	5442	20096	25067520	1781760	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	baseline-7	baseline	2	flush	4096	32	flush	5427	20096	25034752	1781760	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	baseline-7	baseline	1	compact	4096	32	compact	5476	20096	24985600	1781760	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	baseline-7	baseline	2	compact	4096	32	compact	5420	20096	25100288	1781760	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	candidate-8	candidate	1	flush	4096	32	flush	94	20096	25427968	1781760	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	candidate-8	candidate	2	flush	4096	32	flush	85	20096	25427968	1781760	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	candidate-8	candidate	1	compact	4096	32	compact	85	20096	25427968	1781760	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+maintenance-4096	candidate-8	candidate	2	compact	4096	32	compact	81	20096	25427968	1781760	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	19
+phases	baseline-1	baseline	1	maintenance_phases	16000	32	sst_read	3665	16000	17022976	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-1	baseline	2	maintenance_phases	16000	32	sst_read	2766	16000	17022976	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-1	baseline	1	maintenance_phases	4096	32	ordered_entries	27	4096	2523136	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-1	baseline	2	maintenance_phases	4096	32	ordered_entries	27	4096	2523136	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-1	baseline	1	maintenance_phases	16000	32	encode_file	19	784176	11976704	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-1	baseline	2	maintenance_phases	16000	32	encode_file	25	784176	11583488	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-2	candidate	1	maintenance_phases	16000	32	sst_read	63	16000	17121280	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-2	candidate	2	maintenance_phases	16000	32	sst_read	55	16000	17104896	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-2	candidate	1	maintenance_phases	4096	32	ordered_entries	1	4096	2719744	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-2	candidate	2	maintenance_phases	4096	32	ordered_entries	1	4096	2719744	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-2	candidate	1	maintenance_phases	16000	32	encode_file	20	784176	11976704	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-2	candidate	2	maintenance_phases	16000	32	encode_file	18	784176	11976704	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-3	candidate	1	maintenance_phases	16000	32	sst_read	46	16000	17121280	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-3	candidate	2	maintenance_phases	16000	32	sst_read	49	16000	17121280	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-3	candidate	1	maintenance_phases	4096	32	ordered_entries	1	4096	2719744	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-3	candidate	2	maintenance_phases	4096	32	ordered_entries	1	4096	2719744	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-3	candidate	1	maintenance_phases	16000	32	encode_file	18	784176	11976704	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-3	candidate	2	maintenance_phases	16000	32	encode_file	20	784176	11976704	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-4	baseline	1	maintenance_phases	16000	32	sst_read	3712	16000	17022976	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-4	baseline	2	maintenance_phases	16000	32	sst_read	3071	16000	17022976	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-4	baseline	1	maintenance_phases	4096	32	ordered_entries	29	4096	2523136	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-4	baseline	2	maintenance_phases	4096	32	ordered_entries	28	4096	2523136	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-4	baseline	1	maintenance_phases	16000	32	encode_file	17	784176	11616256	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-4	baseline	2	maintenance_phases	16000	32	encode_file	19	784176	11632640	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-5	candidate	1	maintenance_phases	16000	32	sst_read	74	16000	17121280	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-5	candidate	2	maintenance_phases	16000	32	sst_read	250	16000	17121280	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-5	candidate	1	maintenance_phases	4096	32	ordered_entries	1	4096	2719744	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-5	candidate	2	maintenance_phases	4096	32	ordered_entries	2	4096	2719744	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-5	candidate	1	maintenance_phases	16000	32	encode_file	21	784176	11976704	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-5	candidate	2	maintenance_phases	16000	32	encode_file	21	784176	11976704	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-6	baseline	1	maintenance_phases	16000	32	sst_read	3168	16000	17022976	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-6	baseline	2	maintenance_phases	16000	32	sst_read	3073	16000	17006592	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-6	baseline	1	maintenance_phases	4096	32	ordered_entries	27	4096	2523136	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-6	baseline	2	maintenance_phases	4096	32	ordered_entries	31	4096	2523136	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-6	baseline	1	maintenance_phases	16000	32	encode_file	21	784176	11960320	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-6	baseline	2	maintenance_phases	16000	32	encode_file	17	784176	11960320	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-7	baseline	1	maintenance_phases	16000	32	sst_read	2820	16000	17072128	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-7	baseline	2	maintenance_phases	16000	32	sst_read	3193	16000	17006592	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-7	baseline	1	maintenance_phases	4096	32	ordered_entries	27	4096	2523136	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-7	baseline	2	maintenance_phases	4096	32	ordered_entries	27	4096	2523136	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-7	baseline	1	maintenance_phases	16000	32	encode_file	17	784176	11960320	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	baseline-7	baseline	2	maintenance_phases	16000	32	encode_file	17	784176	11960320	798720	pass	52f82d96df9ad7a232b8980a6432d1fa03042a3e	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-8	candidate	1	maintenance_phases	16000	32	sst_read	47	16000	17104896	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-8	candidate	2	maintenance_phases	16000	32	sst_read	43	16000	17104896	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-8	candidate	1	maintenance_phases	4096	32	ordered_entries	1	4096	2719744	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-8	candidate	2	maintenance_phases	4096	32	ordered_entries	1	4096	2719744	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-8	candidate	1	maintenance_phases	16000	32	encode_file	17	784176	11976704	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18
+phases	candidate-8	candidate	2	maintenance_phases	16000	32	encode_file	17	784176	11976704	798720	pass	6a031894a8af50d93cfb669c3b24196441db8c6c	bend 2.0.37	Homebrew clang version 19.1.7	bend-native-default	Darwin	arm64	arm64	1	/dev/disk3s5	18

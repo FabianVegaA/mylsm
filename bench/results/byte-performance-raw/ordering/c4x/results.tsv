@@ -1,0 +1,16 @@
+sample	scenario	count	value_bytes	phase	elapsed_ms	checksum	peak_rss_bytes	result
+1	order_unique	256	32	ordered_entries	0	256	1916928	pass
+1	order_unique	256	4096	ordered_entries	0	256	2981888	pass
+1	order_unique	1024	32	ordered_entries	1	1024	2031616	pass
+1	order_unique	1024	4096	ordered_entries	0	1024	6209536	pass
+1	order_unique	4096	32	ordered_entries	1	4096	2605056	pass
+1	order_unique	4096	4096	ordered_entries	2	4096	19267584	pass
+1	order_unique	8192	32	ordered_entries	3	8192	3391488	pass
+1	order_unique	8192	4096	ordered_entries	4	8192	36683776	pass
+1	scan_open	0	32	scan_open	0	0	2408448	pass
+1	scan_open	1024	32	scan_open	0	1024	2949120	pass
+1	scan_open	4096	32	scan_open	1	4096	3948544	pass
+1	scan_delta	1024	32	scan_next	0	40960	3031040	pass
+1	scan_delta	1024	4096	scan_next	9	4202496	17170432	pass
+1	scan_delta	4096	32	scan_next	2	163840	4014080	pass
+1	scan_delta	4096	4096	scan_next	42	16809984	44597248	pass
