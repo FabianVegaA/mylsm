@@ -39,7 +39,8 @@ bend proofs/KeysProof.bend --verdict
 El hook `pre-push` ejecuta una sola vez el gate completo cuando las rutas cambiadas
 afectan código Bend, efectos de host, el runner, el toolchain, las dependencias o la
 configuración de hooks. Los cambios solo de documentación no lo disparan.
-También se puede ejecutar manualmente:
+También se puede ejecutar manualmente dentro de `nix develop`, que proporciona
+GNU `timeout` para limitar la ejecución de cada módulo:
 
 ```sh
 ./proofs/run.sh

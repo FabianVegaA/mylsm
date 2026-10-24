@@ -16,6 +16,11 @@ case "$TIMEOUT" in
   ''|*[!0-9]*|0) echo "MYLSM_PROOF_TIMEOUT must be a positive integer" >&2; exit 2 ;;
 esac
 
+if ! command -v timeout >/dev/null 2>&1; then
+  echo "GNU timeout is required; run the proof suite through nix develop." >&2
+  exit 127
+fi
+
 mkdir -p "$LOG_DIR"
 TMP_ROOT=${TMPDIR:-/tmp}
 WORK=$(mktemp -d "$TMP_ROOT/mylsm-proofs.XXXXXX") || exit 2
@@ -106,23 +111,12 @@ run_with_timeout() {
   log_file=$2
   timeout_marker=$3
 
-  bend "$proof_file" --verdict > "$log_file" 2>&1 &
-  bend_pid=$!
-  (
-    sleep "$TIMEOUT"
-    if kill -0 "$bend_pid" 2>/dev/null; then
-      : > "$timeout_marker"
-      kill "$bend_pid" 2>/dev/null || true
-      sleep 2
-      kill -9 "$bend_pid" 2>/dev/null || true
-    fi
-  ) &
-  timer_pid=$!
-
-  wait "$bend_pid"
+  LC_ALL=C timeout --verbose --kill-after=2s "$TIMEOUT" bend "$proof_file" --verdict > "$log_file" 2>&1
   result=$?
-  kill "$timer_pid" 2>/dev/null || true
-  wait "$timer_pid" 2>/dev/null || true
+  if { [ "$result" -eq 124 ] || [ "$result" -eq 137 ]; } &&
+      grep -q '^timeout: sending signal ' "$log_file"; then
+    : > "$timeout_marker"
+  fi
   return "$result"
 }
 

@@ -41,6 +41,9 @@ scripts/mylsm.sh repl --dir ./my-data
 
 The demo writes, reads, and deletes persistent keys. The REPL offers a small text interface; see the [CLI guide](docs/features/cli.md). Run `./proofs/run.sh` to check the formal laws and their witnesses.
 
+Run the proof suite inside `nix develop`; it uses the shell's GNU `timeout` to
+bound each proof process and terminate its children when the deadline expires.
+
 ## Use the library
 
 Import `mylsm.bend` from this checkout. The public durable API has two views of the same database:
