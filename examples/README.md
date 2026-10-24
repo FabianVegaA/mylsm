@@ -1,6 +1,6 @@
 # Examples
 
-These Bend programs use the public `mylsm.bend` API. Run them from the repository root with Bend 2.0.37. Each program creates a new database at `MYLSM_DB_PATH`, so give it a path that does not exist yet.
+These Bend programs use the public `mylsm.bend` API. Run them from the repository root with Bend 2.0.39. Each program creates a new database at `MYLSM_DB_PATH`, so give it a path that does not exist yet.
 
 ```sh
 db=$(mktemp -d)
@@ -20,4 +20,4 @@ To run another example, repeat the three shell lines above with its filename. `b
 
 The examples fail with a nonzero exit status if an operation does not produce the expected result. They use only the public `mylsm.bend` database facade. The byte example also imports `bend-kit-bytes` to construct raw byte buffers.
 
-For error meanings and resource limits, see the [durable API guide](../docs/DURABLE_API.md). The [0.6 acceptance report](../bench/results/mylsm-0.6.0.0-acceptance.md) records the current validation limits.
+For error meanings and resource limits, see the [durable API guide](../docs/features/durable-api.md). The [0.6 acceptance report](../bench/results/mylsm-0.6.0.0-acceptance.md) records the current validation limits.

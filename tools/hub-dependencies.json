@@ -1,10 +1,14 @@
 {
-  "bend_minimum": "2.0.35",
+  "bend_minimum": "2.0.39",
   "source_repository": {
     "url": "https://github.com/paymog/bend-kit",
     "checkout_commit": "bba96d622670fd9ab9bbc08c72fd77f81c8052c2"
   },
   "packages": {
+    "bend-mathlib": {
+      "release": "0.7.5.0",
+      "hash": "0xcd4682caa53da19986acd472c2181473"
+    },
     "bend-kit-bytes": {
       "release": "0.3.2.0",
       "hash": "0x185ae03c75e3e75be1171471f68b43cb",

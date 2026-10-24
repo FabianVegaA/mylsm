@@ -50,6 +50,7 @@ scripts/mylsm.sh run
 | `MYLSM_DEVICE` | `auto`, `cpu`, `gpu` | `auto` | Selects the execution policy |
 | `MYLSM_THREADS` | Integer `1..256` | Detected logical CPUs | Passed to native Bend as `--threads N` |
 | `MYLSM_GPU_MEMORY` | Bend memory size such as `4GB` | `4GB` | Passed as `--gpu SIZE` when GPU is selected |
+| `MYLSM_BATCH_CAP` | Integer clamped to `1..1024` | `1` | REPL engine batch-processing cap; separate from the durable API's mutation limit |
 | `MYLSM_DIR` | Filesystem path | `.mylsm-repl-data` | REPL database directory |
 
 Examples:
@@ -225,3 +226,23 @@ version-1 exports are rejected. Quoted paths are accepted.
 - The REPL accepts at most 256 commands per process.
 - Formal proofs cover selected pure laws and closed vectors, not the host OS or
   all open inputs.
+
+## Implementation and checks
+
+[scripts/mylsm.sh](../../scripts/mylsm.sh) delegates to
+[app/cli/main.bend](../../app/cli/main.bend). Argument and runtime policy live in
+[Policy.bend](../../app/cli/Policy.bend) and [Runtime.bend](../../app/cli/Runtime.bend);
+the REPL grammar and execution live in [app/repl](../../app/repl/).
+
+The REPL uses the historical `Recover` engine. Its administrative statistics and
+interchange envelope differ from the `Bytes`/`Utf8` API and its
+[backup bundle](backup-and-migration.md).
+
+Formal contracts live in [Cli.bend](../../laws/Cli.bend) and
+[Repl.bend](../../laws/Repl.bend), with matching witnesses in [proofs](../../proofs/).
+Run `bash bench/smoke/cli.sh` for host integration. The
+[acceptance report](../../bench/results/mylsm-0.6.0.0-acceptance.md) records a native
+REPL build failure in the macOS SDK environment. Its Bend 2.0.39 compatibility rerun
+passes all 82 formal modules, including `ReplProof`, with mathlib 0.7.5.0; that rerun
+does not repeat the native CLI SDK checks. Successful typechecking alone does not
+close a formal gate.

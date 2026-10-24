@@ -540,12 +540,12 @@ def next_chunk(encoder: Encoder) -> Encoder & Maybe<&1, Bytes.Bytes>:
 
 # Translate the shared strict UTF-8 result into the SST error domain.
 type TextRead is Type:
-  Text{cursor: Bytes.Cursor, byte: Maybe<&2, U32>}
+  DecodedText{cursor: Bytes.Cursor, byte: Maybe<&2, U32>}
 
 def parse.text.wrap(pair: Bytes.Cursor & Maybe<&2, U32>) -> TextRead:
   match pair:
     case (cursor, byte):
-      Text{cursor, byte}
+      DecodedText{cursor, byte}
 
 def parse.text.finish(
   cursor: Bytes.Cursor,
@@ -564,15 +564,15 @@ def parse.text.go(
   state: StorageBytes.Utf8State
 ) -> Bytes.Cursor & Result<&1, &1, Error, String>:
   match remaining read:
-    case 0n Text{cursor, _}:
+    case 0n DecodedText{cursor, _}:
       parse.text.finish(cursor, StorageBytes.utf8.scan.fin(state))
-    case 1n+0n Text{cursor, Some{+byte}}:
+    case 1n+0n DecodedText{cursor, Some{+byte}}:
       parse.text.finish(cursor, StorageBytes.utf8.scan.fin(
         StorageBytes.utf8.step(state, byte)))
-    case 1n+1n+rest Text{cursor, Some{+byte}}:
+    case 1n+1n+rest DecodedText{cursor, Some{+byte}}:
       parse.text.go(1n+rest, parse.text.wrap(Bytes.Cursor.u8(cursor)),
         StorageBytes.utf8.step(state, byte))
-    case 1n+_ Text{cursor, None{}}:
+    case 1n+_ DecodedText{cursor, None{}}:
       (cursor, Fail{Malformed{}})
 
 def parse.text.start(
@@ -582,7 +582,7 @@ def parse.text.start(
 ) -> Bytes.Cursor & Result<&1, &1, Error, String>:
   match empty:
     case True{}:
-      parse.text.go(0n, Text{cursor, Some{0}},
+      parse.text.go(0n, DecodedText{cursor, Some{0}},
         StorageBytes.Utf8State{0, 128, 191, 0, SNil{}, True{}})
     case False{}:
       parse.text.go(U32.to_nat(length), parse.text.wrap(Bytes.Cursor.u8(cursor)),

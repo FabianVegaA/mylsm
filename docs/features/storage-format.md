@@ -2,7 +2,7 @@
 
 ## Version identities
 
-The public package version is `0.6.0.0`. The database manifest generation written by 0.6 is `5`; the version strings are not interchangeable. The supported migration source is the durable API package `0.5.0.0`, whose current on-disk storage identity is format `0.4.0.0` (generation 3). Generation 4 remains readable for databases already written by earlier 0.6 development builds, but new databases, flushes, compactions, restores, and migrations publish generation 5 manifests. The generation-4 WAL and SST record encodings remain unchanged inside generation-5 databases. The backup exchange format has its own version field and is independent of package and database versions.
+This checkout implements the 0.6 storage family. The package import in `pack.json` still points to `0.5.0.0`; it does not identify the checkout or establish a published 0.6 release. The database manifest generation written by 0.6 is `5`; the version strings are not interchangeable. The supported migration source is the durable API package `0.5.0.0`, whose current on-disk storage identity is format `0.4.0.0` (generation 3). Generation 4 remains readable for databases already written by earlier 0.6 development builds, but new databases, flushes, compactions, restores, and migrations publish generation 5 manifests. The generation-4 WAL and SST record encodings remain unchanged inside generation-5 databases. The backup exchange format has its own version field and is independent of package and database versions.
 
 The 0.6 reader accepts manifest generations 4 and 5 for normal open. Storage format 0.4.0.0 / generation 3 is accepted only by inspection and the explicit migration path; normal open never silently interprets generation 3 using the byte comparator. Unknown generations fail before recovery sweep, repair, file deletion, or data writes.
 
@@ -25,7 +25,7 @@ The same comparison governs MemTables, Bloom hashing inputs, SST ordering and in
 
 ## Public API namespaces
 
-The public surface is split into `MyLSM.Utf8` and `MyLSM.Bytes`. Each namespace exposes `create`, `open`, `get`, `put`, `delete`, `write_batch`, `scan_range`, `scan_prefix`, `snapshot`, `stats`, `backup`, and `close` where applicable. The UTF-8 namespace accepts strings and validates text at its boundary. The byte namespace accepts and returns `Bytes.Bytes` directly and never decodes or re-encodes key/value contents.
+The public surface is split into `MyLSM.Utf8` and `MyLSM.Bytes`. Each namespace exposes `create`, `open_existing`, `get`, `put`, `delete`, `write_batch`, `scan_range`, `scan_prefix`, `snapshot`, `stats`, `backup`, and `close` where applicable. The UTF-8 namespace accepts strings and validates text at its boundary. The byte namespace accepts and returns `Bytes.Bytes` directly and never decodes or re-encodes key/value contents.
 
 Scans return an owned cursor with `seek`, `next`, and `close`; snapshots expose `get`, `scan_range`, `scan_prefix`, and `close`. Range scans use optional lower and upper byte bounds. Prefix scans accept an arbitrary byte prefix. Both namespaces return the same cursor lifecycle and ordering semantics, while the UTF-8 cursor enters terminal error on invalid stored text.
 
@@ -61,7 +61,7 @@ Range scans use `[lower, upper)`, with either bound optional. Prefix scans compa
 
 Backup format version 1 is independent of database manifest generation 5. It contains a fixed magic, version, bounded blocks of strictly ordered key/value byte pairs, per-block counts and checksums, a total record count, and a final marker/checksum. Tombstones and database history are not exported. A successful backup represents one retained snapshot exactly.
 
-Restore validates the entire stream incrementally: version, lengths, resource limits, strict key order, checksums, total count, and final marker. It writes a sibling temporary database in manifest generation 5, syncs and reopens it, and atomically publishes only after all checks pass. Existing destinations are rejected.
+Restore currently holds the bounded exchange and decoded records in memory and validates: version, lengths, resource limits, strict key order, checksums, total count, and final marker. It writes a sibling temporary database in manifest generation 5, syncs and reopens it, and atomically publishes only after all checks pass. Existing destinations are rejected.
 
 ## Migration
 
@@ -72,3 +72,27 @@ An interrupted or failed migration does not publish a final destination. A succe
 ## Formal evidence boundary
 
 The generation 5 manifest layout, generation-4 WAL/SST encodings, bounds, and error choices are pure Bend decisions and receive laws and witnesses where their inputs can be modeled without host effects. `bend-kit-bytes` supplies the underlying packed byte comparison implementation; closed byte-order vectors exercise its documented unsigned lexicographic behavior, but they do not constitute a proof of that dependency or of host IO.
+
+## Implementation and checks
+
+The public calls are documented in [durable-api.md](durable-api.md), cursor behavior in
+[scans-and-snapshots.md](scans-and-snapshots.md), and publication in
+[backup-and-migration.md](backup-and-migration.md).
+
+- Codecs: [ByteManifest.bend](../../src/ByteManifest.bend),
+  [ByteWal.bend](../../src/ByteWal.bend), [ByteSstFile.bend](../../src/ByteSstFile.bend)
+  and [BlockIndexFormatPolicy.bend](../../src/scan/BlockIndexFormatPolicy.bend).
+- Formal contracts: [ByteManifest.bend](../../laws/ByteManifest.bend),
+  [ByteWal.bend](../../laws/ByteWal.bend), [ByteSstFile.bend](../../laws/ByteSstFile.bend)
+  and their matching modules in [proofs](../../proofs/).
+- Runtime fixtures: [byte_manifest_io.bend](../../bench/smoke/byte_manifest_io.bend),
+  [byte_index_budget.sh](../../bench/smoke/byte_index_budget.sh) and
+  [byte_block_reader.sh](../../bench/smoke/byte_block_reader.sh).
+
+## Known inspection limitation
+
+[FormatInspect.describe](../../src/transfer/FormatInspect.bend) identifies the byte
+manifest family as generation 4 from its magic. Generations 4 and 5 share that magic,
+so the reported identity alone does not distinguish their manifest layouts. The
+manifest decoder accepts both; treat the encoded generation field as authoritative.
+Inspection validates the manifest, not the contents of its WAL or SST.

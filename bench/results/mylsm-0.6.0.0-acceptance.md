@@ -5,7 +5,29 @@ Linux runtime gates, Bun FFI effects, and snapshot-generation reclamation pass.
 Release acceptance is not complete: the repeated workload matrix and Linux
 cursor memory ceiling remain open.
 
-## Host and toolchain
+## Bend 2.0.39 compatibility rerun
+
+Darwin arm64, Bend 2.0.39, and `bend-mathlib@0.7.5.0` pinned to
+`0xcd4682caa53da19986acd472c2181473` in `tools/hub-dependencies.json`.
+The checkout includes the updated comparison/equality bridge in `src/Keys.bend`
+and the `DecodedText` constructor in `src/SstFile.bend`, avoiding the new Base
+`Event.Text` constructor. No law or witness was removed or weakened.
+
+| Check | Result |
+| --- | --- |
+| `bash proofs/run.sh` | `PASS=82 FAIL=0 TIMEOUT=0 TOTAL=82`; all modules checked with `--verdict`, including `ReplProof` |
+| `bash scripts/check-bend.sh src/Keys.bend src/SstFile.bend` | Pass; changed-source lint and width checks |
+| `bash bench/smoke/shared_utf8_bytes.sh` | `SHARED_UTF8_BYTES_PASSED` |
+| `bash bench/smoke/durable_session.sh` | `DURABLE SESSION PASS`; native create, reopen, error and close paths |
+| `bash bench/smoke/backup_restore.sh` | `BACKUP_RESTORE_PASSED` |
+| `bench/smoke/sst_v3_io.bend`, executed from a temporary working directory | Packed SST write/read passes with multibyte UTF-8 values and a tombstone |
+
+This rerun establishes the formal gate and these focused host checks for the
+updated dependency and toolchain. It does not rerun the native CLI SDK checks,
+Linux platform matrix or performance workloads recorded below. Their existing
+limitations and outstanding release evidence remain applicable.
+
+## Host and toolchain of the earlier runs
 
 | Attribute | Observed value |
 | --- | --- |
@@ -56,7 +78,7 @@ are in `mylsm-0.5.0.0-phase3-linux-samples.tsv`; candidate rows are in
 | Bend 2.0.37 upgrade, Darwin arm64 | `bend update`; `bash bench/smoke/cli.sh`; focused JS effects and Bun/Node consumer smokes | Pin and docs updated; formal proofs pass 82/82 and fuzz decides 1,000,000 inputs. CLI smoke reaches the native REPL but exits 1 because Clang cannot build SDK modules (CoreFoundation/Foundation/Metal) in this host environment; JS effects pass on Node and native Bend, Bun FFI and owner-spawn smokes pass, and public examples pass. `ReplProof` typechecks, while `--verdict` reports a backend/kernel mismatch; the 2.0.36 Docker image lacks Lean, so the mismatch could not be compared against the prior release. |
 | Formal laws and witnesses | `bash proofs/run.sh` | `PASS=81 FAIL=0 TIMEOUT=0 TOTAL=81` |
 | Bolt lint | `../bolt/bin/bolt.bin 2>&1 | grep -v ' S002: ' | grep -E 'error:|warning:'` | No findings printed; `grep` returns 1 when the result is empty |
-| Source width | Repository command from `AGENT.md` | No lines over 200 columns |
+| Source width | Repository commands, now in the [Bend standard](../../docs/standards/bend.md) | No lines over 200 columns |
 | Patch whitespace | `git diff --check` | Pass |
 | Incremental cursor memory | `bash bench/smoke/public_cursor_memory.sh` | Pass at both configured dataset sizes; results below |
 | Linux incremental cursor memory | `MYLSM_THREADS=2 bash bench/smoke/public_cursor_memory.sh` | Fails the 32 MiB absolute limit at 64k: 48,197,632 B open and 46,514,176 B scanning; 16k is 24,023,040 B open and 22,609,920 B scanning |

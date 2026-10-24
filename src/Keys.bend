@@ -1,6 +1,6 @@
 import Base
-import bend-mathlib@0.7.0.0/string.bend as MString
-import bend-mathlib@0.7.0.0/bool.bend as MBool
+import bend-mathlib@0.7.5.0/string.bend as MString
+import bend-mathlib@0.7.5.0/bool.bend as MBool
 import bend-kit-bytes@0.3.2.0/bytes.bend as PackedBytes
 
 def Bytes.cmp.order(pair: PackedBytes.Bytes & PackedBytes.Bytes & Cmp) -> Cmp:
@@ -126,6 +126,7 @@ def cmp_eq_pair(
 
 # Compare whether eq bridge holds for the key ordering and comparison.
 def cmp_eq_bridge(+s1: String, +s2: String) -> {cmp_is_eq(cmp(s1, s2)) == eq(s1, s2) : Bool}:
+  %MString.internal_order_cmp(s1, s2) : {cmp_is_eq(cmp(s1, s2)) == Cmp.is_eq(_) : Bool}
   cmp_eq_pair(String.cmp(s1, s2))
 
 # Reflexivity chain for open keys. Every product law about keyed lookup

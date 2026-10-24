@@ -1,0 +1,29 @@
+min_version: 1.10.10
+
+pre-commit:
+  parallel: true
+  commands:
+    whitespace:
+      run: git diff --cached --check
+    bend-lint:
+      glob:
+        - "*.bend"
+        - "**/*.bend"
+      run: bash scripts/check-bend.sh {staged_files}
+
+pre-push:
+  commands:
+    proofs:
+      glob:
+        - "*.bend"
+        - "**/*.bend"
+        - "src/effs/*"
+        - "proofs/run.sh"
+        - "tools/toolchain.json"
+        - "tools/hub-dependencies.json"
+        - "lefthook.yml"
+      run: |
+        set -- {push_files}
+        if [ "$#" -gt 0 ]; then
+          bash proofs/run.sh
+        fi
