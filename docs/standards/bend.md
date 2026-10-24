@@ -12,8 +12,8 @@
 | [examples](../../examples/) | Consumidores de la fachada pública |
 | [bench](../../bench/) | Integración, fallos y mediciones reproducibles |
 
-Usar la última versión de Bend, registrar el cambio en
-[tools/toolchain.json](../../tools/toolchain.json) y revalidar los gates al actualizar.
+Usar la última versión de Bend mediante la revisión fijada en
+[flake.nix](../../flake.nix) y [flake.lock](../../flake.lock), y revalidar los gates al actualizar.
 Consultar `bend guide` para sintaxis y convenciones. Las versiones de dependencias del
 Hub y sus restricciones están en [tools/hub-dependencies.json](../../tools/hub-dependencies.json).
 
@@ -36,8 +36,8 @@ su costo, y comprobar la ganancia con mediciones representativas.
 
 El hook `pre-commit` de [lefthook.yml](../../lefthook.yml) ejecuta
 [scripts/check-bend.sh](../../scripts/check-bend.sh) sobre las rutas Bend preparadas
-para el commit, incluidas las de subdirectorios. El script usa `BOLT_BIN`, `bolt` en
-`PATH` o el binario existente en `../bolt/bin/bolt.bin`, en ese orden.
+para el commit, incluidas las de subdirectorios. El script usa `bolt` del entorno
+Nix en `PATH`; `BOLT_BIN` permite elegir explícitamente otro ejecutable.
 
 El gate rechaza cualquier salida no exitosa de Bolt y cualquier diagnóstico no exceptuado,
 incluidas las advertencias. Conserva las excepciones de ancho del proyecto: filtra `S002`

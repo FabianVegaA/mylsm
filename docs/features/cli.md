@@ -1,8 +1,35 @@
 # MyLSM CLI Reference
 
-MyLSM provides a developer CLI at `scripts/mylsm.sh`. The project remains an
-experimental prototype: this interface is intended for demonstrations, local
-experiments, and validation, not production operations.
+MyLSM provides an installed CLI named `mylsm` and a developer launcher at
+`scripts/mylsm.sh`. The database is an alpha; see the
+[acceptance evidence](../../bench/results/mylsm-0.6.0.0-acceptance.md) for current limits.
+
+## Installed CLI
+
+The GitHub commands require the packaging flake to be committed and published.
+For unpublished changes, use the local checkout commands below.
+
+```sh
+nix profile install github:FabianVegaA/mylsm
+mylsm doctor
+mylsm demo
+mylsm repl --dir ./my-data
+```
+
+`nix run github:FabianVegaA/mylsm -- repl --dir ./my-data` runs without installing.
+From a checkout, `nix build` produces `result/bin/mylsm` and `nix run .` uses the
+same package. Nix's `nix-command` and `flakes` features must be enabled.
+
+The installed CLI supports `demo`, `repl`, `doctor`, `--help` and `-h`.
+With no command, it runs `demo`. It uses precompiled CPU binaries, preserves the caller's working
+directory and never compiles or downloads Bend dependencies at runtime.
+`MYLSM_DEVICE=auto` and `cpu` use CPU execution; an explicit `gpu` request fails.
+The REPL retains its directory precedence and supervised thread restart behavior.
+`check`, `fuzz`, `bench`, `build` and `run` require the developer checkout.
+
+The package targets Apple Silicon on macOS 15+, and Linux ARM64/x86-64.
+The following command table and adaptive runtime settings describe the developer
+launcher; shared REPL commands apply to both interfaces.
 
 ## Command status
 
@@ -240,9 +267,9 @@ interchange envelope differ from the `Bytes`/`Utf8` API and its
 
 Formal contracts live in [Cli.bend](../../laws/Cli.bend) and
 [Repl.bend](../../laws/Repl.bend), with matching witnesses in [proofs](../../proofs/).
-Run `bash bench/smoke/cli.sh` for host integration. The
-[acceptance report](../../bench/results/mylsm-0.6.0.0-acceptance.md) records a native
-REPL build failure in the macOS SDK environment. Its Bend 2.0.39 compatibility rerun
-passes all 82 formal modules, including `ReplProof`, with mathlib 0.7.5.0; that rerun
-does not repeat the native CLI SDK checks. Successful typechecking alone does not
-close a formal gate.
+Run `bash bench/smoke/cli.sh` for developer host integration. `nix flake check`
+builds the installed CLI and checks demo execution, persistent REPL data, thread
+restart and rejected configuration. The Nix build selects Apple SDK 15 and a
+macOS 15 deployment target; older SDK build failures remain historical evidence
+in the [acceptance report](../../bench/results/mylsm-0.6.0.0-acceptance.md).
+Successful typechecking alone does not close a formal gate.

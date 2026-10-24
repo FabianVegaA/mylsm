@@ -1,0 +1,85 @@
+{
+  "nodes": {
+    "bend": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1792791901,
+        "narHash": "sha256-mQ6NNSxVT19Wx0LJuT0IS+xw1mPw5qsvXqmkPU89aUg=",
+        "owner": "bendlang",
+        "repo": "bend",
+        "rev": "295e996574573e3a88827b1cf7045b437333c8f0",
+        "type": "github"
+      },
+      "original": {
+        "owner": "bendlang",
+        "repo": "bend",
+        "rev": "295e996574573e3a88827b1cf7045b437333c8f0",
+        "type": "github"
+      }
+    },
+    "bolt": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792780289,
+        "narHash": "sha256-B0gsKnsUo25H/TGZuRwtAEt4WWO8KFghSNBXsta1RXQ=",
+        "owner": "Emerging-Patterns",
+        "repo": "bolt",
+        "rev": "71d0cf2bdf1898824868bf65351c405a51766520",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Emerging-Patterns",
+        "repo": "bolt",
+        "rev": "71d0cf2bdf1898824868bf65351c405a51766520",
+        "type": "github"
+      }
+    },
+    "ez": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792730458,
+        "narHash": "sha256-gpyP8MmnJcmOdvlWRm5SGMKomi/pimr9dKaq0DExVew=",
+        "owner": "Emerging-Patterns",
+        "repo": "ez",
+        "rev": "166a23c54b1c5a7bf587abd3d906332bd73a856b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Emerging-Patterns",
+        "repo": "ez",
+        "rev": "166a23c54b1c5a7bf587abd3d906332bd73a856b",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1792502884,
+        "narHash": "sha256-IoNisKcGbUjdd45qCqywGMCYmZ5EnkxezvLII0FWwNA=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "02c087f3fe673c9e317f206a627cb6b910336dbe",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "bend": "bend",
+        "bolt": "bolt",
+        "ez": "ez",
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

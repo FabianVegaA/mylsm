@@ -2,6 +2,13 @@ import Base
 import ../app/cli/Types.bend as Cli
 import ../app/cli/Policy.bend as Policy
 
+# Native runtime settings are enclosed by Bend's RTS delimiters.
+law native_runtime_arguments:
+  for +count: Nat
+  for +memory: String
+  {Policy.native_arguments(count, memory) ==
+    Con{"+RTS", Con{"--threads", Con{Nat.show(count), Con{"--gpu", Con{memory, Con{"-RTS", Nil{}}}}}}} : List<String>}
+
 # The CLI selects the demo when no command is supplied.
 law default_command:
   {Policy.parse_args(Nil{}) == Done{Cli.Demo{}} : Result<&1, &1, String, Cli.Command>}

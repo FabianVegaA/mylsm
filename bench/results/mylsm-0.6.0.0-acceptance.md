@@ -32,7 +32,7 @@ limitations and outstanding release evidence remain applicable.
 | Attribute | Observed value |
 | --- | --- |
 | Host | Darwin 25.6.0, arm64 |
-| Bend | 2.0.37 (`tools/toolchain.json`, current host validation) |
+| Bend | 2.0.37 |
 | Linux runtime | Ubuntu 24.04 arm64 in Docker, Bend 2.0.36, Clang 18 |
 | Linux filesystem | Container overlay for lock and permission tests; bind mount for compilation and socket/client integration |
 | Bun | 1.4.3 on Darwin arm64 and Linux arm64 |

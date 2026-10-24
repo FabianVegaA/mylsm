@@ -235,10 +235,10 @@ def run_backend(
     case Cli.PortableCpu{}:
       IO.try(U32, Attached.run("bend", Con{source, Nil{}}, effective_env(Cli.PortableCpu{}, count, directory), None{}))
     case Cli.NativeCpu{}:
-      IO.try(U32, Attached.run(output, Con{"--threads", Con{Nat.show(count), Nil{}}},
+      IO.try(U32, Attached.run(output, Policy.native_arguments(count, "off"),
         effective_env(Cli.NativeCpu{}, count, directory), None{}))
     case Cli.NativeGpu{}:
-      IO.try(U32, Attached.run(output, Con{"--threads", Con{Nat.show(count), Con{"--gpu", Con{memory, Nil{}}}}},
+      IO.try(U32, Attached.run(output, Policy.native_arguments(count, memory),
         effective_env(Cli.NativeGpu{}, count, directory), None{}))
 
 # Returns on child success and propagates a nonzero child status.

@@ -20,7 +20,7 @@ static int attached_arguments(Env e, Term list, char* program, char*** result, s
   if (values == NULL) { return ENOMEM; }
   values[0] = program;
   *count = 1;
-  while (term_aux(list) == CID_CON) {
+  while (term_aux(list) == CID(Con)) {
     Term fields[2];
     spare_free(e, cls_fit(2), ctr_take(e, list, 2, fields));
     u64 length = 0;
@@ -53,7 +53,7 @@ static int attached_overrides(Env e, Term list, char*** result, size_t* count) {
   char** values = calloc(capacity, sizeof(char*));
   if (values == NULL) { return ENOMEM; }
   *count = 0;
-  while (term_aux(list) == CID_CON) {
+  while (term_aux(list) == CID(Con)) {
     Term fields[2];
     Term pair[2];
     spare_free(e, cls_fit(2), ctr_take(e, list, 2, fields));

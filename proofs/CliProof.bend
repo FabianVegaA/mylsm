@@ -1,6 +1,9 @@
 import Base
 import ../laws/Cli.bend as Laws
 
+def Laws.native_runtime_arguments(_count, _memory):
+  {==}
+
 def Laws.default_command():
   {==}
 

@@ -1,6 +1,10 @@
 import Base
 import ./Types.bend as Cli
 
+# Encloses native runtime settings in Bend's RTS delimiters.
+def native_arguments(count: Nat, memory: String) -> List<String>:
+  Con{"+RTS", Con{"--threads", Con{Nat.show(count), Con{"--gpu", Con{memory, Con{"-RTS", Nil{}}}}}}}
+
 # Rejects an empty explicit directory and stores a valid REPL directory.
 def parse_repl_directory(directory: String, empty: Bool) -> Result<&1, &1, String, Cli.Command>:
   match empty:
@@ -13,7 +17,7 @@ def parse_repl(args: List<String>) -> Result<&1, &1, String, Cli.Command>:
     case Nil{}: Done{Cli.Repl{None{}}}
     case Con{"--dir", Con{+directory, Nil{}}}:
       parse_repl_directory(directory, String.is_empty(directory))
-    case _: Fail{"usage: scripts/mylsm.sh repl [--dir PATH]"}
+    case _: Fail{"usage: mylsm repl [--dir PATH]"}
 
 # Maps a named CLI command and its arguments to a command value.
 def parse_named(command: String, args: List<String>) -> Result<&1, &1, String, Cli.Command>:

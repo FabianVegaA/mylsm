@@ -8,10 +8,8 @@ if [ -n "${BOLT_BIN:-}" ]; then
   bolt_bin=$BOLT_BIN
 elif command -v bolt >/dev/null 2>&1; then
   bolt_bin=bolt
-elif [ -x ../bolt/bin/bolt.bin ]; then
-  bolt_bin=../bolt/bin/bolt.bin
 else
-  printf '%s\n' 'Bolt is required: install bolt on PATH or set BOLT_BIN.' >&2
+  printf '%s\n' 'Bolt is required: enter nix develop or set BOLT_BIN.' >&2
   exit 127
 fi
 
