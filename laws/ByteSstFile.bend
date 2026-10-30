@@ -1,7 +1,26 @@
 import Base
 import ../src/ByteMemTable.bend as ByteMemTable
+import ../src/ByteWal.bend as ByteWal
 import ../src/ByteSstFile.bend as ByteSstFile
+import ../src/Wal.bend as Wal
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
+
+def measured.block.marker(value: Maybe<&1, Bytes.Bytes>) -> Bytes.Bytes:
+  match value:
+    case Some{block}: block
+    case None{}: Bytes.new(0)
+
+def measured.block() -> Bytes.Bytes:
+  measured.block.marker(Bytes.from_hex(
+    "0000003400000001000000300000000100000000010000000002000031e48db52141f0266a527163b309f7ffea5df3272f7489062967b70e39e99892739a0617a8dec2e40cb9ebb26e0035b7d5ce50beb6c52d1b97fdd90202b02b27"))
+
+def measured.block.measured(pair: Bytes.Bytes & U32) -> Bytes.Bytes:
+  match pair:
+    case (block, length):
+      Bytes.set.u32be(block, U32.sub(length, 4), 0)
+
+def measured.block.corrupt() -> Bytes.Bytes:
+  measured.block.measured(Bytes.length(measured.block()))
 
 # Builds the smallest accepted multi-block header fixture.
 def valid_stream_header() -> Bytes.Bytes:
@@ -83,3 +102,15 @@ law byte_sst_pages_fill_available_capacity:
     ByteMemTable.Entry{Bytes.new(1), Some{Bytes.new(1)}},
     ByteMemTable.Entry{Bytes.new(2), Some{Bytes.new(1)}}
   ], 64n)) == 1n : Nat}
+
+# Verifies block value measurement returns length without value.
+law block_value_measurement_returns_length_without_value:
+  {ByteSstFile.measure_block(measured.block(), Bytes.new(1)) ==
+    Done{ByteWal.ValuePresent{2}} :
+    Result<&1, &1, Wal.Error, ByteWal.ValueMetadata>}
+
+# Verifies block value measurement rejects corrupt outer checksum.
+law block_value_measurement_rejects_corrupt_outer_checksum:
+  {ByteSstFile.measure_block(measured.block.corrupt(), Bytes.new(1)) ==
+    Fail{Wal.ChecksumMismatch{}} :
+    Result<&1, &1, Wal.Error, ByteWal.ValueMetadata>}

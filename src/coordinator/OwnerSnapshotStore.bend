@@ -3,11 +3,17 @@ import ../ByteDurableDb.bend as ByteDb
 import ../ByteMemTable.bend as ByteMemTable
 import ../scan/Snapshot.bend as Snapshot
 import ./GenerationRetentionPolicy.bend as GenerationRetention
+import ./TransportBudgetPolicy.bend as TransportBudget
+import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # Keeps logical owner accounting and retained roots in one persistent value.
 type Store is Type:
   Store{registry: Snapshot.OwnerRegistry, ids: List<&2, U32>,
     roots: List<&1, ByteDb.SnapshotRoot>}
+
+# Carries the state for GenerationReferences.
+type GenerationReferences is Data:
+  GenerationReferences{generations: List<&2, U32>, legacy: Bool}
 
 # Returns logical retention totals together with the preserved snapshot roots.
 type Metrics is Type:
@@ -91,33 +97,43 @@ def generation.references.none(
   sst_path: Maybe<&1, String>,
   retained_bytes: Nat,
   delta: List<&1, ByteMemTable.Entry>,
-  rest: List<&2, U32> & List<&1, ByteDb.SnapshotRoot>
-) -> List<&2, U32> & List<&1, ByteDb.SnapshotRoot>:
-  match rest:
-    case (references, roots):
-      (references, Con{ByteDb.SnapshotRoot{sst_path, None{},
-        retained_bytes, delta}, roots})
+  rest: GenerationReferences & List<&1, ByteDb.SnapshotRoot>
+) -> GenerationReferences & List<&1, ByteDb.SnapshotRoot>:
+  match sst_path:
+    case None{}:
+      match rest:
+        case (references, roots):
+          (references, Con{ByteDb.SnapshotRoot{None{}, None{},
+            retained_bytes, delta}, roots})
+    case Some{path}:
+      match rest:
+        case (references, roots):
+          match references:
+            case GenerationReferences{generations, _}:
+              (GenerationReferences{generations, True{}},
+                Con{ByteDb.SnapshotRoot{Some{path}, None{},
+                  retained_bytes, delta}, roots})
 
 def generation.references.some(
   sst_path: Maybe<&1, String>,
   generation_copies: U32 & U32,
   retained_bytes: Nat,
   delta: List<&1, ByteMemTable.Entry>,
-  rest: List<&2, U32> & List<&1, ByteDb.SnapshotRoot>
-) -> List<&2, U32> & List<&1, ByteDb.SnapshotRoot>:
+  rest: GenerationReferences & List<&1, ByteDb.SnapshotRoot>
+) -> GenerationReferences & List<&1, ByteDb.SnapshotRoot>:
   match generation_copies:
     case (reference, retained):
       match rest:
-        case (references, roots):
-          (Con{reference, references},
+        case (GenerationReferences{generations, legacy}, roots):
+          (GenerationReferences{Con{reference, generations}, legacy},
             Con{ByteDb.SnapshotRoot{sst_path, Some{retained},
               retained_bytes, delta}, roots})
 
 def generation.references(
   roots: List<&1, ByteDb.SnapshotRoot>
-) -> List<&2, U32> & List<&1, ByteDb.SnapshotRoot>:
+) -> GenerationReferences & List<&1, ByteDb.SnapshotRoot>:
   match roots:
-    case Nil{}: (Nil{}, Nil{})
+    case Nil{}: (GenerationReferences{Nil{}, False{}}, Nil{})
     case Con{root, tail}:
       match root:
         case ByteDb.SnapshotRoot{sst_path, sst_generation,
@@ -136,10 +152,10 @@ def generation.can.reclaim.restored(
   ids: List<&2, U32>,
   candidate: U32,
   published: Maybe<&1, U32>,
-  references: List<&2, U32> & List<&1, ByteDb.SnapshotRoot>
+  references: GenerationReferences & List<&1, ByteDb.SnapshotRoot>
 ) -> Bool & Store:
   match references:
-    case (generations, roots):
+    case (GenerationReferences{generations, _}, roots):
       (GenerationRetention.can_reclaim(candidate, published, generations),
         Store{registry, ids, roots})
 
@@ -152,6 +168,34 @@ def generation.can.reclaim(
     case Store{registry, ids, roots}:
       generation.can.reclaim.restored(registry, ids, candidate, published,
         generation.references(roots))
+
+def retired_files.count.restored(
+  registry: Snapshot.OwnerRegistry,
+  ids: List<&2, U32>,
+  references: GenerationReferences & List<&1, ByteDb.SnapshotRoot>
+) -> Nat & Store:
+  match references:
+    case (GenerationReferences{generations, legacy}, roots):
+      (GenerationRetention.unique_file_count(generations, legacy),
+        Store{registry, ids, roots})
+
+def retired_files.count(store: Store) -> Nat & Store:
+  match store:
+    case Store{registry, ids, roots}:
+      retired_files.count.restored(registry, ids, generation.references(roots))
+
+def retired_files.within(count: Nat, maximum: U32) -> Bool:
+  Nat.is_le(count, U32.to_nat(maximum))
+
+def retired_files.can_compact.result(
+  counted: Nat & Store,
+  maximum: U32
+) -> Bool & Store:
+  match counted:
+    case (count, store): (retired_files.within(count, maximum), store)
+
+def retired_files.can_compact(store: Store, maximum: U32) -> Bool & Store:
+  retired_files.can_compact.result(retired_files.count(store), maximum)
 
 def open.root.allocated(
   registry: Snapshot.OwnerRegistry,
@@ -190,8 +234,12 @@ def open.root.copies(
         case (request_root, retained_root):
           match request_root:
             case ByteDb.SnapshotRoot{_, _, retained_bytes, _}:
-              open.root.result(Snapshot.owner.snapshot.open(registry,
-                generation, retained_bytes, limits), ids, roots, retained_root)
+              match limits:
+                case (max_snapshots, max_retained_bytes):
+                  open.root.result(Snapshot.owner.snapshot.open(registry,
+                    generation, retained_bytes,
+                    (max_snapshots, max_retained_bytes)), ids, roots,
+                    retained_root)
 
 def open.root(
   store: Store,
@@ -409,6 +457,25 @@ def lookup.root(store: Store, snapshot_id: U32) -> LookupResult:
   match store:
     case Store{registry, ids, roots}:
       lookup.root.copies(registry, ids.clone.pair(ids), roots, snapshot_id)
+
+def value.length.lookup.result(
+  result: LookupResult,
+  key: Bytes.Bytes
+) -> Store & IO(Result<&1, &1, ByteDb.Error, Maybe<&1, U32>>):
+  match result:
+    case RootFound{store, root}:
+      (store, ByteDb.snapshot.root.value_length(root, key))
+    case RootMissing{store}:
+      (store, IO.pure(Result<&1, &1, ByteDb.Error, Maybe<&1, U32>>,
+        Done{None{}}))
+
+# Handles value length.
+def value_length(
+  store: Store,
+  snapshot_id: U32,
+  key: Bytes.Bytes
+) -> Store & IO(Result<&1, &1, ByteDb.Error, Maybe<&1, U32>>):
+  value.length.lookup.result(lookup.root(store, snapshot_id), key)
 
 def roots.count(roots: List<&1, ByteDb.SnapshotRoot>) -> Nat:
   match roots:
@@ -736,3 +803,229 @@ def cursor.close(store: Store, cursor_id: U32) -> CursorCloseResult:
     case Store{registry, ids, roots}:
       cursor.close.result(ids, roots,
         Snapshot.owner.cursor.close(registry, cursor_id))
+
+# Carries the state for CursorSnapshotFindState.
+type CursorSnapshotFindState is Type:
+  CursorSnapshotSearching{remaining: List<&2, Snapshot.CursorResource>,
+    cursor_id: U32}
+  CursorSnapshotComparing{matches: Bool, snapshot_id: U32,
+    remaining: List<&2, Snapshot.CursorResource>, cursor_id: U32}
+  CursorSnapshotFinished{result: Maybe<&2, U32>}
+
+def cursor.snapshot.id.compare(
+  copies: U32 & U32,
+  id: U32,
+  snapshot_id: U32,
+  tail: List<&2, Snapshot.CursorResource>
+) -> CursorSnapshotFindState:
+  match copies:
+    case (query_id, retained_id):
+      CursorSnapshotComparing{U32.is_eq(id, query_id), snapshot_id,
+        tail, retained_id}
+
+def cursor.snapshot.id.advance(state: CursorSnapshotFindState) -> CursorSnapshotFindState:
+  match state:
+    case CursorSnapshotSearching{remaining, cursor_id}:
+      match remaining:
+        case Nil{}: CursorSnapshotFinished{None{}}
+        case Con{Snapshot.CursorResource{id, snapshot_id}, tail}:
+          cursor.snapshot.id.compare(TransportBudget.tx.u32.duplicate(cursor_id),
+            id, snapshot_id, tail)
+    case CursorSnapshotComparing{matches, snapshot_id, remaining, cursor_id}:
+      match matches:
+        case True{}: CursorSnapshotFinished{Some{snapshot_id}}
+        case False{}: CursorSnapshotSearching{remaining, cursor_id}
+    case _: state
+
+def cursor.snapshot.id.process(
+  fuel: Nat,
+  state: CursorSnapshotFindState
+) -> Maybe<&2, U32>:
+  match fuel:
+    case 0n:
+      match state:
+        case CursorSnapshotFinished{result}: result
+        case _: None{}
+    case 1n+rest:
+      match state:
+        case CursorSnapshotFinished{Some{snapshot_id}}: Some{snapshot_id}
+        case CursorSnapshotFinished{None{}}: None{}
+        case _:
+          cursor.snapshot.id.process(rest,
+            cursor.snapshot.id.advance(state))
+
+def cursor.snapshot.id.find(
+  +cursors: List<&2, Snapshot.CursorResource>,
+  cursor_id: U32
+) -> Maybe<&2, U32>:
+  cursor.snapshot.id.process(
+    Nat.add(Nat.mul(List.length(&2, Snapshot.CursorResource, cursors), 2n), 1n),
+    CursorSnapshotSearching{cursors, cursor_id})
+
+# Carries the state for SnapshotRetainedFindState.
+type SnapshotRetainedFindState is Type:
+  SnapshotRetainedSearching{remaining: List<&2, Snapshot.SnapshotResource>,
+    snapshot_id: U32}
+  SnapshotRetainedComparing{matches: Bool, retained_bytes: Nat,
+    remaining: List<&2, Snapshot.SnapshotResource>, snapshot_id: U32}
+  SnapshotRetainedFinished{result: Maybe<&2, Nat>}
+
+def snapshot.retained.bytes.compare(
+  copies: U32 & U32,
+  id: U32,
+  retained_bytes: Nat,
+  tail: List<&2, Snapshot.SnapshotResource>
+) -> SnapshotRetainedFindState:
+  match copies:
+    case (query_id, retained_id):
+      SnapshotRetainedComparing{U32.is_eq(id, query_id), retained_bytes,
+        tail, retained_id}
+
+def snapshot.retained.bytes.advance(
+  state: SnapshotRetainedFindState
+) -> SnapshotRetainedFindState:
+  match state:
+    case SnapshotRetainedSearching{remaining, snapshot_id}:
+      match remaining:
+        case Nil{}: SnapshotRetainedFinished{None{}}
+        case Con{Snapshot.SnapshotResource{id, _, retained_bytes, _}, tail}:
+          snapshot.retained.bytes.compare(
+            TransportBudget.tx.u32.duplicate(snapshot_id), id,
+            retained_bytes, tail)
+    case SnapshotRetainedComparing{matches, retained_bytes, remaining,
+        snapshot_id}:
+      match matches:
+        case True{}: SnapshotRetainedFinished{Some{retained_bytes}}
+        case False{}: SnapshotRetainedSearching{remaining, snapshot_id}
+    case _: state
+
+def snapshot.retained.bytes.process(
+  fuel: Nat,
+  state: SnapshotRetainedFindState
+) -> Maybe<&2, Nat>:
+  match fuel:
+    case 0n:
+      match state:
+        case SnapshotRetainedFinished{result}: result
+        case _: None{}
+    case 1n+rest:
+      match state:
+        case SnapshotRetainedFinished{Some{retained_bytes}}:
+          Some{retained_bytes}
+        case SnapshotRetainedFinished{None{}}: None{}
+        case _:
+          snapshot.retained.bytes.process(rest,
+            snapshot.retained.bytes.advance(state))
+
+def snapshot.retained.bytes.find(
+  +snapshots: List<&2, Snapshot.SnapshotResource>,
+  snapshot_id: U32
+) -> Maybe<&2, Nat>:
+  snapshot.retained.bytes.process(
+    Nat.add(Nat.mul(List.length(&2, Snapshot.SnapshotResource, snapshots), 2n), 1n),
+    SnapshotRetainedSearching{snapshots, snapshot_id})
+
+def cursor.retained.bytes.lookup(
+  snapshots: List<&2, Snapshot.SnapshotResource>,
+  snapshot_id: Maybe<&2, U32>
+) -> Maybe<&2, Nat>:
+  match snapshot_id:
+    case None{}: None{}
+    case Some{id}: snapshot.retained.bytes.find(snapshots, id)
+
+def cursor.retained.bytes(
+  registry: Snapshot.OwnerRegistry,
+  cursor_id: U32
+) -> Maybe<&2, Nat>:
+  match registry:
+    case Snapshot.OwnerRegistry{_, _, snapshots, cursors}:
+      cursor.retained.bytes.lookup(snapshots,
+        cursor.snapshot.id.find(cursors, cursor_id))
+
+def cursor.response.bound.retained(
+  retained_bytes: Maybe<&2, Nat>,
+  response_bytes: U32
+) -> TransportBudget.BoundDecision:
+  match retained_bytes:
+    case None{}: TransportBudget.Bounded{0, 28n}
+    case Some{bytes}:
+      TransportBudget.tx.cursor.bound(bytes, response_bytes)
+
+def snapshot.response.bound.retained(
+  retained_bytes: Maybe<&2, Nat>,
+  response_bytes: U32
+) -> TransportBudget.BoundDecision:
+  match retained_bytes:
+    case None{}: TransportBudget.Bounded{0, 28n}
+    case Some{bytes}:
+      TransportBudget.tx.payload.bound(bytes, response_bytes)
+
+def snapshot.response.bound.measure(
+  registry: Snapshot.OwnerRegistry,
+  snapshot_id: U32
+) -> Maybe<&2, Nat>:
+  match registry:
+    case Snapshot.OwnerRegistry{_, _, snapshots, _}:
+      snapshot.retained.bytes.find(snapshots, snapshot_id)
+
+def snapshot.response.bound.decision(
+  registry: Snapshot.OwnerRegistry,
+  snapshot_id: U32,
+  response_bytes: U32
+) -> TransportBudget.BoundDecision:
+  snapshot.response.bound.retained(
+    snapshot.response.bound.measure(registry, snapshot_id), response_bytes)
+
+def snapshot.response.bound.preserved(
+  ids: List<&2, U32>,
+  roots: List<&1, ByteDb.SnapshotRoot>,
+  registries: Snapshot.OwnerRegistry & Snapshot.OwnerRegistry,
+  snapshot_id: U32,
+  response_bytes: U32
+) -> Store & TransportBudget.BoundDecision:
+  match registries:
+    case (store_registry, query_registry):
+      (Store{store_registry, ids, roots},
+        snapshot.response.bound.decision(query_registry, snapshot_id,
+          response_bytes))
+
+def snapshot.response.bound(
+  store: Store,
+  snapshot_id: U32,
+  response_bytes: U32
+) -> Store & TransportBudget.BoundDecision:
+  match store:
+    case Store{registry, ids, roots}:
+      snapshot.response.bound.preserved(ids, roots,
+        Snapshot.owner.registry.clone(registry), snapshot_id, response_bytes)
+
+def cursor.response.bound.decision(
+  registry: Snapshot.OwnerRegistry,
+  cursor_id: U32,
+  response_bytes: U32
+) -> TransportBudget.BoundDecision:
+  cursor.response.bound.retained(
+    cursor.retained.bytes(registry, cursor_id), response_bytes)
+
+def cursor.response.bound.preserved(
+  ids: List<&2, U32>,
+  roots: List<&1, ByteDb.SnapshotRoot>,
+  registries: Snapshot.OwnerRegistry & Snapshot.OwnerRegistry,
+  cursor_id: U32,
+  response_bytes: U32
+) -> Store & TransportBudget.BoundDecision:
+  match registries:
+    case (store_registry, query_registry):
+      (Store{store_registry, ids, roots},
+        cursor.response.bound.decision(query_registry, cursor_id,
+          response_bytes))
+
+def cursor.response.bound(
+  store: Store,
+  cursor_id: U32,
+  response_bytes: U32
+) -> Store & TransportBudget.BoundDecision:
+  match store:
+    case Store{registry, ids, roots}:
+      cursor.response.bound.preserved(ids, roots,
+        Snapshot.owner.registry.clone(registry), cursor_id, response_bytes)

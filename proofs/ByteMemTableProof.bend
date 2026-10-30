@@ -56,6 +56,20 @@ def Laws.probe_distinguishes_absence():
 def Laws.probe_finds_live_value():
   {==}
 
+def Laws.length_probe_returns_value_size_without_cloning_it():
+  {==}
+
+def Laws.length_probe_distinguishes_tombstone():
+  {==}
+
+def Laws.length_probe_distinguishes_absence():
+  {==}
+
+def Laws.length_probe_hit_preserves_arbitrary_value_ownership(
+  _prefix, _key, _tail, _value_length, _value_buffer
+):
+  {==}
+
 def Laws.strict_order_rejects_duplicate_keys():
   {==}
 

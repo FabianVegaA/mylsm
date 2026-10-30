@@ -1,6 +1,17 @@
 import Base
 import ../laws/CoordinatorProtocol.bend as Laws
 
+def Laws.response_allocation_has_exact_frame_length(
+  _version, _generation, _request_id, _status, _payload_length,
+  _payload_buffer
+):
+  {==}
+
+def Laws.control_response_reuses_the_header_allocation(
+  _header_buffer, _status_code
+):
+  {==}
+
 def Laws.protocol_payload_at_record_ceiling_is_admitted():
   {==}
 
@@ -92,4 +103,16 @@ def Laws.maximum_declared_payload_is_rejected():
   {==}
 
 def Laws.maximum_operation_tag_is_rejected():
+  {==}
+
+def Laws.incomplete_header_does_not_admit_a_frame():
+  {==}
+
+def Laws.header_inspection_rejects_a_non_header_buffer():
+  {==}
+
+def Laws.valid_header_exposes_bounded_frame_length():
+  {==}
+
+def Laws.oversized_header_is_rejected_before_payload_read():
   {==}

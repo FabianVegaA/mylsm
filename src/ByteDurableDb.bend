@@ -10,6 +10,7 @@ import ./DbLock.bend as DbLock
 import ./DurableError.bend as DurableError
 import ./DurableBatchPolicy.bend as BatchPolicy
 import ./coordinator/QueuePolicy.bend as QueuePolicy
+import ./coordinator/SnapshotValueLengthPolicy.bend as SnapshotValueLengthPolicy
 import ./Fs.bend as Fs
 import ./Keys.bend as Keys
 import ./scan/Cursor.bend as Cursor
@@ -22,6 +23,7 @@ import ./scan/VisibleStats.bend as VisibleStats
 import ./CrashPoint.bend as CrashPoint
 import ./scan/ScanWorkPolicy.bend as ScanWorkPolicy
 import ./ByteRecoveryPolicy.bend as RecoveryPolicy
+import ./ValueLengthPolicy.bend as ValueLengthPolicy
 import ./Wal.bend as Wal
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
@@ -1353,6 +1355,155 @@ def get.retained(
   match pair:
     case (Handle{path, lock, table, state, _}, result):
       (Handle{path, lock, table, state, base_stats}, result)
+
+def get.length.sst.result(
+  +path: String,
+  lock: DbLock.Lock,
+  table: ByteMemTable.Table,
+  result: Result<&1, &1, U32 & String, ByteWal.ValueMetadata>
+) -> Handle & Result<&1, &1, Error, Maybe<&1, U32>>:
+  match result:
+    case Fail{(code, message)}:
+      (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}},
+        Fail{recovery.error(code, message)})
+    case Done{ByteWal.ValueAbsent{}}:
+      (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}},
+        Done{None{}})
+    case Done{ByteWal.ValueDeleted{}}:
+      (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}},
+        Done{None{}})
+    case Done{ByteWal.ValuePresent{value_bytes}}:
+      (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}},
+        Done{Some{value_bytes}})
+
+def get.length.sst(
+  paths: String & String,
+  lock: DbLock.Lock,
+  table: ByteMemTable.Table,
+  key: Bytes.Bytes
+) -> IO(Handle & Result<&1, &1, Error, Maybe<&1, U32>>):
+  match paths:
+    case (sst_path, db_path):
+      do IO<Handle & Result<&1, &1, Error, Maybe<&1, U32>>>:
+        measured : Result<&1, &1, U32 & String, ByteWal.ValueMetadata> <-
+          SstCursor.measure_key(sst_path, key)
+        return get.length.sst.result(db_path, lock, table, measured)
+
+def get.length.manifest.fallback(
+  +path: String,
+  lock: DbLock.Lock,
+  key: Bytes.Bytes,
+  table: ByteMemTable.Table,
+  result: Result<&1, &1, ByteManifestIo.Error, ByteManifest.ManifestValue>
+) -> IO(Handle & Result<&1, &1, Error, Maybe<&1, U32>>):
+  match result:
+    case Fail{ByteManifestIo.Invalid{_}}:
+      IO.pure(Handle & Result<&1, &1, Error, Maybe<&1, U32>>,
+        (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}},
+          Fail{Corruption{"byte manifest validation failed"}}))
+    case Fail{ByteManifestIo.Host{code, message}}:
+      IO.pure(Handle & Result<&1, &1, Error, Maybe<&1, U32>>,
+        (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}},
+          Fail{Io{code, message}}))
+    case Done{ByteManifest.Empty{}}:
+      IO.pure(Handle & Result<&1, &1, Error, Maybe<&1, U32>>,
+        (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}},
+          Done{None{}}))
+    case Done{ByteManifest.GenerationEmpty{}}:
+      IO.pure(Handle & Result<&1, &1, Error, Maybe<&1, U32>>,
+        (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}},
+          Done{None{}}))
+    case Done{ByteManifest.HasSst{}}:
+      get.length.sst((path.clone.pair(path ++ "/SST")), lock, table, key)
+    case Done{ByteManifest.GenerationSst{file_id}}:
+      get.length.sst((ByteManifest.sst.generation.path(path, file_id), path),
+        lock, table, key)
+
+def get.length.manifest(
+  +path: String,
+  lock: DbLock.Lock,
+  key: Bytes.Bytes,
+  table: ByteMemTable.Table,
+  result: Result<&1, &1, ByteManifestIo.Error, ByteManifest.ManifestValue>
+) -> IO(Handle & Result<&1, &1, Error, Maybe<&1, U32>>):
+  get.length.manifest.fallback(path, lock, key, table, result)
+
+def get.length.probed(
+  +path: String,
+  lock: DbLock.Lock,
+  key: Bytes.Bytes,
+  pair: ByteMemTable.Table & ByteMemTable.LengthProbe
+) -> IO(Handle & Result<&1, &1, Error, Maybe<&1, U32>>):
+  match pair:
+    case (table, ByteMemTable.LengthDeleted{}):
+      IO.pure(Handle & Result<&1, &1, Error, Maybe<&1, U32>>,
+        (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}},
+          Done{None{}}))
+    case (table, ByteMemTable.LengthPresent{value_bytes}):
+      IO.pure(Handle & Result<&1, &1, Error, Maybe<&1, U32>>,
+        (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}},
+          Done{Some{value_bytes}}))
+    case (table, ByteMemTable.LengthAbsent{}):
+      do IO<Handle & Result<&1, &1, Error, Maybe<&1, U32>>>:
+        manifest : Result<&1, &1, ByteManifestIo.Error, ByteManifest.ManifestValue> <-
+          ByteManifestIo.read(path ++ "/MANIFEST")
+        get.length.manifest(path, lock, key, table, manifest)
+
+def get.length.delta(
+  +path: String,
+  lock: DbLock.Lock,
+  keys: Bytes.Bytes & Bytes.Bytes,
+  table: ByteMemTable.Table
+) -> IO(Handle & Result<&1, &1, Error, Maybe<&1, U32>>):
+  match keys:
+    case (probe_key, fallback_key):
+      get.length.probed(path, lock, fallback_key,
+        ByteMemTable.probe.length(table, probe_key))
+
+def value_length.preserve.handle(
+  +path: String,
+  lock: DbLock.Lock,
+  table: ByteMemTable.Table,
+  state: HandleState,
+  base_stats: VisibleStats.Stats,
+  result: Result<&1, &1, Error, Maybe<&1, U32>>
+) -> Handle & Result<&1, &1, Error, Maybe<&1, U32>>:
+  (Handle{path, lock, table, state, base_stats}, result)
+
+def value_length.preserve(
+  base_stats: VisibleStats.Stats,
+  pair: Handle & Result<&1, &1, Error, Maybe<&1, U32>>
+) -> Handle & Result<&1, &1, Error, Maybe<&1, U32>>:
+  match pair:
+    case (Handle{path, lock, table, state, _}, Done{Some{value_bytes}}):
+      value_length.preserve.handle(path, lock, table, state,
+        ValueLengthPolicy.after_lookup(base_stats,
+          ValueLengthPolicy.ValueFound{}), Done{Some{value_bytes}})
+    case (Handle{path, lock, table, state, _}, Done{None{}}):
+      value_length.preserve.handle(path, lock, table, state,
+        ValueLengthPolicy.after_lookup(base_stats,
+          ValueLengthPolicy.ValueMissing{}), Done{None{}})
+    case (Handle{path, lock, table, state, _}, Fail{error}):
+      value_length.preserve.handle(path, lock, table, state,
+        ValueLengthPolicy.after_lookup(base_stats,
+          ValueLengthPolicy.LookupFailed{}), Fail{error})
+
+# Handles value length.
+def value_length(
+  handle: Handle,
+  key: Bytes.Bytes
+) -> IO(Handle & Result<&1, &1, Error, Maybe<&1, U32>>):
+  match handle:
+    case Handle{path, lock, table, Open{}, base_stats}:
+      do IO<Handle & Result<&1, &1, Error, Maybe<&1, U32>>>:
+        measured : Handle & Result<&1, &1, Error, Maybe<&1, U32>> <-
+          get.length.delta(path, lock, ByteMemTable.bytes.clone(key), table)
+        return value_length.preserve(base_stats, measured)
+    case Handle{path, lock, table, Poisoned{}, base_stats}:
+      IO.pure(Handle & Result<&1, &1, Error, Maybe<&1, U32>>,
+        (Handle{path, lock, table, Poisoned{}, base_stats},
+          Fail{CommitUnknown{0, "database handle requires reopen"}}))
+
 
 # Reads one raw byte key while retaining the database handle.
 def get(
@@ -2804,6 +2955,108 @@ def snapshot.root.get(
   key: Bytes.Bytes
 ) -> IO(Result<&1, &1, Error, Maybe<&1, Bytes.Bytes>>):
   snapshot.root.get.copied(root, ByteMemTable.bytes.clone(key))
+
+def snapshot.root.value.length.decision(
+  decision: SnapshotValueLengthPolicy.Decision
+) -> Result<&1, &1, Error, Maybe<&1, U32>>:
+  match decision:
+    case SnapshotValueLengthPolicy.NeedSst{}: Fail{ResourceLimit{}}
+    case SnapshotValueLengthPolicy.Missing{}: Done{None{}}
+    case SnapshotValueLengthPolicy.Found{value_bytes}:
+      Done{Some{value_bytes}}
+
+def snapshot.root.value.length.metadata(
+  probe: ByteMemTable.LengthProbe,
+  measured: Result<&1, &1, U32 & String, ByteWal.ValueMetadata>
+) -> Result<&1, &1, Error, Maybe<&1, U32>>:
+  match measured:
+    case Fail{(code, message)}:
+      Fail{recovery.error(code, message)}
+    case Done{metadata}:
+      snapshot.root.value.length.decision(
+        SnapshotValueLengthPolicy.result(probe, metadata))
+
+def snapshot.root.value.length.metadata.read(
+  sst_path: Maybe<&1, String>,
+  probe: ByteMemTable.LengthProbe,
+  key: Bytes.Bytes
+) -> IO(Result<&1, &1, Error, Maybe<&1, U32>>):
+  match sst_path:
+    case None{}:
+      IO.pure(Result<&1, &1, Error, Maybe<&1, U32>>,
+        snapshot.root.value.length.metadata(probe,
+          Done{ByteWal.ValueAbsent{}}))
+    case Some{path}:
+      do IO<Result<&1, &1, Error, Maybe<&1, U32>>>:
+        measured : Result<&1, &1, U32 & String, ByteWal.ValueMetadata> <-
+          SstCursor.measure_key(path, key)
+        return snapshot.root.value.length.metadata(probe, measured)
+
+def snapshot.root.value.length.delta.output(
+  sst_path: Maybe<&1, String>,
+  sst_generation: Maybe<&1, U32>,
+  retained_bytes: Nat,
+  lookup_key: Bytes.Bytes,
+  looked_up: ByteMemTable.Table & ByteMemTable.LengthProbe
+) -> SnapshotRoot & ByteMemTable.LengthProbe & Bytes.Bytes:
+  match looked_up:
+    case (ByteMemTable.Table{entries}, probe):
+      (SnapshotRoot{sst_path, sst_generation, retained_bytes, entries},
+        probe, lookup_key)
+
+def snapshot.root.value.length.delta.counted(
+  sst_path: Maybe<&1, String>,
+  sst_generation: Maybe<&1, U32>,
+  retained_bytes: Nat,
+  keys: Bytes.Bytes & Bytes.Bytes,
+  counted: List<&1, ByteMemTable.Entry> & Nat
+) -> SnapshotRoot & ByteMemTable.LengthProbe & Bytes.Bytes:
+  match keys:
+    case (probe_key, lookup_key):
+      snapshot.root.value.length.delta.output(sst_path, sst_generation,
+        retained_bytes, lookup_key,
+        ByteMemTable.lookup.length.start.counted(probe_key, counted))
+
+def snapshot.root.value.length.delta(
+  root: SnapshotRoot,
+  keys: Bytes.Bytes & Bytes.Bytes
+) -> SnapshotRoot & ByteMemTable.LengthProbe & Bytes.Bytes:
+  match root:
+    case SnapshotRoot{sst_path, sst_generation, retained_bytes, delta}:
+      snapshot.root.value.length.delta.counted(sst_path, sst_generation,
+        retained_bytes, keys, ByteMemTable.count.keep(delta))
+
+def snapshot.root.value.length.dispatch(
+  root: SnapshotRoot,
+  +probe: ByteMemTable.LengthProbe,
+  key: Bytes.Bytes,
+  decision: SnapshotValueLengthPolicy.Decision
+) -> IO(Result<&1, &1, Error, Maybe<&1, U32>>):
+  match root:
+    case SnapshotRoot{sst_path, _, _, _}:
+      match decision:
+        case SnapshotValueLengthPolicy.NeedSst{}:
+          snapshot.root.value.length.metadata.read(sst_path, probe, key)
+        case SnapshotValueLengthPolicy.Missing{}:
+          IO.pure(Result<&1, &1, Error, Maybe<&1, U32>>, Done{None{}})
+        case SnapshotValueLengthPolicy.Found{value_bytes}:
+          IO.pure(Result<&1, &1, Error, Maybe<&1, U32>>,
+            Done{Some{value_bytes}})
+
+def snapshot.root.value.length.probed(
+  measured: SnapshotRoot & ByteMemTable.LengthProbe & Bytes.Bytes
+) -> IO(Result<&1, &1, Error, Maybe<&1, U32>>):
+  match measured:
+    case (root, (+probe, key)):
+      snapshot.root.value.length.dispatch(root, probe, key,
+        SnapshotValueLengthPolicy.delta(probe))
+
+def snapshot.root.value_length(
+  root: SnapshotRoot,
+  key: Bytes.Bytes
+) -> IO(Result<&1, &1, Error, Maybe<&1, U32>>):
+  snapshot.root.value.length.probed(snapshot.root.value.length.delta(root,
+    ByteMemTable.bytes.clone(key)))
 
 # Restores a read handle after byte lookup.
 def close.released(

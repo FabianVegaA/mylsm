@@ -1,10 +1,19 @@
 import Base
 import ./UnixSocketPolicy.bend as Policy
+import ./UnixSocketTypes.bend as SocketTypes
 
 # Represents an unavailable socket primitive or another raw host failure.
 type Error is Data:
   UnsupportedPlatform{}
+  Transient{code: U32}
   Host{code: U32, message: String}
+
+# Carries the state for PollStatus.
+type PollStatus is Data:
+  Readable{}
+  ReadableFailed{}
+  Idle{}
+  Failed{}
 
 # Classifies the platform-specific unsupported syscall codes.
 def unsupported_code(+code: U32) -> Bool:
@@ -18,6 +27,7 @@ def classify.mapping(
 ) -> Error:
   match classification:
     case Policy.UnsupportedPlatform{}: UnsupportedPlatform{}
+    case Policy.Transient{code}: Transient{code}
     case Policy.Host{code}: Host{code, message}
 
 # Converts a pure platform classification into the socket error surface.
@@ -48,6 +58,34 @@ def classify_file_result(
   match pair:
     case (server, Done{client}): (server, Done{client})
     case (server, Fail{error}): (server, Fail{classify(error)})
+
+# Handles classify poll result.
+def classify_poll_result(
+  result: Result<&1, &1, U32 & String, U32>
+) -> Result<&1, &1, Error, U32>:
+  match result:
+    case Done{ready}: Done{ready}
+    case Fail{error}: Fail{classify(error)}
+
+def poll.status.classified(status: Policy.PollStatus) -> PollStatus:
+  match status:
+    case Policy.Readable{}: Readable{}
+    case Policy.ReadableFailed{}: ReadableFailed{}
+    case Policy.Idle{}: Idle{}
+    case Policy.Failed{}: Failed{}
+
+def poll.status(flags: U32) -> PollStatus:
+  poll.status.classified(Policy.poll_status(flags))
+
+def poll.failure.retryable(action: Policy.PollFailureAction) -> Bool:
+  match action:
+    case Policy.Retry{}: True{}
+    case Policy.Stop{}: False{}
+
+def poll.error.retryable(error: Error) -> Bool:
+  match error:
+    case Transient{code}: poll.failure.retryable(Policy.poll.failure(code))
+    case _: False{}
 
 # Rewrites a socket-creation error into the typed platform domain.
 def classify_created(
@@ -119,6 +157,79 @@ def accept(
     pair : File & Result<&1, &1, U32 & String, File> <-
       unix_socket_accept(server)
     return classify_file_result(pair)
+
+# Handles unix socket nonblocking.
+def unix_socket_nonblocking(
+  socket: File
+) -> IO(File & Result<&1, &1, U32 & String, Unit>):
+  import "../effs/unix_socket_nonblocking.c"
+  import "../effs/unix_socket_nonblocking.js"
+
+# Handles nonblocking.
+def nonblocking(
+  socket: File
+) -> IO(File & Result<&1, &1, Error, Unit>):
+  do IO<File & Result<&1, &1, Error, Unit>>:
+    result : File & Result<&1, &1, U32 & String, Unit> <-
+      unix_socket_nonblocking(socket)
+    return classify_file_unit(result)
+
+# Handles unix socket poll.
+def unix_socket_poll(
+  socket: File,
+  events: U32,
+  timeout_ms: U32
+) -> IO(File & Result<&1, &1, U32 & String, U32>):
+  import "../effs/unix_socket_poll.c"
+  import "../effs/unix_socket_poll.js"
+
+# Handles classify poll pair.
+def classify_poll_pair(
+  pair: File & Result<&1, &1, U32 & String, U32>
+) -> File & Result<&1, &1, Error, U32>:
+  match pair:
+    case (file, result): (file, classify_poll_result(result))
+
+# Handles poll.
+def poll(
+  socket: File,
+  events: U32,
+  timeout_ms: U32
+) -> IO(File & Result<&1, &1, Error, U32>):
+  do IO<File & Result<&1, &1, Error, U32>>:
+    pair : File & Result<&1, &1, U32 & String, U32> <-
+      unix_socket_poll(socket, events, timeout_ms)
+    return classify_poll_pair(pair)
+
+# Handles unix socket poll many.
+def unix_socket_poll_many(
+  interests: List<SocketTypes.PollInterest>,
+  timeout_ms: U32
+) -> IO(List<SocketTypes.PollInterest> &
+  Result<&1, &1, U32 & String, List<&2, SocketTypes.ReadyEvent>>):
+  import "../effs/unix_socket_poll_many.c"
+  import "../effs/unix_socket_poll_many.js"
+
+def poll_many.result(
+  pair: List<SocketTypes.PollInterest> & Result<&1, &1, U32 & String, List<&2, SocketTypes.ReadyEvent>>
+) -> List<SocketTypes.PollInterest> &
+  Result<&1, &1, Error, List<&2, SocketTypes.ReadyEvent>>:
+  match pair:
+    case (interests, Done{flags}): (interests, Done{flags})
+    case (interests, Fail{error}): (interests, Fail{classify(error)})
+
+# Handles poll many.
+def poll_many(
+  interests: List<SocketTypes.PollInterest>,
+  timeout_ms: U32
+) -> IO(List<SocketTypes.PollInterest> &
+  Result<&1, &1, Error, List<&2, SocketTypes.ReadyEvent>>):
+  do IO<List<SocketTypes.PollInterest> &
+    Result<&1, &1, Error, List<&2, SocketTypes.ReadyEvent>>>:
+    pair : List<SocketTypes.PollInterest> &
+      Result<&1, &1, U32 & String, List<&2, SocketTypes.ReadyEvent>> <-
+        unix_socket_poll_many(interests, timeout_ms)
+    return poll_many.result(pair)
 
 # Connects one client socket descriptor to a validated local endpoint path.
 def unix_socket_connect(

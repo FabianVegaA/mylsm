@@ -1,6 +1,7 @@
 import Base
 import ../../mylsm.bend as MyLSM
 import ../../src/Console.bend as Console
+import ../../src/ResourceOptions.bend as ResourceOptions
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 def bytes.from_hex.result(result: Maybe<&1, Bytes.Bytes>) -> Bytes.Bytes:
@@ -415,13 +416,49 @@ def if.owner.action.result(
     case True{}: backup.opened(backup_path, result)
     case False{}: opened(result)
 
+def mismatched.options() -> ResourceOptions.Options:
+  ResourceOptions.Options{
+    ResourceOptions.TransportLimits{65, 16777216, 16777216, 16777216,
+      30000, 30000},
+    ResourceOptions.QueueLimits{64, 16777216, 30000},
+    ResourceOptions.ReaderLimits{64, 4096, 64, 67108864, 64,
+      16384, 65536, 67108864}}
+
+def mismatched.open.result(
+  +path: String,
+  action: String,
+  backup_path: String,
+  result: Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Handle>
+) -> IO(Unit):
+  match result:
+    case Fail{MyLSM.InvalidArgument{}}:
+      do IO<Unit>:
+        opened : Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Handle> <-
+          MyLSM.Bytes.open_existing_with_options(path,
+            ResourceOptions.defaults())
+        if.owner.action.result(String.eq(action, "backup"), backup_path,
+          opened)
+    case Done{handle}:
+      do IO<Unit>:
+        _closed : Result<&1, &1, MyLSM.Bytes.Error, Unit> <-
+          MyLSM.Bytes.close(handle)
+        fail("public options mismatch was accepted")
+    case Fail{_}: fail("public options mismatch returned the wrong error")
+
+def mismatched.open(
+  +path: String,
+  action: String,
+  backup_path: String
+) -> IO(Unit):
+  do IO<Unit>:
+    result : Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Handle> <-
+      MyLSM.Bytes.open_existing_with_options(path, mismatched.options())
+    mismatched.open.result(path, action, backup_path, result)
+
 def main() -> IO(Unit):
   do IO<Unit>:
     path : String <- IO.try(String, Console.get_env("MYLSM_DB_PATH"))
     action : String <- IO.try(String, Console.get_env("MYLSM_OWNER_ACTION"))
     backup_path : String <- IO.try(String,
       Console.get_env("MYLSM_BACKUP_PATH"))
-    backup_mode : Bool = String.eq(action, "backup")
-    result : Result<&1, &1, MyLSM.Bytes.Error, MyLSM.Bytes.Handle> <-
-      MyLSM.Bytes.open_existing_wait(path, 1000, 10)
-    if.owner.action.result(backup_mode, backup_path, result)
+    mismatched.open(path, action, backup_path)

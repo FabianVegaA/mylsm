@@ -1,5 +1,6 @@
 import Base
 import ./Wal.bend as Wal
+import ./Keys.bend as Keys
 import ./StorageBytes.bend as StorageBytes
 import ./hub_sha/sha256.bend as SHA
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
@@ -18,6 +19,38 @@ type DecodedRecord is Type:
   RecordDone{frame: Bytes.Bytes, offset: U32, mutation: Mutation}
   RecordError{frame: Bytes.Bytes, error: Wal.Error}
 
+# Carries the state for RecordMetadata.
+type RecordMetadata is Type:
+  RecordMetadata{next_offset: U32, key: Bytes.Bytes,
+    has_value: Bool, value_bytes: U32}
+
+# Carries the state for RecordMeasure.
+type RecordMeasure is Type:
+  RecordMeasure{frame: Bytes.Bytes,
+    result: Result<&1, &1, Wal.Error, RecordMetadata>}
+
+# Carries the state for ValueMetadata.
+type ValueMetadata is Data:
+  ValueAbsent{}
+  ValueDeleted{}
+  ValuePresent{value_bytes: U32}
+
+# Carries the state for MeasureProgress.
+type MeasureProgress is Type:
+  MeasureProgress{query: Bytes.Bytes, records_end: U32,
+    found: Bool, has_value: Bool, value_bytes: U32}
+
+# Carries the state for MeasureState.
+type MeasureState is Type:
+  MeasureNext{frame: Bytes.Bytes, offset: U32, remaining: Nat,
+    progress: MeasureProgress}
+  MeasureRead{remaining: Nat, progress: MeasureProgress,
+    measured: RecordMeasure}
+  MeasureCompared{frame: Bytes.Bytes, next_offset: U32,
+    remaining: Nat, progress: MeasureProgress, has_value: Bool,
+    value_bytes: U32, order: Cmp}
+  MeasureFailed{error: Wal.Error}
+
 # Carries bounded frame parsing and newest-first decoded mutations.
 type DecodeState is Type:
   DecodeNext{frame: Bytes.Bytes, offset: U32, remaining: Nat,
@@ -32,6 +65,12 @@ type FrameHeader is Type:
 # Carries the final parser offset with its affine mutations.
 type ParsedBatch is Type:
   ParsedBatch{offset: U32, batch: Batch}
+
+def u32.clone.pair(+value: U32) -> U32 & U32:
+  (value, value)
+
+def u32.clone.triple(+value: U32) -> U32 & U32 & U32:
+  (value, (value, value))
 
 # Encodes a raw key deletion using the shared bounded record layout.
 def record.delete(key: Bytes.Bytes) -> Result<&1, &1, Wal.Error, Bytes.Bytes>:
@@ -347,6 +386,434 @@ def record.tag(
 def record.decode(frame: Bytes.Bytes, +offset: U32) -> DecodedRecord:
   record.tag(Bytes.get(frame, offset), offset)
 
+def record.measure.pack(
+  frame: Bytes.Bytes,
+  result: Result<&1, &1, Wal.Error, RecordMetadata>
+) -> RecordMeasure:
+  RecordMeasure{frame, result}
+
+def record.measure.result(measured: RecordMeasure)
+  -> Result<&1, &1, Wal.Error, RecordMetadata>:
+  match measured:
+    case RecordMeasure{_, result}: result
+
+def record.measure.value.result(
+  frame: Bytes.Bytes,
+  key: Bytes.Bytes,
+  +value_length: U32,
+  value_offset: U32,
+  valid: Bool
+) -> RecordMeasure:
+  match valid:
+    case True{}:
+      value_end : U32 = U32.add(value_offset, 4)
+      record.measure.pack(frame, Done{RecordMetadata{
+        U32.add(value_end, value_length), key, True{}, value_length}})
+    case False{}: record.measure.pack(frame, Fail{Wal.Malformed{}})
+
+def record.measure.value.checked(
+  measured: Bytes.Bytes & U32,
+  key: Bytes.Bytes,
+  +value_length: U32,
+  offsets: U32 & U32
+) -> RecordMeasure:
+  match measured:
+    case (frame, total):
+      match offsets:
+        case (checked_offset, result_offset):
+          record.measure.value.result(frame, key, value_length, result_offset,
+            U32.is_le(value_length, StorageBytes.MAX_RECORD_BYTES()) &&
+              bytes.interval.length(total, U32.add(checked_offset, 4),
+                value_length))
+
+def record.measure.value(
+  measured: Bytes.Bytes & U32,
+  key: Bytes.Bytes,
+  +value_length: U32,
+  value_offset: U32
+) -> RecordMeasure:
+  record.measure.value.checked(measured, key, value_length,
+    u32.clone.pair(value_offset))
+
+def record.measure.value.length(
+  pair: Bytes.Bytes & Maybe<&2, U32>,
+  key: Bytes.Bytes,
+  value_length_offset: U32
+) -> RecordMeasure:
+  match pair:
+    case (frame, length):
+      match length:
+        case Some{value_length}:
+          record.measure.value(Bytes.length(frame), key, value_length,
+            value_length_offset)
+        case None{}:
+          record.measure.pack(frame, Fail{Wal.Malformed{}})
+
+def record.measure.value.length.read(
+  frame: Bytes.Bytes,
+  key: Bytes.Bytes,
+  offsets: U32 & U32
+) -> RecordMeasure:
+  match offsets:
+    case (read_offset, value_length_offset):
+      record.measure.value.length(
+        Bytes.get.u32be(frame, read_offset), key, value_length_offset)
+
+def record.measure.key.finished(
+  pair: Bytes.Bytes & Bytes.Bytes,
+  tag: U32,
+  +_key_length: U32,
+  value_offset: U32
+) -> RecordMeasure:
+  match pair:
+    case (frame, key):
+      match tag:
+        case 0:
+          record.measure.value.length.read(frame, key,
+            u32.clone.pair(value_offset))
+        case 1:
+          record.measure.pack(frame,
+            Done{RecordMetadata{value_offset, key, False{}, 0}})
+        case _:
+          record.measure.pack(frame, Fail{Wal.Malformed{}})
+
+def record.measure.key.result(
+  frame: Bytes.Bytes,
+  tag: U32,
+  +key_length: U32,
+  valid: Bool,
+  offsets: U32 & U32
+) -> RecordMeasure:
+  match valid:
+    case True{}:
+      match offsets:
+        case (slice_offset, key_offset):
+          record.measure.key.finished(Bytes.slice(frame, slice_offset,
+            key_length), tag, key_length, key_offset)
+    case False{}: record.measure.pack(frame, Fail{Wal.Malformed{}})
+
+def record.measure.key.checked(
+  measured: Bytes.Bytes & U32,
+  tag: U32,
+  +key_length: U32,
+  offsets: U32 & U32 & U32
+) -> RecordMeasure:
+  match measured:
+    case (frame, total):
+      match offsets:
+        case (checked_offset, (slice_offset, value_offset)):
+          record.measure.key.result(frame, tag, key_length,
+            U32.is_le(key_length, StorageBytes.MAX_RECORD_BYTES()) &&
+              bytes.interval.length(total, checked_offset, key_length),
+            (slice_offset, U32.add(value_offset, key_length)))
+
+def record.measure.key.length(
+  measured: Bytes.Bytes & U32,
+  tag: U32,
+  +key_length: U32,
+  key_offset: U32
+) -> RecordMeasure:
+  record.measure.key.checked(measured, tag, key_length,
+    u32.clone.triple(key_offset))
+
+def record.measure.key.length.read(
+  pair: Bytes.Bytes & Maybe<&2, U32>,
+  tag: U32,
+  key_offset: U32
+) -> RecordMeasure:
+  match pair:
+    case (frame, length):
+      match length:
+        case Some{key_length}:
+          record.measure.key.length(Bytes.length(frame), tag, key_length,
+            key_offset)
+        case None{}:
+          record.measure.pack(frame, Fail{Wal.Malformed{}})
+
+def record.measure.tag(
+  pair: Bytes.Bytes & Maybe<&2, U32>,
+  offsets: U32 & U32
+) -> RecordMeasure:
+  match pair:
+    case (frame, tag):
+      match tag:
+        case Some{0}:
+          match offsets:
+            case (length_offset, key_offset):
+              record.measure.key.length.read(
+                Bytes.get.u32be(frame, length_offset), 0, key_offset)
+        case Some{1}:
+          match offsets:
+            case (length_offset, key_offset):
+              record.measure.key.length.read(
+                Bytes.get.u32be(frame, length_offset), 1, key_offset)
+        case _:
+          record.measure.pack(frame, Fail{Wal.Malformed{}})
+
+def record.measure.retained(frame: Bytes.Bytes, +offset: U32)
+  -> RecordMeasure:
+  record.measure.tag(Bytes.get(frame, offset),
+    (U32.add(offset, 1), U32.add(offset, 5)))
+
+def record.measure(frame: Bytes.Bytes, +offset: U32)
+  -> Result<&1, &1, Wal.Error, RecordMetadata>:
+  record.measure.result(record.measure.retained(frame, offset))
+
+def measure.checksum.comparison(
+  frame: Bytes.Bytes,
+  comparison: Bytes.Bytes & Bytes.Bytes & Bool
+) -> Bytes.Bytes & Bool:
+  match comparison:
+    case (_, _, valid): (frame, valid)
+
+def measure.checksum.claimed(
+  pair: Bytes.Bytes & Bytes.Bytes,
+  digest: Bytes.Bytes
+) -> Bytes.Bytes & Bool:
+  match pair:
+    case (frame, claimed):
+      measure.checksum.comparison(frame, Bytes.eq(claimed, digest))
+
+def measure.checksum.range.claimed(
+  pair: Bytes.Bytes & Bytes.Bytes,
+  digest: Bytes.Bytes
+) -> Bytes.Bytes & Bool:
+  measure.checksum.claimed(pair, digest)
+
+def measure.checksum.range.prefix(
+  pair: Bytes.Bytes & Bytes.Bytes,
+  +base: U32,
+  +total: U32
+) -> Bytes.Bytes & Bool:
+  match pair:
+    case (frame, prefix):
+      measure.checksum.range.claimed(
+        Bytes.slice(frame, U32.add(base, U32.sub(total, 32)), 32),
+        SHA.sha256_packed_bytes(prefix))
+
+def measure.checksum.range(
+  frame: Bytes.Bytes,
+  +base: U32,
+  +total: U32
+) -> Bytes.Bytes & Bool:
+  measure.checksum.range.prefix(
+    Bytes.slice(frame, base, U32.sub(total, 32)), base, total)
+
+def measure.checksum(frame: Bytes.Bytes, +total: U32) -> Bytes.Bytes & Bool:
+  measure.checksum.range(frame, 0, total)
+
+def measure.lookup.finish.absent(exact: Bool)
+  -> Result<&1, &1, Wal.Error, ValueMetadata>:
+  match exact:
+    case False{}: Fail{Wal.Malformed{}}
+    case True{}: Done{ValueAbsent{}}
+
+def measure.lookup.finish.present(
+  has_value: Bool,
+  +value_bytes: U32,
+  exact: Bool
+) -> Result<&1, &1, Wal.Error, ValueMetadata>:
+  match has_value:
+    case True{}:
+      match exact:
+        case False{}: Fail{Wal.Malformed{}}
+        case True{}: Done{ValuePresent{value_bytes}}
+    case False{}:
+      match exact:
+        case False{}: Fail{Wal.Malformed{}}
+        case True{}: Done{ValueDeleted{}}
+
+def measure.lookup.finish(
+  progress: MeasureProgress,
+  offset: U32
+) -> Result<&1, &1, Wal.Error, ValueMetadata>:
+  match progress:
+    case MeasureProgress{_, records_end, found, has_value, value_bytes}:
+      match found:
+        case False{}: measure.lookup.finish.absent(
+          U32.is_eq(offset, records_end))
+        case True{}:
+          measure.lookup.finish.present(has_value, value_bytes,
+            U32.is_eq(offset, records_end))
+
+def measure.lookup.progress(
+  query: Bytes.Bytes,
+  records_end: U32
+) -> MeasureProgress:
+  MeasureProgress{query, records_end, False{}, False{}, 0}
+
+def measure.lookup.compared(
+  frame: Bytes.Bytes,
+  next_offset: U32,
+  remaining: Nat,
+  records_end: U32,
+  found: Bool,
+  prior_has_value: Bool,
+  prior_value_bytes: U32,
+  record_has_value: Bool,
+  record_value_bytes: U32,
+  comparison: Bytes.Bytes & Bytes.Bytes & Cmp
+) -> MeasureState:
+  match comparison:
+    case (_, query, order):
+      MeasureCompared{frame, next_offset, remaining,
+        MeasureProgress{query, records_end, found, prior_has_value,
+          prior_value_bytes}, record_has_value, record_value_bytes, order}
+
+def measure.lookup.read.result(
+  frame: Bytes.Bytes,
+  remaining: Nat,
+  progress: MeasureProgress,
+  result: Result<&1, &1, Wal.Error, RecordMetadata>
+) -> MeasureState:
+  match progress:
+    case MeasureProgress{query, records_end, found, prior_has_value,
+      prior_value_bytes}:
+      match result:
+        case Fail{error}: MeasureFailed{error}
+        case Done{RecordMetadata{next_offset, key, has_value, value_bytes}}:
+          measure.lookup.compared(frame, next_offset, remaining,
+            records_end, found, prior_has_value, prior_value_bytes,
+            has_value, value_bytes,
+            Keys.Bytes.cmp.with_inputs(key, query))
+
+def measure.lookup.read(
+  remaining: Nat,
+  progress: MeasureProgress,
+  measured: RecordMeasure
+) -> MeasureState:
+  match measured:
+    case RecordMeasure{frame, result}:
+      measure.lookup.read.result(frame, remaining, progress, result)
+
+def measure.lookup.loop(fuel: Nat, state: MeasureState)
+  -> Result<&1, &1, Wal.Error, ValueMetadata>:
+  match fuel:
+    case 0n: Fail{Wal.Malformed{}}
+    case 1n+rest:
+      match state:
+        case MeasureNext{frame, offset, remaining, progress}:
+          match remaining:
+            case 0n: measure.lookup.finish(progress, offset)
+            case 1n+more:
+              measure.lookup.loop(rest,
+                MeasureRead{more, progress,
+                  record.measure.retained(frame, offset)})
+        case MeasureRead{remaining, progress, measured}:
+          measure.lookup.loop(rest,
+            measure.lookup.read(remaining, progress, measured))
+        case MeasureCompared{frame, next_offset, remaining, progress,
+          record_has_value, record_value_bytes, order}:
+          match progress:
+            case MeasureProgress{query, records_end, found, has_value,
+              value_bytes}:
+              match order:
+                case EQ{}:
+                  measure.lookup.loop(rest,
+                    MeasureNext{frame, next_offset, remaining,
+                      MeasureProgress{query, records_end, True{},
+                        record_has_value, record_value_bytes}})
+                case _:
+                  measure.lookup.loop(rest,
+                    MeasureNext{frame, next_offset, remaining,
+                      MeasureProgress{query, records_end, found, has_value,
+                        value_bytes}})
+        case MeasureFailed{error}: Fail{error}
+
+def measure.lookup.records.bound(
+  frame: Bytes.Bytes,
+  query: Bytes.Bytes,
+  +count: U32,
+  +offset: U32,
+  +records_end: U32
+) -> Result<&1, &1, Wal.Error, ValueMetadata>:
+  measure.lookup.loop(Nat.add(Nat.mul(3n, U32.to_nat(count)), 1n),
+    MeasureNext{frame, offset, U32.to_nat(count),
+      measure.lookup.progress(query, records_end)})
+
+def measure.lookup.records(
+  frame: Bytes.Bytes,
+  query: Bytes.Bytes,
+  +count: U32,
+  +total: U32
+) -> Result<&1, &1, Wal.Error, ValueMetadata>:
+  +records_end = U32.sub(total, 32)
+  measure.lookup.records.bound(frame, query, count, 8, records_end)
+
+def measure.lookup.checksum.result(
+  pair: Bytes.Bytes & Bool,
+  query: Bytes.Bytes,
+  +base: U32,
+  +count: U32,
+  +total: U32
+) -> Result<&1, &1, Wal.Error, ValueMetadata>:
+  match pair:
+    case (frame, valid):
+      match valid:
+        case True{}:
+          measure.lookup.records.bound(frame, query, count,
+            U32.add(base, 8), U32.add(base, U32.sub(total, 32)))
+        case False{}: Fail{Wal.ChecksumMismatch{}}
+
+def frame.bounds.valid(+frame_length: U32, +count: U32, +total: U32) -> Bool:
+  U32.is_le(36, frame_length) &&
+    Nat.is_eq(U32.to_nat(total), Nat.add(U32.to_nat(frame_length), 4n)) &&
+    Nat.is_le(U32.to_nat(count), Nat.div(U32.to_nat(frame_length), 5n)) &&
+    Wal.frame_length_allowed(count, frame_length)
+
+def measure.lookup.bounded.valid(
+  frame: Bytes.Bytes,
+  query: Bytes.Bytes,
+  +base: U32,
+  +count: U32,
+  +total: U32,
+  valid: Bool
+) -> Result<&1, &1, Wal.Error, ValueMetadata>:
+  match valid:
+    case False{}: Fail{Wal.Malformed{}}
+    case True{}:
+      measure.lookup.checksum.result(
+        measure.checksum.range(frame, base, total), query, base, count, total)
+
+def measure.lookup.bounded.measured(
+  measured: Bytes.Bytes & U32,
+  query: Bytes.Bytes,
+  +base: U32,
+  +frame_length: U32,
+  +count: U32,
+  +total: U32
+) -> Result<&1, &1, Wal.Error, ValueMetadata>:
+  match measured:
+    case (frame, buffer_length):
+      measure.lookup.bounded.valid(frame, query, base, count, total,
+        frame.bounds.valid(frame_length, count, total) &&
+          bytes.interval.length(buffer_length, base, total))
+
+def measure.lookup.bounded(
+  frame: Bytes.Bytes,
+  query: Bytes.Bytes,
+  +base: U32,
+  +frame_length: U32,
+  +count: U32,
+  +total: U32
+) -> Result<&1, &1, Wal.Error, ValueMetadata>:
+  measure.lookup.bounded.measured(Bytes.length(frame), query, base,
+    frame_length, count, total)
+
+def measure.lookup.header(header: FrameHeader, query: Bytes.Bytes)
+  -> Result<&1, &1, Wal.Error, ValueMetadata>:
+  match header:
+    case FrameHeader{frame, +frame_length, +count, +total}:
+      measure.lookup.bounded(frame, query, 0, frame_length, count, total)
+
+def measure.lookup.header.result(
+  result: Result<&1, &1, Wal.Error, FrameHeader>,
+  query: Bytes.Bytes
+) -> Result<&1, &1, Wal.Error, ValueMetadata>:
+  match result:
+    case Fail{error}: Fail{error}
+    case Done{header}: measure.lookup.header(header, query)
+
 # Decodes the exact number of records declared by a WAL frame.
 def decode.records.loop(fuel: Nat, state: DecodeState) -> Result<&1, &1, Wal.Error, ParsedBatch>:
   match fuel:
@@ -382,13 +849,6 @@ def decode.header.validated(
       Fail{Wal.Malformed{}}
     case True{}:
       Done{FrameHeader{frame, frame_length, count, total}}
-
-# Validates the declared count and full frame length.
-def frame.bounds.valid(+frame_length: U32, +count: U32, +total: U32) -> Bool:
-  U32.is_le(36, frame_length) &&
-    Nat.is_eq(U32.to_nat(total), Nat.add(U32.to_nat(frame_length), 4n)) &&
-    Nat.is_le(U32.to_nat(count), Nat.div(U32.to_nat(frame_length), 5n)) &&
-    Wal.frame_length_allowed(count, frame_length)
 
 # Validates the declared count and full frame length.
 def decode.header.count(
@@ -504,6 +964,10 @@ def decode.frame.length(pair: Bytes.Bytes & U32) -> Result<&1, &1, Wal.Error, Fr
   match pair:
     case (frame, +total):
       decode.header.length(Bytes.get.u32be(frame, 0), total)
+
+def measure.lookup(frame: Bytes.Bytes, query: Bytes.Bytes)
+  -> Result<&1, &1, Wal.Error, ValueMetadata>:
+  measure.lookup.header.result(decode.frame.length(Bytes.length(frame)), query)
 
 # Dispatches a parsed header to the full bounded frame decoder.
 def decode.frame.header.result(

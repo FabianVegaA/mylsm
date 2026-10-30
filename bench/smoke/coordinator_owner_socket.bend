@@ -4,6 +4,7 @@ import ../../src/ByteMemTable.bend as ByteMemTable
 import ../../src/Console.bend as Console
 import ../../src/DbLock.bend as DbLock
 import ../../src/Fs.bend as Fs
+import ../../src/ResourceOptions.bend as ResourceOptions
 import ../../src/coordinator/Owner.bend as Owner
 import ../../src/coordinator/OwnerCursorStore.bend as OwnerCursorStore
 import ../../src/coordinator/OwnerSnapshotStore.bend as OwnerSnapshots
@@ -42,8 +43,9 @@ def listening(
 ) -> IO(Unit):
   match pair:
     case (server, Done{Unit{}}):
-      Owner.serve.loop(105n,
-        Owner.Serving{server, handle, endpoint, 1, OwnerSnapshots.empty(),
+      Owner.serve.loop(117n,
+        Owner.Serving{server, handle, endpoint, 1,
+          ResourceOptions.defaults(), OwnerSnapshots.empty(),
           OwnerCursorStore.empty()})
     case (server, Fail{_}): failed(server, handle, endpoint, "owner listen failed")
 

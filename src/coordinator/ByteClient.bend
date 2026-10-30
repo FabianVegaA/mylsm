@@ -7,6 +7,7 @@ import ./OwnerCursorCodec.bend as OwnerCursorCodec
 import ./CursorCountPolicy.bend as CursorCountPolicy
 import ./CursorOpenCodec.bend as CursorOpenCodec
 import ./StatsCodec.bend as StatsCodec
+import ./OptionsCodec.bend as OptionsCodec
 import ../ByteWal.bend as ByteWal
 import ../Wal.bend as Wal
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
@@ -21,6 +22,25 @@ type SnapshotCountState is Type:
   SnapshotCountItem{session: Client.Session, cursor_id: U32,
     decision: CursorCountPolicy.Decision}
 
+def describe.result(
+  pair: Client.Session & Result<&1, &1, Client.Error, Protocol.Response>
+) -> Client.Session & Result<&1, &1, Client.Error, OptionsCodec.Decision>:
+  match pair:
+    case (session, Fail{error}): (session, Fail{error})
+    case (session, Done{Protocol.Response{_, _, _, status, payload}}):
+      match status:
+        case Protocol.Success{}: (session, Done{OptionsCodec.decode(payload)})
+        case _: (session, Fail{Client.OwnerRejected{status}})
+
+# Handles describe owner.
+def describe_owner(
+  session: Client.Session
+) -> IO(Client.Session & Result<&1, &1, Client.Error, OptionsCodec.Decision>):
+  do IO<Client.Session & Result<&1, &1, Client.Error, OptionsCodec.Decision>>:
+    pair : Client.Session &
+      Result<&1, &1, Client.Error, Protocol.Response> <-
+        Client.session.describe_owner(session)
+    return describe.result(pair)
 def result.failure(
   error: Client.Error
 ) -> Result<&1, &1, Client.Error, Maybe<&1, Bytes.Bytes>>:

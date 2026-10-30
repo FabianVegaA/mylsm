@@ -9,8 +9,8 @@ Term clock_monotonic_run(Env e, Term* f, IoWork* w) {
   if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
     return io_fail(e, errno, NULL);
   }
-  uint64_t nanos = (uint64_t)now.tv_sec * 1000000000ULL + (uint64_t)now.tv_nsec;
-  return io_done(e, nanos);
+  uint64_t micros = (uint64_t)now.tv_sec * 1000000ULL + (uint64_t)now.tv_nsec / 1000ULL;
+  return io_done(e, micros);
 }
 
 static void __attribute__((constructor)) clock_monotonic_use(void) {

@@ -6,6 +6,8 @@ import ../../src/coordinator/StatsCodec.bend as StatsCodec
 import ../../src/coordinator/CursorCodec.bend as CursorCodec
 import ../../src/coordinator/Io.bend as ClientIo
 import ../../src/coordinator/Protocol.bend as Protocol
+import ../../src/coordinator/OptionsCodec.bend as OptionsCodec
+import ../../src/ResourceOptions.bend as ResourceOptions
 import ../../src/coordinator/UnixSocketIo.bend as UnixSocket
 import ../../src/ByteWal.bend as ByteWal
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
@@ -46,6 +48,7 @@ def owner.rejection.status(status: Protocol.ResponseStatus) -> IO(Unit):
 def owner.read.error(error: ClientIo.Error) -> IO(Unit):
   match error:
     case ClientIo.UnsupportedPlatform{}: fail("owner response socket unsupported")
+    case ClientIo.Transient{_}: fail("owner response read was interrupted")
     case ClientIo.Host{code, _}:
       fail("owner response read host error " ++ Nat.show(U32.to_nat(code)))
     case ClientIo.Truncated{}: fail("owner returned a truncated response")
@@ -653,13 +656,57 @@ def disconnect.created(
         disconnect.connected(connected)
     case (Fail{_}, _): fail("coordinator disconnect fixture could not create socket")
 
-def disconnect.endpoint(paths: String & String) -> IO(Unit):
+def disconnect.endpoint.core(paths: String & String) -> IO(Unit):
   match paths:
     case (endpoint, retained_endpoint):
       do IO<Unit>:
         created : Result<&1, &1, UnixSocket.Error, File> <- UnixSocket.create()
         _disconnected : Unit <- disconnect.created((created, endpoint))
         put.request(retained_endpoint)
+
+def describe.checked(paths: String & String, matches: Bool) -> IO(Unit):
+  match matches:
+    case True{}: disconnect.endpoint.core(paths)
+    case False{}: fail("owner options handshake differs from defaults")
+
+def describe.result(
+  pair: Client.Session &
+    Result<&1, &1, Client.Error, OptionsCodec.Decision>,
+  paths: String & String
+) -> IO(Unit):
+  match pair:
+    case (_, Done{OptionsCodec.Parsed{options}}):
+      describe.checked(paths,
+        bytes.equal(Bytes.eq(OptionsCodec.encode(options),
+          OptionsCodec.encode(ResourceOptions.defaults()))))
+    case _: fail("owner options handshake failed")
+
+def describe.paths.result(
+  endpoints: String & String,
+  retained: String
+) -> String & (String & String):
+  match endpoints:
+    case (client_endpoint, path_endpoint):
+      (client_endpoint, (path_endpoint, retained))
+
+def describe.paths(paths: String & String) -> String & (String & String):
+  match paths:
+    case (endpoint, retained):
+      describe.paths.result(endpoint.clone.pair(endpoint), retained)
+
+def disconnect.endpoint.ready(
+  endpoints: String & (String & String)
+) -> IO(Unit):
+  match endpoints:
+    case (endpoint, retained_paths):
+      do IO<Unit>:
+        described : Client.Session &
+          Result<&1, &1, Client.Error, OptionsCodec.Decision> <-
+            ByteClient.describe_owner(Client.session.open(endpoint, 1))
+        describe.result(described, retained_paths)
+
+def disconnect.endpoint(paths: String & String) -> IO(Unit):
+  disconnect.endpoint.ready(describe.paths(paths))
 
 # Exercises a serialized binary put and read through independent IPC calls.
 def main() -> IO(Unit):

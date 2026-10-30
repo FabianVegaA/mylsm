@@ -20,6 +20,21 @@ type Probe is Type:
   Deleted{}
   Present{value: Bytes.Bytes}
 
+# Carries the state for LengthProbe.
+type LengthProbe is Data:
+  LengthAbsent{}
+  LengthDeleted{}
+  LengthPresent{value_bytes: U32}
+
+# Carries the state for LengthLookup.
+type LengthLookup is Type:
+  LengthLookup{entries: List<&1, Entry>, result: LengthProbe, found: Bool}
+
+# Carries the state for LengthSearch.
+type LengthSearch is Type:
+  LengthSearch{query: Bytes.Bytes, entries: List<&1, Entry>,
+    prefix: List<&1, Entry>, order: Cmp}
+
 # Carries affine search state across lexicographic comparisons.
 type Search is Type:
   Search{query: Bytes.Bytes, entries: List<&1, Entry>, prefix: List<&1, Entry>, order: Cmp}
@@ -322,6 +337,104 @@ def probe(table: Table, query: Bytes.Bytes) -> Table & Probe:
   match table:
     case Table{entries}:
       lookup.start.probe.pair(query, count.keep(entries))
+
+def lookup.length.result(
+  prefix: List<&1, Entry>,
+  remaining: List<&1, Entry>,
+  result: LengthProbe,
+  found: Bool
+) -> LengthLookup:
+  LengthLookup{append(List.reverse(&1, Entry, prefix), remaining), result,
+    found}
+
+def lookup.length.hit(
+  prefix: List<&1, Entry>,
+  key: Bytes.Bytes,
+  tail: List<&1, Entry>,
+  val: Maybe<&1, Bytes.Bytes>
+) -> LengthLookup:
+  match val:
+    case None{}:
+      lookup.length.result(prefix, Con{Entry{key, None{}}, tail},
+        LengthDeleted{}, True{})
+    case Some{Bytes.Bytes{+len, buf}}:
+      lookup.length.result(prefix,
+        Con{Entry{key, Some{Bytes.Bytes{len, buf}}}, tail},
+        LengthPresent{len}, True{})
+
+def lookup.length.state(
+  prefix: List<&1, Entry>,
+  val: Maybe<&1, Bytes.Bytes>,
+  tail: List<&1, Entry>,
+  comparison: Bytes.Bytes & Bytes.Bytes & Cmp
+) -> LengthSearch:
+  match comparison:
+    case (key, query, order):
+      LengthSearch{query, Con{Entry{key, val}, tail}, prefix, order}
+
+def lookup.length.advance(
+  query: Bytes.Bytes,
+  key: Bytes.Bytes,
+  val: Maybe<&1, Bytes.Bytes>,
+  tail: List<&1, Entry>,
+  prefix: List<&1, Entry>
+) -> LengthSearch:
+  match tail:
+    case Nil{}:
+      LengthSearch{query, Nil{}, Con{Entry{key, val}, prefix}, EQ{}}
+    case Con{Entry{next_key, next_val}, rest}:
+      lookup.length.state(Con{Entry{key, val}, prefix}, next_val, rest,
+        Keys.Bytes.cmp.with_inputs(next_key, query))
+
+def lookup.length.go(fuel: Nat, state: LengthSearch) -> LengthLookup:
+  match fuel:
+    case 0n:
+      match state:
+        case LengthSearch{_, entries, prefix, _}:
+          lookup.length.result(prefix, entries, LengthAbsent{}, False{})
+    case 1n+rest:
+      match state:
+        case LengthSearch{query, entries, prefix, order}:
+          match entries:
+            case Nil{}:
+              lookup.length.result(prefix, Nil{}, LengthAbsent{}, False{})
+            case Con{Entry{key, val}, tail}:
+              match order:
+                case EQ{}: lookup.length.hit(prefix, key, tail, val)
+                case LT{}:
+                  lookup.length.go(rest,
+                    lookup.length.advance(query, key, val, tail, prefix))
+                case GT{}:
+                  lookup.length.go(rest,
+                    lookup.length.advance(query, key, val, tail, prefix))
+
+def lookup.length.output(result: LengthLookup) -> Table & LengthProbe:
+  match result:
+    case LengthLookup{entries, result, _}: (Table{entries}, result)
+
+def lookup.length.start(
+  query: Bytes.Bytes,
+  entries: List<&1, Entry>,
+  count: Nat
+) -> Table & LengthProbe:
+  match entries:
+    case Nil{}: (Table{Nil{}}, LengthAbsent{})
+    case Con{Entry{key, val}, tail}:
+      lookup.length.output(lookup.length.go(Nat.add(count, 1n),
+        lookup.length.state(Nil{}, val, tail,
+          Keys.Bytes.cmp.with_inputs(key, query))))
+
+def lookup.length.start.counted(
+  query: Bytes.Bytes,
+  counted: List<&1, Entry> & Nat
+) -> Table & LengthProbe:
+  match counted:
+    case (entries, count): lookup.length.start(query, entries, count)
+
+def probe.length(table: Table, query: Bytes.Bytes) -> Table & LengthProbe:
+  match table:
+    case Table{entries}:
+      lookup.length.start.counted(query, count.keep(entries))
 
 # Reads a byte key and returns the still-owned table with the result.
 def get(table: Table, query: Bytes.Bytes) -> Table & Maybe<&1, Bytes.Bytes>:

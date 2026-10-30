@@ -8,6 +8,7 @@ import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 # Classifies framing, resource, and host failures from socket IO.
 type Error is Data:
   UnsupportedPlatform{}
+  Transient{code: U32}
   Host{code: U32, message: String}
   Truncated{}
   Malformed{}
@@ -20,6 +21,20 @@ type Error is Data:
 # Returns the terminal outcome of an exact-length socket transfer.
 type ExactResult is Type:
   ExactResult{bytes: Bytes.Bytes, complete: Bool}
+
+# Carries the state for ReadAttempt.
+type ReadAttempt is Type:
+  ReadAvailable{bytes: Bytes.Bytes}
+  ReadInterrupted{}
+  ReadWouldBlock{}
+  ReadFailed{error: Error}
+
+# Carries the state for WriteAttempt.
+type WriteAttempt is Type:
+  NonblockingWriteSent{bytes: Bytes.Bytes, sent: U32}
+  NonblockingWriteInterrupted{bytes: Bytes.Bytes}
+  NonblockingWriteWouldBlock{bytes: Bytes.Bytes}
+  NonblockingWriteFailed{bytes: Bytes.Bytes, error: Error}
 
 # Tracks partial transfer progress until the requested length is complete.
 type ExactState is Type:
@@ -53,6 +68,7 @@ def host.error.classified(
 ) -> Error:
   match classification:
     case UnixSocketPolicy.UnsupportedPlatform{}: UnsupportedPlatform{}
+    case UnixSocketPolicy.Transient{code}: Transient{code}
     case UnixSocketPolicy.Host{_}: Host{code, message}
 
 def host.error.copies(
@@ -108,6 +124,113 @@ def read.bytes(
     pair : File & Result<&1, &1, U32 & String, U32 & Array<U32>> <-
       read.words(file, max_bytes)
     return read.pair(pair)
+
+def read.nonblocking.classified(
+  file: File,
+  +code: U32,
+  message: String,
+  disposition: IoPolicy.ReadDisposition
+) -> File & ReadAttempt:
+  match disposition:
+    case IoPolicy.ReadInterrupted{}: (file, ReadInterrupted{})
+    case IoPolicy.ReadWouldBlock{}: (file, ReadWouldBlock{})
+    case IoPolicy.ReadFailure{}:
+      (file, ReadFailed{host.error(code, message)})
+
+def read.nonblocking.failed(
+  file: File,
+  pair: U32 & String
+) -> File & ReadAttempt:
+  match pair:
+    case (+code, message):
+      read.nonblocking.classified(file, code, message,
+        IoPolicy.read.disposition(code))
+
+def read.nonblocking.result(
+  pair: File & Result<&1, &1, U32 & String, Bytes.Bytes>
+) -> File & ReadAttempt:
+  match pair:
+    case (file, Done{bytes}): (file, ReadAvailable{bytes})
+    case (file, Fail{error}): read.nonblocking.failed(file, error)
+
+def read.nonblocking(
+  file: File,
+  max_bytes: U32
+) -> IO(File & ReadAttempt):
+  do IO<File & ReadAttempt>:
+    pair : File & Result<&1, &1, U32 & String, Bytes.Bytes> <-
+      read.bytes(file, max_bytes)
+    return read.nonblocking.result(pair)
+
+# Handles unix socket write nonblocking.
+def unix_socket_write_nonblocking(
+  file: File,
+  offset: U32,
+  length: U32,
+  words: Array<U32>
+) -> IO(File & (Array<U32> &
+  Result<&1, &1, U32 & String, U32>)):
+  import "../effs/unix_socket_write_nonblocking.c"
+  import "../effs/unix_socket_write_nonblocking.js"
+
+def write.nonblocking.classified(
+  file: File,
+  bytes: Bytes.Bytes,
+  +code: U32,
+  message: String,
+  disposition: IoPolicy.WriteDisposition
+) -> File & WriteAttempt:
+  match disposition:
+    case IoPolicy.WriteInterrupted{}:
+      (file, NonblockingWriteInterrupted{bytes})
+    case IoPolicy.WriteWouldBlock{}:
+      (file, NonblockingWriteWouldBlock{bytes})
+    case IoPolicy.WriteFailure{}:
+      (file, NonblockingWriteFailed{bytes, host.error(code, message)})
+
+def write.nonblocking.failed(
+  file: File,
+  bytes: Bytes.Bytes,
+  error: U32 & String
+) -> File & WriteAttempt:
+  match error:
+    case (+code, message):
+      write.nonblocking.classified(file, bytes, code, message,
+        IoPolicy.write.disposition(code))
+
+def write.nonblocking.wrap(
+  pair: File & (Array<U32> & Result<&1, &1, U32 & String, U32>),
+  total: U32
+) -> File & WriteAttempt:
+  match pair:
+    case (file, (words, result)):
+      match result:
+        case Done{sent}:
+          (file, NonblockingWriteSent{Bytes.Bytes{total, words}, sent})
+        case Fail{error}:
+          write.nonblocking.failed(file, Bytes.Bytes{total, words}, error)
+
+def write.nonblocking.start(
+  file: File,
+  offset: U32,
+  length: U32,
+  total: U32,
+  words: Array<U32>
+) -> IO(File & WriteAttempt):
+  do IO<File & WriteAttempt>:
+    pair : File & (Array<U32> & Result<&1, &1, U32 & String, U32>) <-
+      unix_socket_write_nonblocking(file, offset, length, words)
+    return write.nonblocking.wrap(pair, total)
+
+def write.nonblocking(
+  file: File,
+  offset: U32,
+  length: U32,
+  bytes: Bytes.Bytes
+) -> IO(File & WriteAttempt):
+  match bytes:
+    case Bytes.Bytes{total, words}:
+      write.nonblocking.start(file, offset, length, total, words)
 
 def write.words(
   file: File,
@@ -256,7 +379,7 @@ def write.start.total(
 ) -> IO(File & Result<&1, &1, U32 & String, Unit>):
   match total_copies:
     case (total, (bytes_length, _)):
-      write.loop(Nat.add(U32.to_nat(fuel_length), 1n),
+      write.loop(Nat.add(Nat.mul(4n, U32.to_nat(fuel_length)), 2n),
         WriteNeed{file, Protocol.u32.duplicate.triple(remaining_seed), total,
           Protocol.u32.duplicate.triple(0), Bytes.Bytes{bytes_length, words}})
 
@@ -386,7 +509,8 @@ def frame.result(
 
 def payload.result(
   header: Bytes.Bytes,
-  pair: File & Result<&1, &1, U32 & String, ExactResult>
+  pair: File & Result<&1, &1, U32 & String, ExactResult>,
+  max_payload: Nat
 ) -> IO(File & Result<&1, &1, Error, Protocol.Request>):
   match pair:
     case (file, Fail{(code, message)}):
@@ -400,59 +524,65 @@ def payload.result(
         case True{}:
           IO.pure(File & Result<&1, &1, Error, Protocol.Request>,
             frame.result(file, Protocol.decode(Bytes.concat([header, bytes]),
-              max_payload_bytes())))
+              max_payload)))
 
 def payload.header(
   file: File,
   header: Bytes.Bytes,
-  length: U32
+  length: U32,
+  max_payload: Nat
 ) -> IO(File & Result<&1, &1, Error, Protocol.Request>):
   do IO<File & Result<&1, &1, Error, Protocol.Request>>:
     payload : File & Result<&1, &1, U32 & String, ExactResult> <-
       exact.start(file, U32.to_nat(length))
-    payload.result(header, payload)
+    payload.result(header, payload, max_payload)
 
 def header.length(
   file: File,
   bytes: Bytes.Bytes,
-  length: Maybe<&2, U32>
+  length: Maybe<&2, U32>,
+  max_payload: Nat
 ) -> IO(File & Result<&1, &1, Error, Protocol.Request>):
   match length:
-    case Some{length}: payload.header(file, bytes, length)
+    case Some{length}: payload.header(file, bytes, length, max_payload)
     case None{}:
       IO.pure(File & Result<&1, &1, Error, Protocol.Request>,
         (file, Fail{Malformed{}}))
 
 def header.length.result(
   file: File,
-  pair: Bytes.Bytes & Maybe<&2, U32>
+  pair: Bytes.Bytes & Maybe<&2, U32>,
+  max_payload: Nat
 ) -> IO(File & Result<&1, &1, Error, Protocol.Request>):
   match pair:
-    case (bytes, length): header.length(file, bytes, length)
+    case (bytes, length): header.length(file, bytes, length, max_payload)
 
 def header.decision(
   file: File,
   bytes: Bytes.Bytes,
-  decision: Protocol.FrameDecision
+  decision: Protocol.FrameDecision,
+  max_payload: Nat
 ) -> IO(File & Result<&1, &1, Error, Protocol.Request>):
   match decision:
     case Protocol.NeedMore{}:
-      header.length.result(file, Bytes.get.u32be(bytes, 20))
+      header.length.result(file, Bytes.get.u32be(bytes, 20), max_payload)
     case _:
       IO.pure(File & Result<&1, &1, Error, Protocol.Request>,
         frame.result(file, decision))
 
 def header.cloned(
   file: File,
-  pair: Bytes.Bytes & Bytes.Bytes
+  pair: Bytes.Bytes & Bytes.Bytes,
+  +max_payload: Nat
 ) -> IO(File & Result<&1, &1, Error, Protocol.Request>):
   match pair:
     case (for_decode, retained):
       header.decision(file, retained,
-        Protocol.decode(for_decode, max_payload_bytes()))
+        Protocol.decode(for_decode, max_payload), max_payload)
 
 def header.result(
-  pair: File & Result<&1, &1, U32 & String, ExactResult>
+  pair: File & Result<&1, &1, U32 & String, ExactResult>,
+  max_payload: Nat
 ) -> IO(File & Result<&1, &1, Error, Protocol.Request>):
   match pair:
     case (file, Fail{(code, message)}):
@@ -464,7 +594,18 @@ def header.result(
           IO.pure(File & Result<&1, &1, Error, Protocol.Request>,
             (file, Fail{Truncated{}}))
         case True{}:
-          header.cloned(file, ByteMemTable.bytes.clone(bytes))
+            header.cloned(file, ByteMemTable.bytes.clone(bytes), max_payload)
+
+def read_request.limited(
+  file: File,
+  max_payload: Nat
+) -> IO(
+  File & Result<&1, &1, Error, Protocol.Request>
+):
+  do IO<File & Result<&1, &1, Error, Protocol.Request>>:
+    header : File & Result<&1, &1, U32 & String, ExactResult> <-
+      exact.start(file, 24n)
+    header.result(header, max_payload)
 
 # Reads and validates one length-bounded request frame.
 def read_request(
@@ -472,10 +613,7 @@ def read_request(
 ) -> IO(
   File & Result<&1, &1, Error, Protocol.Request>
 ):
-  do IO<File & Result<&1, &1, Error, Protocol.Request>>:
-    header : File & Result<&1, &1, U32 & String, ExactResult> <-
-      exact.start(file, 24n)
-    header.result(header)
+  read_request.limited(file, max_payload_bytes())
 
 def response.frame.result(
   file: File,

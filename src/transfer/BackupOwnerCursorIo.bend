@@ -60,13 +60,22 @@ def source.error(error: Client.Error) -> Backup.Error:
       Policy.source.error(Policy.ConnectHost{code, message})
     case Client.ConnectFailure{ClientSocket.UnsupportedPlatform{}}:
       Policy.source.error(Policy.ConnectUnsupported{})
+    case Client.ConnectFailure{ClientSocket.Transient{code}}:
+      Policy.source.error(Policy.ConnectHost{code,
+        "owner socket connection was interrupted"})
     case Client.RetryRead{ClientIo.Host{code, message}}:
       Policy.source.error(Policy.ReadHost{code, message})
     case Client.RetryRead{ClientIo.UnsupportedPlatform{}}:
       Policy.source.error(Policy.ReadUnsupported{})
+    case Client.RetryRead{ClientIo.Transient{code}}:
+      Policy.source.error(Policy.ReadHost{code,
+        "owner socket read was interrupted"})
     case Client.RetryRead{_}: Policy.source.error(Policy.ReadFailure{})
     case Client.CommitUnknown{ClientIo.Host{code, message}}:
       Policy.source.error(Policy.CommitHost{code, message})
+    case Client.CommitUnknown{ClientIo.Transient{code}}:
+      Policy.source.error(Policy.CommitHost{code,
+        "owner mutation response was interrupted"})
     case Client.CommitUnknown{_}: Policy.source.error(Policy.CommitFailure{})
     case Client.FrameTooLarge{}: Policy.source.error(Policy.FrameTooLarge{})
     case Client.StaleOwner{}: Policy.source.error(Policy.StaleOwner{})

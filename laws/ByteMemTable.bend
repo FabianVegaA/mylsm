@@ -174,6 +174,49 @@ law probe_finds_live_value:
     bytes.fixture(Bytes.from_hex("61")), bytes.fixture(Bytes.from_hex("80"))),
     bytes.fixture(Bytes.from_hex("61")))) == True{} : Bool}
 
+# Verifies length probe returns value size without cloning it.
+law length_probe_returns_value_size_without_cloning_it:
+  {ByteMemTable.probe.length(ByteMemTable.put(ByteMemTable.empty(),
+    bytes.fixture(Bytes.from_hex("61")), bytes.fixture(Bytes.from_hex("8081"))),
+    bytes.fixture(Bytes.from_hex("61"))) ==
+    (ByteMemTable.put(ByteMemTable.empty(),
+      bytes.fixture(Bytes.from_hex("61")),
+      bytes.fixture(Bytes.from_hex("8081"))),
+      ByteMemTable.LengthPresent{2}) :
+    ByteMemTable.Table & ByteMemTable.LengthProbe}
+
+# Verifies length probe distinguishes tombstone.
+law length_probe_distinguishes_tombstone:
+  {ByteMemTable.probe.length(ByteMemTable.del(ByteMemTable.empty(),
+    bytes.fixture(Bytes.from_hex("61"))),
+    bytes.fixture(Bytes.from_hex("61"))) ==
+    (ByteMemTable.del(ByteMemTable.empty(),
+      bytes.fixture(Bytes.from_hex("61"))), ByteMemTable.LengthDeleted{}) :
+    ByteMemTable.Table & ByteMemTable.LengthProbe}
+
+# Verifies length probe distinguishes absence.
+law length_probe_distinguishes_absence:
+  {ByteMemTable.probe.length(ByteMemTable.empty(),
+    bytes.fixture(Bytes.from_hex("61"))) ==
+    (ByteMemTable.empty(), ByteMemTable.LengthAbsent{}) :
+    ByteMemTable.Table & ByteMemTable.LengthProbe}
+
+# Verifies length probe hit preserves arbitrary value ownership.
+law length_probe_hit_preserves_arbitrary_value_ownership:
+  for prefix: List<&1, ByteMemTable.Entry>
+  for key: Bytes.Bytes
+  for tail: List<&1, ByteMemTable.Entry>
+  for value_length: U32
+  for value_buffer: Array<U32>
+  {ByteMemTable.lookup.length.hit(prefix, key, tail,
+      Some{Bytes.Bytes{value_length, value_buffer}}) ==
+    ByteMemTable.LengthLookup{ByteMemTable.append(
+      List.reverse(&1, ByteMemTable.Entry, prefix),
+      Con{ByteMemTable.Entry{key,
+        Some{Bytes.Bytes{value_length, value_buffer}}}, tail}),
+      ByteMemTable.LengthPresent{value_length}, True{}} :
+    ByteMemTable.LengthLookup}
+
 # Identical neighboring keys are rejected by the strict export-order check.
 law strict_order_rejects_duplicate_keys:
   {ByteMemTable.ordered.strict([ByteMemTable.Entry{bytes.fixture(Bytes.from_hex("61")),

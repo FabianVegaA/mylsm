@@ -1,4 +1,5 @@
 import Base
+import ../ByteMemTable.bend as ByteMemTable
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # Returns the maximum encoded request or response payload in bytes.
@@ -29,6 +30,14 @@ type FrameDecision is Type:
   UnknownOperation{}
   FrameTooLarge{}
   Decoded{request: Request}
+
+# Carries the state for HeaderDecision.
+type HeaderDecision is Data:
+  HeaderIncomplete{}
+  HeaderReady{frame_bytes: U32}
+  HeaderMalformed{}
+  HeaderUnknownOperation{}
+  HeaderTooLarge{}
 
 # Defines response outcomes carried independently from operation payloads.
 type ResponseStatus is Data:
@@ -149,12 +158,56 @@ def response.status.decode(code: U32) -> ResponseStatusDecision:
     case 12: ValidResponseStatus{UnsupportedFormat{}}
     case _: InvalidResponseStatus{}
 
+def response.encode.header(
+  buffer: Array<U32>,
+  version: U32,
+  generation: U32,
+  request_id: U32,
+  status_code: U32,
+  payload_length: U32
+) -> Array<U32>:
+  Bytes.put.go(4n,
+    Bytes.put.go(4n,
+      Bytes.put.go(4n,
+        Bytes.put.go(4n,
+          Bytes.put.go(4n,
+            Bytes.put.go(4n,
+              Bytes.put.go(4n, buffer, 3, False{}, 1296847670),
+              7, False{}, version),
+            11, False{}, generation),
+          15, False{}, request_id),
+        19, False{}, 7),
+      23, False{}, U32.add(payload_length, 4)),
+    27, False{}, status_code)
+
+def response.encode.payload(
+  version: U32,
+  generation: U32,
+  request_id: U32,
+  status_code: U32,
+  payload: Bytes.Bytes
+) -> Bytes.Bytes:
+  match payload:
+    case Bytes.Bytes{+length, buffer}:
+      Bytes.Bytes{U32.add(length, 28),
+        response.encode.header(
+          Bytes.dst(Bytes.copy(length, buffer,
+            Bytes.alloc(U32.add(length, 28)), 0, 28)),
+          version, generation, request_id, status_code, length)}
+
+def header.control(header: Bytes.Bytes, status_code: U32) -> Bytes.Bytes:
+  match header:
+    case Bytes.Bytes{24, buffer}:
+      Bytes.set.u32be(Bytes.set.u32be(Bytes.set.u32be(
+        Bytes.Bytes{28, buffer}, 16, 7), 20, 4), 24, status_code)
+    case _: Bytes.new(0)
+
 # Encodes a typed response status before its raw detail bytes.
 def encode_response(response: Response) -> Bytes.Bytes:
   match response:
-    case Response{+version, +generation, +request_id, status, payload}:
-      encode.fields(version, generation, request_id, 7,
-        Bytes.length(Bytes.concat([u32.bytes(response.status.code(status)), payload])))
+    case Response{version, generation, request_id, status, payload}:
+      response.encode.payload(version, generation, request_id,
+        response.status.code(status), payload)
 
 def decode.complete.payload(
   +version: U32,
@@ -342,6 +395,7 @@ def operation.valid(code: U32) -> Bool:
     case 13: True{}
     case 14: True{}
     case 15: True{}
+    case 16: True{}
     case _: False{}
 
 def operation.request.valid(code: U32) -> Bool:
@@ -360,6 +414,7 @@ def operation.request.valid(code: U32) -> Bool:
     case 13: True{}
     case 14: True{}
     case 15: True{}
+    case 16: True{}
     case _: False{}
 
 def decode.words.operation.validated(
@@ -507,6 +562,74 @@ def decode.header(input: Bytes.Bytes, max_payload_bytes: Nat) -> FrameDecision:
 # Decodes one complete frame or reports whether more input is required.
 def decode(input: Bytes.Bytes, max_payload_bytes: Nat) -> FrameDecision:
   decode.header(input, max_payload_bytes)
+
+def header.classify(
+  decision: FrameDecision,
+  frame_bytes: Maybe<&2, U32>
+) -> HeaderDecision:
+  match decision:
+    case NeedMore{}:
+      match frame_bytes:
+        case Some{length}: HeaderReady{length}
+        case _: HeaderMalformed{}
+    case Decoded{_}:
+      match frame_bytes:
+        case Some{length}: HeaderReady{length}
+        case _: HeaderMalformed{}
+    case Malformed{}: HeaderMalformed{}
+    case UnknownOperation{}: HeaderUnknownOperation{}
+    case FrameTooLarge{}: HeaderTooLarge{}
+
+def header.frame.bytes(pair: Bytes.Bytes & Maybe<&2, U32>) -> Maybe<&2, U32>:
+  match pair:
+    case (_, Some{payload_bytes}): Some{U32.add(24, payload_bytes)}
+    case (_, None{}): None{}
+
+def header.inspect.cloned(
+  pair: Bytes.Bytes & Bytes.Bytes,
+  max_payload_bytes: Nat
+) -> HeaderDecision:
+  match pair:
+    case (header, validation):
+      header.classify(decode(validation, max_payload_bytes),
+        header.frame.bytes(Bytes.get.u32be(header, 20)))
+
+def header.inspect.sized(
+  input: Bytes.Bytes,
+  max_payload_bytes: Nat,
+  enough_header: Bool,
+  exact_header: Bool
+) -> HeaderDecision:
+  match enough_header:
+    case False{}: HeaderIncomplete{}
+    case True{}:
+      match exact_header:
+        case False{}: HeaderMalformed{}
+        case True{}:
+          header.inspect.cloned(ByteMemTable.bytes.clone(input), max_payload_bytes)
+
+def header.inspect.sized.copies(
+  input: Bytes.Bytes,
+  sizes: U32 & U32 & U32,
+  max_payload_bytes: Nat
+) -> HeaderDecision:
+  match sizes:
+    case (size, (checked_size, _)):
+      header.inspect.sized(input, max_payload_bytes,
+        Nat.is_le(24n, U32.to_nat(size)),
+        Nat.is_eq(24n, U32.to_nat(checked_size)))
+
+def header.inspect.size(
+  pair: Bytes.Bytes & U32,
+  max_payload_bytes: Nat
+) -> HeaderDecision:
+  match pair:
+    case (input, size):
+      header.inspect.sized.copies(input, u32.duplicate.triple(size),
+        max_payload_bytes)
+
+def header.inspect(input: Bytes.Bytes, max_payload_bytes: Nat) -> HeaderDecision:
+  header.inspect.size(Bytes.length(input), max_payload_bytes)
 
 def decode.response.payload.slice(
   sliced: Bytes.Bytes & Bytes.Bytes,

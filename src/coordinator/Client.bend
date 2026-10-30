@@ -532,3 +532,8 @@ def session.stats(
   session: Session
 ) -> IO(Session & Result<&1, &1, Error, Protocol.Response>):
   session.call(session, 6, Bytes.new(0))
+
+def session.describe_owner(
+  session: Session
+) -> IO(Session & Result<&1, &1, Error, Protocol.Response>):
+  session.call(session, 16, Bytes.new(0))

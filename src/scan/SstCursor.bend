@@ -1,5 +1,6 @@
 import Base
 import ../ByteMemTable.bend as ByteMemTable
+import ../ByteWal.bend as ByteWal
 import ./ByteBlockReader.bend as ByteBlockReader
 import ./ByteRange.bend as ByteRange
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
@@ -368,6 +369,24 @@ def open.trusted(
     opened : Result<&1, &1, U32 & String, ByteBlockReader.Reader> <-
       ByteBlockReader.open(path)
     open.trusted.result(bounds, opened)
+
+def measure.key.opened(
+  key: Bytes.Bytes,
+  opened: Result<&1, &1, U32 & String, ByteBlockReader.Reader>
+) -> IO(Result<&1, &1, U32 & String, ByteWal.ValueMetadata>):
+  match opened:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, U32 & String, ByteWal.ValueMetadata>,
+        Fail{error})
+    case Done{reader}: ByteBlockReader.measure_key(reader, key)
+
+# Handles measure key.
+def measure_key(path: String, key: Bytes.Bytes)
+  -> IO(Result<&1, &1, U32 & String, ByteWal.ValueMetadata>):
+  do IO<Result<&1, &1, U32 & String, ByteWal.ValueMetadata>>:
+    opened : Result<&1, &1, U32 & String, ByteBlockReader.Reader> <-
+      ByteBlockReader.open(path)
+    measure.key.opened(key, opened)
 
 # Validates the complete SST before opening a second bounded scan pass.
 def open(

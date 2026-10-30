@@ -4,6 +4,7 @@ import ../../src/Console.bend as Console
 import ../../src/coordinator/Operation.bend as Operation
 import ../../src/coordinator/Owner.bend as Owner
 import ../../src/coordinator/Protocol.bend as Protocol
+import ../../src/ResourceOptions.bend as ResourceOptions
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 def bytes.parsed(value: Maybe<&1, Bytes.Bytes>) -> Bytes.Bytes:
@@ -18,6 +19,22 @@ def bytes(hex: String) -> Bytes.Bytes:
 def bytes.equal(pair: Bytes.Bytes & Bytes.Bytes & Bool) -> Bool:
   match pair:
     case (_, _, equal): equal
+
+def overbound.response.result() -> Protocol.Response:
+  Owner.bound.response(1, 1, 99, Protocol.Success{}, Bytes.new(2), 1)
+
+def overbound.payload.empty(measured: Bytes.Bytes & U32) -> Bool:
+  match measured:
+    case (_, length): U32.is_eq(length, 0)
+
+def overbound.response.status(response: Protocol.Response) -> Bool:
+  match response:
+    case Protocol.Response{_, _, _, Protocol.CommitUnknown{}, payload}:
+      overbound.payload.empty(Bytes.length(payload))
+    case _: False{}
+
+def overbound.response.valid() -> Bool:
+  overbound.response.status(overbound.response.result())
 
 # Requires the owner service to complete its ordered shutdown.
 def closed(result: Result<&1, &1, ByteDb.Error, Unit>) -> IO(Unit):
@@ -63,7 +80,8 @@ def stats.matches(handle: ByteDb.Handle, matches: Bool) -> IO(Unit):
 def stats.response(pair: ByteDb.Handle & Protocol.Response) -> IO(Unit):
   match pair:
     case (handle, Protocol.Response{_, _, _, Protocol.Success{}, payload}):
-      stats.matches(handle, bytes.equal(Bytes.eq(payload, bytes("313a35"))))
+      stats.matches(handle, bytes.equal(Bytes.eq(payload,
+        bytes("313a353a303a303a30"))))
     case (handle, _):
       fail.close(handle, "owner stats operation failed")
 
@@ -74,7 +92,8 @@ def stats.checked(pair: ByteDb.Handle & ByteDb.Stats) -> IO(Unit):
         result : ByteDb.Handle & Protocol.Response <- IO.pure(
           ByteDb.Handle & Protocol.Response,
           Owner.stats.response(handle, stats,
-            Owner.ReplyContext{(1, 1), (1, 1), (3, 3)}))
+            Owner.ReplyContext{(1, 1), (1, 1), (3, 3),
+              ResourceOptions.defaults()}))
         stats.response(result)
 
 def read.matches(handle: ByteDb.Handle, matches: Bool) -> IO(Unit):
@@ -106,15 +125,24 @@ def written(pair: ByteDb.Handle & Protocol.Response) -> IO(Unit):
       fail.close(handle, "owner put operation failed")
 
 # Starts the owner dispatch fixture with a recovered durable database.
+def created.checked(
+  pair: Result<&1, &1, ByteDb.Error, ByteDb.Handle> & Bool
+) -> IO(Unit):
+  match pair:
+    case (Done{handle}, True{}):
+          do IO<Unit>:
+            response : ByteDb.Handle & Protocol.Response <- Owner.dispatch.request(
+              handle, Protocol.Request{1, 1, 1, 2,
+                Operation.encode.put(bytes("00ff"), bytes("80ff00"))}, 1)
+            written(response)
+    case (Done{handle}, False{}):
+      fail.close(handle,
+        "over-bound response did not report an uncertain outcome")
+    case (Fail{_}, _): IO.die(Unit, 1, "owner dispatch database creation failed")
+
+# Handles created.
 def created(result: Result<&1, &1, ByteDb.Error, ByteDb.Handle>) -> IO(Unit):
-  match result:
-    case Done{handle}:
-      do IO<Unit>:
-        response : ByteDb.Handle & Protocol.Response <- Owner.dispatch.request(
-          handle, Protocol.Request{1, 1, 1, 2,
-            Operation.encode.put(bytes("00ff"), bytes("80ff00"))}, 1)
-        written(response)
-    case Fail{_}: IO.die(Unit, 1, "owner dispatch database creation failed")
+  created.checked((result, overbound.response.valid()))
 
 def main() -> IO(Unit):
   do IO<Unit>:

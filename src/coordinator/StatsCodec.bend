@@ -23,6 +23,21 @@ type State is Data:
     retained_bytes: Nat, cursors: Nat, seen: Bool}
   Invalid{}
 
+def decimal.length(value: Nat) -> Nat:
+  String.length(Nat.show(value))
+
+def payload.length(
+  entries: Nat,
+  payload_bytes: Nat,
+  snapshots: Nat,
+  retained_bytes: Nat,
+  cursors: Nat
+) -> Nat:
+  Nat.add(4n, Nat.add(decimal.length(entries),
+    Nat.add(decimal.length(payload_bytes),
+      Nat.add(decimal.length(snapshots),
+        Nat.add(decimal.length(retained_bytes), decimal.length(cursors))))))
+
 def digit.value(scalar: U32) -> Nat:
   Nat.sub(U32.to_nat(scalar), 48n)
 

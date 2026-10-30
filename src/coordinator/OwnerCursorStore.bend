@@ -30,6 +30,12 @@ type TakeResult is Type:
   Taken{store: Store, cursor: VisibleCursor.Cursor}
   NotFound{store: Store}
 
+# Carries the state for PreviewResult.
+type PreviewResult is Type:
+  PreviewReady{store: Store, payload_bytes: Nat}
+  PreviewTerminal{store: Store, payload_bytes: Nat}
+  PreviewRejected{store: Store}
+
 # Starts with no live owner cursors.
 def empty() -> Store:
   Store{Nil{}, Nil{}}
@@ -47,6 +53,9 @@ def ids.count(ids: List<&2, U32>) -> Nat:
   match ids:
     case Nil{}: 0n
     case Con{_, tail}: Nat.add(1n, ids.count(tail))
+
+def has.capacity(count: Nat, max_cursors: Nat) -> Bool:
+  Nat.is_lt(count, max_cursors)
 
 def ids.count.keep.go(
   ids: List<&2, U32>,
@@ -221,6 +230,37 @@ def reinsert(
   cursor: VisibleCursor.Cursor
 ) -> Store:
   insert(store, id, cursor)
+
+def preview.result(
+  id: U32,
+  store: Store,
+  preview: VisibleCursor.Preview
+) -> PreviewResult:
+  match preview:
+    case VisibleCursor.PreviewReady{cursor, payload_bytes}:
+      PreviewReady{reinsert(store, id, cursor), payload_bytes}
+    case VisibleCursor.PreviewEnded{cursor}:
+      PreviewTerminal{reinsert(store, id, cursor), 1n}
+    case VisibleCursor.PreviewFailed{cursor}:
+      PreviewRejected{reinsert(store, id, cursor)}
+
+def preview.taken(id: U32, result: TakeResult) -> IO(PreviewResult):
+  match result:
+    case Taken{store, cursor}:
+      do IO<PreviewResult>:
+        preview : VisibleCursor.Preview <- VisibleCursor.preview(cursor)
+        return preview.result(id, store, preview)
+    case NotFound{store}:
+      IO.pure(PreviewResult, PreviewRejected{store})
+
+def preview.ids(store: Store, ids: U32 & U32) -> IO(PreviewResult):
+  match ids:
+    case (preview_id, take_id):
+      preview.taken(preview_id, take(store, take_id))
+
+# Handles preview.
+def preview(store: Store, id: U32) -> IO(PreviewResult):
+  preview.ids(store, CursorCodec.u32.duplicate(id))
 
 def close.all.cursors(cursors: List<&1, VisibleCursor.Cursor>) -> IO(Unit):
   match cursors:

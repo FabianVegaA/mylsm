@@ -6,12 +6,14 @@ import ./RangeCursor.bend as RangeCursor
 import ./ScanMerge.bend as ScanMerge
 import ./SstCursor.bend as SstCursor
 import ./VisibleSeekPolicy.bend as VisibleSeekPolicy
+import ./CursorPreviewPolicy.bend as PreviewPolicy
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
 # Retains one SST head and one ordered delta source between reads.
 type Cursor is Type:
   Active{base: Maybe<&1, SstCursor.Cursor>, pending: Maybe<&1, ByteMemTable.Entry>,
-    delta: List<&1, ByteMemTable.Entry>, bounds: RangeCursor.Bounds}
+    delta: List<&1, ByteMemTable.Entry>, bounds: RangeCursor.Bounds,
+    staged: Maybe<&1, ByteMemTable.Entry>}
   Ended{}
   Closed{}
   Failed{error: U32 & String}
@@ -22,6 +24,17 @@ type Step is Type:
   Skip{cursor: Cursor}
   End{}
   Error{error: U32 & String}
+
+# Carries the state for Preview.
+type Preview is Type:
+  PreviewReady{cursor: Cursor, payload_bytes: Nat}
+  PreviewEnded{cursor: Cursor}
+  PreviewFailed{cursor: Cursor}
+
+# Carries the state for PreviewState.
+type PreviewState is Type:
+  PreviewNeed{cursor: Cursor}
+  PreviewRead{step: Step}
 
 # Carries one in-range delta entry or exhaustion at the upper bound.
 type DeltaHead is Type:
@@ -61,7 +74,7 @@ def open(
   delta: List<&1, ByteMemTable.Entry>,
   bounds: RangeCursor.Bounds
 ) -> Cursor:
-  Active{base, None{}, delta, bounds}
+  Active{base, None{}, delta, bounds, None{}}
 
 def base.seek(base: Maybe<&1, SstCursor.Cursor>, lower: Maybe<&1, Bytes.Bytes>) -> Maybe<&1, SstCursor.Cursor>:
   match base:
@@ -100,12 +113,12 @@ def seek.ready(
   match lowers:
     case (base_lower, (delta_lower, bounds_lower)):
       Active{base.seek(base, base_lower), None{}, RangeCursor.seek(delta, delta_lower),
-        VisibleSeekPolicy.seek.bounds(bounds, bounds_lower)}
+        VisibleSeekPolicy.seek.bounds(bounds, bounds_lower), None{}}
 
 # Advances every retained source to the same inclusive lower key.
 def seek(cursor: Cursor, lower: Maybe<&1, Bytes.Bytes>) -> Cursor:
   match cursor:
-    case Active{base, _, delta, bounds}:
+    case Active{base, _, delta, bounds, _}:
       seek.ready(base, delta, bounds, lower.triple(lower))
     case Ended{}: Ended{}
     case Closed{}: Closed{}
@@ -170,9 +183,9 @@ def delta.output.result(
   match visible:
     case True{}:
       match live:
-        case True{}: Item{entry, Active{base, pending, tail, bounds}}
-        case False{}: Skip{Active{base, pending, tail, bounds}}
-    case False{}: Skip{Active{base, pending, tail, bounds}}
+        case True{}: Item{entry, Active{base, pending, tail, bounds, None{}}}
+        case False{}: Skip{Active{base, pending, tail, bounds, None{}}}
+    case False{}: Skip{Active{base, pending, tail, bounds, None{}}}
 
 def delta.output.checks(
   entry: ByteMemTable.Entry,
@@ -248,14 +261,14 @@ def decision.step(
       match base:
         case Some{cursor}:
           Item{base_entry, Active{Some{cursor}, None{},
-            Con{delta_entry, delta_tail}, bounds}}
+            Con{delta_entry, delta_tail}, bounds, None{}}}
         case None{}: End{}
     case ScanMerge.EmitBoth{}:
       delta.output(delta_entry, base, None{}, delta_tail, bounds)
     case ScanMerge.SkipDelta{}:
-      Skip{Active{base, Some{base_entry}, delta_tail, bounds}}
+      Skip{Active{base, Some{base_entry}, delta_tail, bounds, None{}}}
     case ScanMerge.SkipBoth{}:
-      Skip{Active{base, None{}, delta_tail, bounds}}
+      Skip{Active{base, None{}, delta_tail, bounds, None{}}}
     case ScanMerge.Finished{}: End{}
 
 def compare.order.only(result: Bytes.Bytes & Bytes.Bytes & Cmp) -> Cmp:
@@ -352,7 +365,7 @@ def ready.delta(
         case Some{base_entry}:
           match head:
             case DeltaDone{}:
-              Item{base_entry, Active{Some{base_cursor}, None{}, Nil{}, bounds}}
+              Item{base_entry, Active{Some{base_cursor}, None{}, Nil{}, bounds, None{}}}
             case DeltaReady{entry, tail}:
               resolve(Some{base_cursor}, base_entry, entry, tail, bounds)
         case None{}: End{}
@@ -393,7 +406,7 @@ def base.next.convert(
     case BaseItem{cursor, entry}:
       IO.pure(Step, ready(Some{cursor}, Some{entry}, delta, bounds))
     case BaseSkip{cursor}:
-      IO.pure(Step, Skip{Active{Some{cursor}, None{}, delta, bounds}})
+      IO.pure(Step, Skip{Active{Some{cursor}, None{}, delta, bounds, None{}}})
     case BaseDone{}:
       IO.pure(Step, ready(None{}, None{}, delta, bounds))
     case BaseError{error}: IO.pure(Step, Error{error})
@@ -408,12 +421,14 @@ def base.next.result(
 # Advances the SST source by at most one record and merges one visible result.
 def next(cursor: Cursor) -> IO(Step):
   match cursor:
-    case Active{Some{base}, None{}, delta, bounds}:
+    case Active{base, pending, delta, bounds, Some{entry}}:
+      IO.pure(Step, Item{entry, Active{base, pending, delta, bounds, None{}}})
+    case Active{Some{base}, None{}, delta, bounds, None{}}:
       do IO<Step>:
         result : SstCursor.Step <- SstCursor.next(base)
         step : Step <- base.next.result(delta, bounds, result)
         return step
-    case Active{base, pending, delta, bounds}:
+    case Active{base, pending, delta, bounds, None{}}:
       IO.pure(Step, ready(base, pending, delta, bounds))
     case Ended{}: IO.pure(Step, End{})
     case Closed{}: IO.pure(Step, End{})
@@ -422,6 +437,96 @@ def next(cursor: Cursor) -> IO(Step):
 # Closes the active SST file descriptor and leaves no source owned by the caller.
 def close(cursor: Cursor) -> IO(Result<&1, &1, U32 & String, Unit>):
   match cursor:
-    case Active{Some{base}, _, _, _}: SstCursor.close(base)
+    case Active{Some{base}, _, _, _, _}: SstCursor.close(base)
     case _:
       IO.pure(Result<&1, &1, U32 & String, Unit>, Done{Unit{}})
+
+def preview.stage(entry: ByteMemTable.Entry, cursor: Cursor,
+  payload_bytes: Nat) -> Preview:
+  match cursor:
+    case Active{base, pending, delta, bounds, _}:
+      PreviewReady{Active{base, pending, delta, bounds, Some{entry}},
+        payload_bytes}
+    case _:
+      PreviewReady{cursor, payload_bytes}
+
+def preview.item.value.length(
+  key: Bytes.Bytes,
+  +key_length: U32,
+  measured: Bytes.Bytes & U32
+) -> ByteMemTable.Entry & Nat:
+  match measured:
+    case (retained_bytes, value_length):
+      (ByteMemTable.Entry{key, Some{retained_bytes}},
+        PreviewPolicy.cursor.item.payload.bytes(
+          U32.to_nat(key_length), U32.to_nat(value_length)))
+
+def preview.item.key.length(
+  bytes: Bytes.Bytes,
+  measured: Bytes.Bytes & U32
+) -> ByteMemTable.Entry & Nat:
+  match measured:
+    case (key, key_length):
+      preview.item.value.length(key, key_length,
+        Bytes.length(bytes))
+
+def preview.item.length(entry: ByteMemTable.Entry)
+  -> ByteMemTable.Entry & Nat:
+  match entry:
+    case ByteMemTable.Entry{key, value}:
+      match value:
+        case Some{bytes}:
+          preview.item.key.length(bytes, Bytes.length(key))
+        case None{}: (entry, 0n)
+
+def preview.item.result(
+  measured: ByteMemTable.Entry & Nat,
+  cursor: Cursor
+) -> Preview:
+  match measured:
+    case (retained, payload_bytes):
+      match retained:
+        case ByteMemTable.Entry{_, value}:
+          match value:
+            case Some{_}:
+              preview.stage(retained, cursor, payload_bytes)
+            case None{}: PreviewFailed{cursor}
+
+def preview.item(entry: ByteMemTable.Entry, cursor: Cursor) -> Preview:
+  preview.item.result(preview.item.length(entry), cursor)
+
+def preview.loop(fuel: Nat, state: PreviewState) -> IO(Preview):
+  match fuel:
+    case 0n:
+      match state:
+        case PreviewNeed{cursor}: IO.pure(Preview, PreviewFailed{cursor})
+        case PreviewRead{step}:
+          match step:
+            case Item{_, cursor}:
+              IO.pure(Preview, PreviewFailed{cursor})
+            case Skip{cursor}:
+              IO.pure(Preview, PreviewFailed{cursor})
+            case End{}:
+              IO.pure(Preview, PreviewEnded{Ended{}})
+            case Error{error}:
+              IO.pure(Preview, PreviewFailed{Failed{error}})
+    case 1n+rest:
+      match state:
+        case PreviewNeed{cursor}:
+          do IO<Preview>:
+            step : Step <- next(cursor)
+            preview.loop(rest, PreviewRead{step})
+        case PreviewRead{step}:
+          match step:
+            case Item{entry, advanced}:
+              IO.pure(Preview, preview.item(entry, advanced))
+            case Skip{advanced}:
+              preview.loop(rest, PreviewNeed{advanced})
+            case End{}:
+              IO.pure(Preview, PreviewEnded{Ended{}})
+            case Error{error}:
+              IO.pure(Preview, PreviewFailed{Failed{error}})
+
+# Handles preview.
+def preview(cursor: Cursor) -> IO(Preview):
+  preview.loop(4096n, PreviewNeed{cursor})

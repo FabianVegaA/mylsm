@@ -30,3 +30,9 @@ def Laws.byte_sst_pages_roll_over_at_the_limit():
 
 def Laws.byte_sst_pages_fill_available_capacity():
   {==}
+
+def Laws.block_value_measurement_returns_length_without_value():
+  {==}
+
+def Laws.block_value_measurement_rejects_corrupt_outer_checksum():
+  {==}

@@ -23,6 +23,7 @@ type Operation is Type:
   SnapshotCursorNext{cursor_id: U32}
   SnapshotCursorClose{cursor_id: U32}
   SnapshotCursorSeek{cursor_id: U32, lower: Maybe<&1, Bytes.Bytes>}
+  DescribeOwner{}
 
 # Reports decoded arguments or a malformed/unsupported operation.
 type Decision is Type:
@@ -292,6 +293,7 @@ def decode.payload(
     case 13: snapshot.cursor.next.decode(payload)
     case 14: snapshot.cursor.close.decode(payload)
     case 15: snapshot.cursor.seek.decode(payload)
+    case 16: empty.operation(Bytes.length(payload), DescribeOwner{})
     case _: UnsupportedOperation{}
 
 # Decodes the tagged operation payload without interpreting keys as text.

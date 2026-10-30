@@ -1,5 +1,7 @@
 import Base
 import ../ByteSstFile.bend as ByteSstFile
+import ../ByteWal.bend as ByteWal
+import ../Wal.bend as Wal
 import ../ByteMemTable.bend as ByteMemTable
 import ../StorageBytes.bend as StorageBytes
 import ../ByteRecoveryPolicy.bend as RecoveryPolicy
@@ -949,6 +951,174 @@ def seek_key_after_validation(
             next_block, decoded, root_hash, index_hash, last_key, selected}
           route.loop(fuel, RouteNeed{file, retained_state, context, key,
             BlockRoutePolicy.Search{0n, count, 0n}})
+
+# Handles measure key result.
+def measure_key_result(
+  result: Result<&1, &1, Wal.Error, ByteWal.ValueMetadata>
+) -> Result<&1, &1, U32 & String, ByteWal.ValueMetadata>:
+  match result:
+    case Done{value}: Done{value}
+    case Fail{Wal.ChecksumMismatch{}}:
+      Fail{corruption("byte SST block checksum mismatch")}
+    case Fail{Wal.Malformed{}}:
+      Fail{corruption("malformed byte SST metadata")}
+    case Fail{Wal.TooLarge{}}:
+      Fail{corruption("byte SST metadata exceeds decoder bounds")}
+    case Fail{Wal.InvalidUtf8{}}:
+      Fail{corruption("byte SST metadata contains invalid text")}
+
+# Handles measure key closed.
+def measure_key_closed(
+  file: File,
+  result: Result<&1, &1, Wal.Error, ByteWal.ValueMetadata>
+) -> IO(Result<&1, &1, U32 & String, ByteWal.ValueMetadata>):
+  do IO<Result<&1, &1, U32 & String, ByteWal.ValueMetadata>>:
+    _closed : Unit <- File.close(file)
+    return measure_key_result(result)
+
+# Handles measure key body result.
+def measure_key_body_result(
+  key: Bytes.Bytes,
+  pair: File & Result<&1, &1, U32 & String, Bytes.Bytes>
+) -> IO(Result<&1, &1, U32 & String, ByteWal.ValueMetadata>):
+  match pair:
+    case (file, Fail{error}):
+      do IO<Result<&1, &1, U32 & String, ByteWal.ValueMetadata>>:
+        _closed : Unit <- File.close(file)
+        return Fail{error}
+    case (file, Done{block}):
+      measure_key_closed(file, ByteSstFile.measure_block(block, key))
+
+# Handles measure key body read.
+def measure_key_body_read(
+  +used: Nat,
+  key: Bytes.Bytes,
+  +payload_length: U32,
+  file: File
+) -> IO(Result<&1, &1, U32 & String, ByteWal.ValueMetadata>):
+  do IO<Result<&1, &1, U32 & String, ByteWal.ValueMetadata>>:
+    block : File & Result<&1, &1, U32 & String, Bytes.Bytes> <-
+      Fs.read_at(file, U32.from_nat(Nat.add(20n, used)),
+        U32.add(payload_length, 40))
+    measure_key_body_result(key, block)
+
+# Handles measure key bounds.
+def measure_key_bounds(
+  +index_offset: Nat,
+  +used: Nat,
+  +payload_length: U32
+) -> Bool:
+  U32.is_le(payload_length, StorageBytes.MAX_BLOCK_BYTES()) &&
+    Nat.is_le(Nat.add(20n, Nat.add(used,
+      Nat.add(U32.to_nat(payload_length), 40n))), index_offset)
+
+# Handles measure key header valid.
+def measure_key_header_valid(
+  +_index_offset: Nat,
+  +used: Nat,
+  key: Bytes.Bytes,
+  +payload_length: U32,
+  file: File,
+  valid: Bool
+) -> IO(Result<&1, &1, U32 & String, ByteWal.ValueMetadata>):
+  match valid:
+    case True{}: measure_key_body_read(used, key, payload_length, file)
+    case False{}:
+      do IO<Result<&1, &1, U32 & String, ByteWal.ValueMetadata>>:
+        _closed : Unit <- File.close(file)
+        return Fail{corruption("byte SST block exceeds file bounds")}
+
+# Handles measure key header length.
+def measure_key_header_length(
+  +index_offset: Nat,
+  +used: Nat,
+  key: Bytes.Bytes,
+  pair: Bytes.Bytes & Maybe<&2, U32>,
+  file: File
+) -> IO(Result<&1, &1, U32 & String, ByteWal.ValueMetadata>):
+  match pair:
+    case (_, None{}):
+      do IO<Result<&1, &1, U32 & String, ByteWal.ValueMetadata>>:
+        _closed : Unit <- File.close(file)
+        return Fail{corruption("invalid byte SST block length")}
+    case (_, Some{+payload_length}):
+      measure_key_header_valid(index_offset, used, key, payload_length,
+        file, measure_key_bounds(index_offset, used, payload_length))
+
+# Handles measure key header exact.
+def measure_key_header_exact(
+  +index_offset: Nat,
+  +used: Nat,
+  key: Bytes.Bytes,
+  pair: File & Result<&1, &1, U32 & String, Bytes.Bytes>
+) -> IO(Result<&1, &1, U32 & String, ByteWal.ValueMetadata>):
+  match pair:
+    case (file, Fail{error}):
+      do IO<Result<&1, &1, U32 & String, ByteWal.ValueMetadata>>:
+        _closed : Unit <- File.close(file)
+        return Fail{error}
+    case (file, Done{header}):
+      measure_key_header_length(index_offset, used, key,
+        Bytes.get.u32be(header, 0), file)
+
+# Handles measure key header.
+def measure_key_header(
+  +index_offset: Nat,
+  +used: Nat,
+  key: Bytes.Bytes,
+  pair: File & Result<&1, &1, U32 & String, Bytes.Bytes>
+) -> IO(Result<&1, &1, U32 & String, ByteWal.ValueMetadata>):
+  measure_key_header_exact(index_offset, used, key,
+    SstStreamIo.read.exact.state(read_at.exact.pair(8, pair)))
+
+def measure.key.block(
+  reader: Reader,
+  key: Bytes.Bytes
+) -> IO(Result<&1, &1, U32 & String, ByteWal.ValueMetadata>):
+  match reader:
+    case Reader{file, state}:
+      match state:
+        case State{_, _, +index_offset, +used, _, _, _, _, _, _, _, _}:
+          do IO<Result<&1, &1, U32 & String, ByteWal.ValueMetadata>>:
+            header : File & Result<&1, &1, U32 & String, Bytes.Bytes> <-
+              Fs.read_at(file, U32.from_nat(Nat.add(20n, used)), 8)
+            measure_key_header(index_offset, used, key, header)
+
+# Handles measure key routed.
+def measure_key_routed(
+  key: Bytes.Bytes,
+  result: Result<&1, &1, U32 & String, Reader>
+) -> IO(Result<&1, &1, U32 & String, ByteWal.ValueMetadata>):
+  match result:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, U32 & String, ByteWal.ValueMetadata>,
+        Fail{error})
+    case Done{reader}: measure.key.block(reader, key)
+
+def measure_key.route(
+  reader: Reader,
+  route_key: Bytes.Bytes,
+  query_key: Bytes.Bytes
+) -> IO(Result<&1, &1, U32 & String, ByteWal.ValueMetadata>):
+  do IO<Result<&1, &1, U32 & String, ByteWal.ValueMetadata>>:
+    routed : Result<&1, &1, U32 & String, Reader> <-
+      seek_key_after_validation(reader, route_key)
+    measure_key_routed(query_key, routed)
+
+def measure_key.copied(
+  reader: Reader,
+  keys: Bytes.Bytes & Bytes.Bytes
+) -> IO(Result<&1, &1, U32 & String, ByteWal.ValueMetadata>):
+  match keys:
+    case (route_key, query_key):
+      measure_key.route(reader, route_key, query_key)
+
+# Handles measure key.
+def measure_key(
+  reader: Reader,
+  key: Bytes.Bytes
+) -> IO(Result<&1, &1, U32 & String, ByteWal.ValueMetadata>):
+  measure_key.copied(reader, ByteMemTable.bytes.clone(key))
 
 def next.body.output.index.hash(
   file: File,

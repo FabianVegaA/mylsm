@@ -2,6 +2,35 @@ import Base
 import ../src/coordinator/Protocol.bend as Protocol
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
+def encoded.response.length(encoded: Bytes.Bytes) -> U32:
+  match encoded:
+    case Bytes.Bytes{length, _}: length
+
+# Verifies response allocation has exact frame length.
+law response_allocation_has_exact_frame_length:
+  for version: U32
+  for generation: U32
+  for request_id: U32
+  for status: Protocol.ResponseStatus
+  for payload_length: U32
+  for payload_buffer: Array<U32>
+  {encoded.response.length(Protocol.encode_response(
+    Protocol.Response{version, generation, request_id, status,
+      Bytes.Bytes{payload_length, payload_buffer}})) ==
+    U32.add(payload_length, 28) : U32}
+
+# Verifies control response reuses the header allocation.
+law control_response_reuses_the_header_allocation:
+  for header_buffer: Array<U32>
+  for status_code: U32
+  {Protocol.header.control(Bytes.Bytes{24, header_buffer}, status_code) ==
+    Bytes.Bytes{28,
+      Bytes.put.go(4n,
+        Bytes.put.go(4n,
+          Bytes.put.go(4n, header_buffer, 19, False{}, 7),
+          23, False{}, 4),
+        27, False{}, status_code)} : Bytes.Bytes}
+
 # Admits a payload at the generation-four encoded record ceiling.
 law protocol_payload_at_record_ceiling_is_admitted:
   {Protocol.payload.admitted(1073741824) == True{} : Bool}
@@ -147,6 +176,12 @@ def frame.prefix.decision(
   match sliced:
     case (_, prefix): Protocol.decode(prefix, 16n)
 
+def header.prefix.decision(
+  sliced: Bytes.Bytes & Bytes.Bytes
+) -> Protocol.HeaderDecision:
+  match sliced:
+    case (_, prefix): Protocol.header.inspect(prefix, 16n)
+
 # Reports an incomplete payload as requiring more bytes.
 law truncated_payload_requests_more_bytes:
   {frame.prefix.decision(Bytes.slice(
@@ -215,3 +250,25 @@ law maximum_operation_tag_is_rejected:
   {Protocol.decode(Protocol.encode(
     Protocol.Request{1, 7, 19, 4294967295, Bytes.new(0)}), 16n) ==
     Protocol.UnknownOperation{} : Protocol.FrameDecision}
+
+# Verifies incomplete header does not admit a frame.
+law incomplete_header_does_not_admit_a_frame:
+  {Protocol.header.inspect(Bytes.new(23), 16n) ==
+    Protocol.HeaderIncomplete{} : Protocol.HeaderDecision}
+
+# Verifies header inspection rejects a non header buffer.
+law header_inspection_rejects_a_non_header_buffer:
+  {Protocol.header.inspect(Bytes.new(25), 16n) ==
+    Protocol.HeaderMalformed{} : Protocol.HeaderDecision}
+
+# Verifies valid header exposes bounded frame length.
+law valid_header_exposes_bounded_frame_length:
+  {header.prefix.decision(Bytes.slice(Protocol.encode(
+    Protocol.Request{1, 7, 19, 2, Bytes.new(1)}), 0, 24)) ==
+    Protocol.HeaderReady{25} : Protocol.HeaderDecision}
+
+# Verifies oversized header is rejected before payload read.
+law oversized_header_is_rejected_before_payload_read:
+  {header.prefix.decision(Bytes.slice(Protocol.encode(
+    Protocol.Request{1, 7, 19, 2, Bytes.new(17)}), 0, 24)) ==
+    Protocol.HeaderTooLarge{} : Protocol.HeaderDecision}

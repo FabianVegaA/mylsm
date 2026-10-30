@@ -17,6 +17,8 @@ ni descarta bytes. Ambas vistas comparten el [orden binario](storage-format.md).
 | `create(path)` | Reservar una base nueva y adquirir su propiedad |
 | `open_existing(path)` | Recuperar una base existente; no crear una faltante |
 | `open_existing_wait(path, timeout_ms, backoff_ms)` | Esperar el lock con timeout acotado |
+| `create_with_options(path, options)` | Crear local con defaults o validar opciones contra el owner remoto |
+| `open_existing_with_options(path, options)` | Abrir sólo si las opciones válidas coinciden con el owner remoto |
 | `put(handle, key, value)` / `delete(handle, key)` | Confirmar una mutación durable |
 | `write_batch(handle, mutations)` | Confirmar un lote atómico |
 | `get(handle, key)` | Devolver el valor o ausencia |
@@ -27,6 +29,12 @@ ni descarta bytes. Ambas vistas comparten el [orden binario](storage-format.md).
 Cada operación que conserva el handle lo devuelve junto al resultado tipado. Pasar ese
 handle a la siguiente operación. Un handle puede ser local o representar un cliente del
 [propietario coordinado](coordination.md).
+
+Las variantes con opciones existen en `Bytes` y `Utf8`. Un mismatch remoto devuelve
+`InvalidArgument` antes de operar la base; una opción local no soportada también se
+rechaza. La ruta remota obtiene la configuración efectiva mediante el handshake de
+coordinación. El owner de esta revisión publica defaults; las opciones personalizadas
+locales aún no son configurables.
 
 `open_existing` requiere un manifest válido. Esperar el lock no crea la base: el timeout
 máximo es 60.000 ms y el backoff válido está entre 1 y 1.000 ms. Una ruta faltante,

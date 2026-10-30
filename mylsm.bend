@@ -41,6 +41,8 @@ import ./src/coordinator/StatsCodec.bend as OwnerStatsCodec
 import ./src/coordinator/Io.bend as OwnerIo
 import ./src/coordinator/UnixSocketIo.bend as OwnerSocket
 import ./src/coordinator/CoordinatorPolicy.bend as OwnerPolicy
+import ./src/ResourceOptions.bend as ResourceOptions
+import ./src/coordinator/OptionsCodec.bend as OwnerOptionsCodec
 
 # Describes manifest validation independently from package/storage identity.
 type ManifestStatus is Data:
@@ -137,16 +139,20 @@ def Bytes.owner.error.status(status: CoordinatorProtocol.ResponseStatus) -> Byte
 def Bytes.owner.error.socket(error: OwnerSocket.Error) -> Bytes.Error:
   match error:
     case OwnerSocket.UnsupportedPlatform{}: UnsupportedPlatform{}
+    case OwnerSocket.Transient{code}: Io{code, "owner socket operation was interrupted"}
     case OwnerSocket.Host{code, message}: Io{code, message}
 
 def Bytes.owner.error.io(error: OwnerIo.Error) -> Bytes.Error:
   match error:
     case OwnerIo.UnsupportedPlatform{}: UnsupportedPlatform{}
+    case OwnerIo.Transient{code}: Io{code, "owner response IO was interrupted"}
     case OwnerIo.Host{code, message}: Io{code, message}
     case _: Corruption{"owner response transport was invalid"}
 
 def Bytes.owner.error.commit(error: OwnerIo.Error) -> Bytes.Error:
   match error:
+    case OwnerIo.Transient{code}:
+      CommitUnknown{code, "mutation response IO was interrupted"}
     case OwnerIo.Host{code, message}: CommitUnknown{code, message}
     case _: CommitUnknown{0, "mutation outcome is uncertain"}
 
@@ -233,29 +239,66 @@ def Bytes.handle(
     case Fail{error}: Fail{Bytes.error(error)}
     case Done{raw}: Done{ByteHandle{raw}}
 
+def Bytes.remote.handshake.validated(
+  session: OwnerClient.Session,
+  decision: ResourceOptions.Decision
+) -> Result<&1, &1, Bytes.Error, Bytes.Handle>:
+  match decision:
+    case ResourceOptions.Accepted{_}: Done{RemoteByteHandle{session}}
+    case _: Fail{Corruption{"owner options are invalid"}}
+
+def Bytes.remote.handshake.result(
+  pair: OwnerClient.Session &
+    Result<&1, &1, OwnerClient.Error, OwnerOptionsCodec.Decision>
+) -> Result<&1, &1, Bytes.Error, Bytes.Handle>:
+  match pair:
+    case (_, Fail{error}): Fail{Bytes.owner.error(error)}
+    case (session, Done{OwnerOptionsCodec.Parsed{options}}):
+      Bytes.remote.handshake.validated(session,
+        ResourceOptions.validate(options))
+    case (_, Done{_}): Fail{Corruption{"owner options response is invalid"}}
+
+def Bytes.remote.handshake(
+  pair: OwnerClient.Session &
+    Result<&1, &1, OwnerClient.Error, OwnerOptionsCodec.Decision>
+) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
+  IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
+    Bytes.remote.handshake.result(pair))
+
 def Bytes.remote.role(
   endpoint: String,
   generation: U32,
   role: OwnerPolicy.OpenRole
-) -> Result<&1, &1, Bytes.Error, Bytes.Handle>:
+) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
   match role:
     case OwnerPolicy.ExistingOwnerClient{}:
-      Done{RemoteByteHandle{OwnerClient.session.open(endpoint, generation)}}
-    case OwnerPolicy.ReturnBusy{}: Fail{Busy{}}
+      do IO<Result<&1, &1, Bytes.Error, Bytes.Handle>>:
+        described : OwnerClient.Session &
+          Result<&1, &1, OwnerClient.Error, OwnerOptionsCodec.Decision> <-
+            OwnerByteClient.describe_owner(
+              OwnerClient.session.open(endpoint, generation))
+        Bytes.remote.handshake(described)
+    case OwnerPolicy.ReturnBusy{}:
+      IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>, Fail{Busy{}})
     case OwnerPolicy.PropagateOpenFailure{}:
-      Fail{Io{0, "owner role could not be established"}}
-    case OwnerPolicy.LocalOwner{}: Fail{Busy{}}
+      IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
+        Fail{Io{0, "owner role could not be established"}})
+    case OwnerPolicy.LocalOwner{}:
+      IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>, Fail{Busy{}})
 
 def Bytes.endpoint.generation(
   endpoint: String,
   result: Result<&1, &1, OwnerGenerationIo.Error, U32>
-) -> Result<&1, &1, Bytes.Error, Bytes.Handle>:
+) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
   match result:
-    case Fail{OwnerGenerationIo.Host{code, message}}: Fail{Io{code, message}}
+    case Fail{OwnerGenerationIo.Host{code, message}}:
+      IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>, Fail{Io{code, message}})
     case Fail{OwnerGenerationIo.Invalid{}}:
-      Fail{Corruption{"owner generation is invalid"}}
+      IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
+        Fail{Corruption{"owner generation is invalid"}})
     case Fail{OwnerGenerationIo.Exhausted{}}:
-      Fail{Corruption{"owner generation is exhausted"}}
+      IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
+        Fail{Corruption{"owner generation is exhausted"}})
     case Done{generation}:
       Bytes.remote.role(endpoint, generation, OwnerPolicy.open.role(
         OwnerPolicy.LockBusy{}, OwnerPolicy.EndpointPresent{}))
@@ -273,11 +316,10 @@ def Bytes.endpoint.checked(
       do IO<Result<&1, &1, Bytes.Error, Bytes.Handle>>:
         generation : Result<&1, &1, OwnerGenerationIo.Error, U32> <-
           OwnerGenerationIo.read(canonical ++ "/OWNER.GEN")
-        return Bytes.endpoint.generation(endpoint, generation)
+        Bytes.endpoint.generation(endpoint, generation)
     case Done{False{}}:
-      IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
-        Bytes.remote.role(endpoint, 0, OwnerPolicy.open.role(
-          OwnerPolicy.LockBusy{}, OwnerPolicy.EndpointMissing{})))
+      Bytes.remote.role(endpoint, 0, OwnerPolicy.open.role(
+        OwnerPolicy.LockBusy{}, OwnerPolicy.EndpointMissing{}))
 
 def Bytes.endpoint.path.pair.go(
   path: String,
@@ -423,6 +465,160 @@ def Bytes.open_existing(+path: String) -> IO(Result<&1, &1, Bytes.Error, Bytes.H
     opened : Result<&1, &1, RawByteDb.Error, RawByteDb.Handle> <-
       RawByteDb.open_existing(path)
     Bytes.owner.candidate(path, opened)
+
+def Bytes.options.local.raw(
+  raw: RawByteDb.Handle,
+  matches: Bool
+) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
+  match matches:
+    case True{}:
+      IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
+        Done{ByteHandle{raw}})
+    case False{}:
+      do IO<Result<&1, &1, Bytes.Error, Bytes.Handle>>:
+        _closed : Result<&1, &1, RawByteDb.Error, Unit> <- RawByteDb.close(raw)
+        return Fail{InvalidArgument{}}
+
+def Bytes.options.local.result(
+  handle: Bytes.Handle,
+  matches: Bool
+) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
+  match handle:
+    case ByteHandle{raw}: Bytes.options.local.raw(raw, matches)
+    case RemoteByteHandle{session}:
+      match matches:
+        case True{}:
+          IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
+            Done{RemoteByteHandle{session}})
+        case False{}:
+          IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
+            Fail{InvalidArgument{}})
+
+def Bytes.options.local(
+  options: ResourceOptions.Options,
+  handle: Bytes.Handle
+) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
+  Bytes.options.local.result(handle,
+    ResourceOptions.same(options, ResourceOptions.defaults()))
+
+def Bytes.options.remote.checked(
+  session: OwnerClient.Session,
+  matches: Bool
+) -> Result<&1, &1, Bytes.Error, Bytes.Handle>:
+  match matches:
+    case True{}: Done{RemoteByteHandle{session}}
+    case False{}: Fail{InvalidArgument{}}
+
+def Bytes.options.remote.result(
+  pair: OwnerClient.Session &
+    Result<&1, &1, OwnerClient.Error, OwnerOptionsCodec.Decision>,
+  expected: ResourceOptions.Options
+) -> Result<&1, &1, Bytes.Error, Bytes.Handle>:
+  match pair:
+    case (_, Fail{error}): Fail{Bytes.owner.error(error)}
+    case (session, Done{OwnerOptionsCodec.Parsed{options}}):
+      Bytes.options.remote.checked(session,
+        ResourceOptions.same(options, expected))
+    case (_, Done{_}): Fail{Corruption{"owner options response is invalid"}}
+
+def Bytes.options.remote(
+  session: OwnerClient.Session,
+  expected: ResourceOptions.Options
+) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
+  do IO<Result<&1, &1, Bytes.Error, Bytes.Handle>>:
+    described : OwnerClient.Session &
+      Result<&1, &1, OwnerClient.Error, OwnerOptionsCodec.Decision> <-
+        OwnerByteClient.describe_owner(session)
+    return Bytes.options.remote.result(described, expected)
+
+def Bytes.options.opened(
+  handle: Bytes.Handle,
+  options: ResourceOptions.Options
+) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
+  match handle:
+    case ByteHandle{_}: Bytes.options.local(options, handle)
+    case RemoteByteHandle{session}: Bytes.options.remote(session, options)
+
+def Bytes.options.opened.result(
+  result: Result<&1, &1, Bytes.Error, Bytes.Handle>,
+  options: ResourceOptions.Options
+) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
+  match result:
+    case Fail{error}:
+      IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>, Fail{error})
+    case Done{handle}: Bytes.options.opened(handle, options)
+
+def Bytes.open_existing.options.decision(
+  +path: String,
+  decision: ResourceOptions.Decision
+) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
+  match decision:
+    case ResourceOptions.Accepted{options}:
+      do IO<Result<&1, &1, Bytes.Error, Bytes.Handle>>:
+        opened : Result<&1, &1, Bytes.Error, Bytes.Handle> <-
+          Bytes.open_existing(path)
+        Bytes.options.opened.result(opened, options)
+    case _: IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
+      Fail{InvalidArgument{}})
+
+def Bytes.open_existing_with_options(
+  +path: String,
+  options: ResourceOptions.Options
+) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
+  Bytes.open_existing.options.decision(path,
+    ResourceOptions.validate(options))
+
+def Bytes.create.options.probe.result(
+  result: Result<&1, &1, Bytes.Error, Bytes.Handle>
+) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
+  match result:
+    case Fail{NotFound{}}:
+      IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
+        Fail{InvalidArgument{}})
+    case Fail{error}:
+      IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>, Fail{error})
+    case Done{RemoteByteHandle{session}}:
+      IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
+        Done{RemoteByteHandle{session}})
+    case Done{ByteHandle{raw}}:
+      do IO<Result<&1, &1, Bytes.Error, Bytes.Handle>>:
+        _closed : Result<&1, &1, RawByteDb.Error, Unit> <- RawByteDb.close(raw)
+        return Fail{AlreadyExists{}}
+
+def Bytes.create.options.probe(
+  +path: String,
+  options: ResourceOptions.Options
+) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
+  do IO<Result<&1, &1, Bytes.Error, Bytes.Handle>>:
+    opened : Result<&1, &1, Bytes.Error, Bytes.Handle> <-
+      Bytes.open_existing_with_options(path, options)
+    Bytes.create.options.probe.result(opened)
+
+def Bytes.create.options.decision(
+  +path: String,
+  options: ResourceOptions.Options,
+  is_default: Bool
+) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
+  match is_default:
+    case True{}: Bytes.create(path)
+    case False{}: Bytes.create.options.probe(path, options)
+
+def Bytes.create.options.validated(
+  +path: String,
+  decision: ResourceOptions.Decision
+) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
+  match decision:
+    case ResourceOptions.Accepted{+options}:
+      Bytes.create.options.decision(path, options,
+        ResourceOptions.same(options, ResourceOptions.defaults()))
+    case _: IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
+      Fail{InvalidArgument{}})
+
+def Bytes.create_with_options(
+  +path: String,
+  options: ResourceOptions.Options
+) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
+  Bytes.create.options.validated(path, ResourceOptions.validate(options))
 
 def Bytes.open_existing_wait(
   +path: String,
@@ -2223,9 +2419,27 @@ def Utf8.create(+path: String) -> IO(Result<&1, &1, Utf8.Error, Utf8.Handle>):
     result : Result<&1, &1, Bytes.Error, Bytes.Handle> <- Bytes.create(path)
     return Utf8.open.result(result)
 
+def Utf8.create_with_options(
+  +path: String,
+  options: ResourceOptions.Options
+) -> IO(Result<&1, &1, Utf8.Error, Utf8.Handle>):
+  do IO<Result<&1, &1, Utf8.Error, Utf8.Handle>>:
+    result : Result<&1, &1, Bytes.Error, Bytes.Handle> <-
+      Bytes.create_with_options(path, options)
+    return Utf8.open.result(result)
+
 def Utf8.open_existing(+path: String) -> IO(Result<&1, &1, Utf8.Error, Utf8.Handle>):
   do IO<Result<&1, &1, Utf8.Error, Utf8.Handle>>:
     result : Result<&1, &1, Bytes.Error, Bytes.Handle> <- Bytes.open_existing(path)
+    return Utf8.open.result(result)
+
+def Utf8.open_existing_with_options(
+  +path: String,
+  options: ResourceOptions.Options
+) -> IO(Result<&1, &1, Utf8.Error, Utf8.Handle>):
+  do IO<Result<&1, &1, Utf8.Error, Utf8.Handle>>:
+    result : Result<&1, &1, Bytes.Error, Bytes.Handle> <-
+      Bytes.open_existing_with_options(path, options)
     return Utf8.open.result(result)
 
 def Utf8.open_existing_wait(

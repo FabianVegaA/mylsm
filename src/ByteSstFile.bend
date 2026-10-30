@@ -1388,6 +1388,154 @@ def parse_block.payload(
     case _:
       Fail{Malformed{}}
 
+def measure.block.checksum.comparison(
+  frame: Bytes.Bytes,
+  comparison: Bytes.Bytes & Bytes.Bytes & Bool
+) -> Bytes.Bytes & Bool:
+  match comparison:
+    case (_, _, valid): (frame, valid)
+
+def measure.block.checksum.claimed(
+  pair: Bytes.Bytes & Bytes.Bytes,
+  expected: Bytes.Bytes
+) -> Bytes.Bytes & Bool:
+  match pair:
+    case (frame, claimed):
+      measure.block.checksum.comparison(frame, Bytes.eq(claimed, expected))
+
+def measure.block.checksum.prefix(
+  pair: Bytes.Bytes & Bytes.Bytes,
+  +digest_offset: U32
+) -> Bytes.Bytes & Bool:
+  match pair:
+    case (frame, prefix):
+      measure.block.checksum.claimed(
+        Bytes.slice(frame, digest_offset, 32),
+        SHA.sha256_packed_bytes(prefix))
+
+def measure.block.checksum(
+  block: Bytes.Bytes,
+  +payload_length: U32
+) -> Bytes.Bytes & Bool:
+  +digest_offset = U32.add(8, payload_length)
+  measure.block.checksum.prefix(Bytes.slice(block, 0, digest_offset),
+    digest_offset)
+
+def measure.block.inner.valid(
+  frame: Bytes.Bytes,
+  query: Bytes.Bytes,
+  +frame_length: U32,
+  +record_count: U32,
+  +payload_length: U32,
+  valid: Bool
+) -> Result<&1, &1, Wal.Error, ByteWal.ValueMetadata>:
+  match valid:
+    case False{}: Fail{Wal.Malformed{}}
+    case True{}:
+      ByteWal.measure.lookup.bounded(frame, query, 8, frame_length,
+        record_count, payload_length)
+
+def measure.block.inner.count(
+  pair: Bytes.Bytes & Maybe<&2, U32>,
+  +frame_length: U32,
+  +record_count: U32,
+  +payload_length: U32,
+  query: Bytes.Bytes
+) -> Result<&1, &1, Wal.Error, ByteWal.ValueMetadata>:
+  match pair:
+    case (frame, Some{inner_count}):
+      measure.block.inner.valid(frame, query, frame_length, record_count,
+        payload_length, U32.is_eq(inner_count, record_count))
+    case (_, None{}): Fail{Wal.Malformed{}}
+
+def measure.block.inner.length(
+  pair: Bytes.Bytes & Maybe<&2, U32>,
+  +record_count: U32,
+  +payload_length: U32,
+  query: Bytes.Bytes
+) -> Result<&1, &1, Wal.Error, ByteWal.ValueMetadata>:
+  match pair:
+    case (frame, Some{frame_length}):
+      measure.block.inner.count(Bytes.get.u32be(frame, 12), frame_length,
+        record_count, payload_length, query)
+    case (_, None{}): Fail{Wal.Malformed{}}
+
+def measure.block.inner(
+  frame: Bytes.Bytes,
+  query: Bytes.Bytes,
+  +record_count: U32,
+  +payload_length: U32
+) -> Result<&1, &1, Wal.Error, ByteWal.ValueMetadata>:
+  measure.block.inner.length(Bytes.get.u32be(frame, 8), record_count,
+    payload_length, query)
+
+def measure.block.checksum.result(
+  pair: Bytes.Bytes & Bool,
+  query: Bytes.Bytes,
+  +record_count: U32,
+  +payload_length: U32
+) -> Result<&1, &1, Wal.Error, ByteWal.ValueMetadata>:
+  match pair:
+    case (block, valid):
+      match valid:
+        case True{}:
+          measure.block.inner(block, query, record_count, payload_length)
+        case False{}: Fail{Wal.ChecksumMismatch{}}
+
+def measure.block.valid(
+  frame: Bytes.Bytes,
+  query: Bytes.Bytes,
+  +record_count: U32,
+  +payload_length: U32,
+  +_total: U32,
+  valid: Bool
+) -> Result<&1, &1, Wal.Error, ByteWal.ValueMetadata>:
+  match valid:
+    case False{}: Fail{Wal.Malformed{}}
+    case True{}:
+      measure.block.checksum.result(
+        measure.block.checksum(frame, payload_length), query, record_count,
+        payload_length)
+
+def measure.block.count(
+  pair: Bytes.Bytes & Maybe<&2, U32>,
+  +payload_length: U32,
+  +total: U32,
+  query: Bytes.Bytes
+) -> Result<&1, &1, Wal.Error, ByteWal.ValueMetadata>:
+  match pair:
+    case (frame, Some{record_count}):
+      measure.block.valid(frame, query, record_count, payload_length, total,
+        U32.is_le(payload_length, StorageBytes.MAX_BLOCK_BYTES()) &&
+          U32.is_eq(total, U32.add(40, payload_length)))
+    case (_, None{}): Fail{Wal.Malformed{}}
+
+def measure.block.payload(
+  pair: Bytes.Bytes & Maybe<&2, U32>,
+  +total: U32,
+  query: Bytes.Bytes
+) -> Result<&1, &1, Wal.Error, ByteWal.ValueMetadata>:
+  match pair:
+    case (block, Some{payload_length}):
+      measure.block.count(Bytes.get.u32be(block, 4), payload_length, total,
+        query)
+    case (_, None{}): Fail{Wal.Malformed{}}
+
+def measure.block.total(
+  pair: Bytes.Bytes & U32,
+  query: Bytes.Bytes
+) -> Result<&1, &1, Wal.Error, ByteWal.ValueMetadata>:
+  match pair:
+    case (block, total):
+      measure.block.payload(Bytes.get.u32be(block, 0), total, query)
+
+# Handles measure block.
+def measure_block(
+  block: Bytes.Bytes,
+  query: Bytes.Bytes
+) -> Result<&1, &1, Wal.Error, ByteWal.ValueMetadata>:
+  measure.block.total(Bytes.length(block), query)
+
 # Validates one complete generation-four page without requiring its file index.
 def parse_block(block: Bytes.Bytes) -> Result<&1, &1, Error, ByteMemTable.Table>:
   parse_block.payload(Bytes.get.u32be(block, 0))

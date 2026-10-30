@@ -19,18 +19,18 @@ type AttemptDecision is Type:
 
 # Carries file ownership through the single recursive wait state machine.
 type WaitState is Type:
-  TryLock{file: File, started_ns: Nat, timeout_ms: Nat, backoff_ms: U32,
+  TryLock{file: File, started_us: Nat, timeout_ms: Nat, backoff_ms: U32,
     operation: String, path: String}
   LockAttempt{pair: File & Result<&1, &1, U32 & String, Unit>,
-    started_ns: Nat, timeout_ms: Nat, backoff_ms: U32, operation: String, path: String}
-  ReadClock{file: File, started_ns: Nat, timeout_ms: Nat, backoff_ms: U32,
+    started_us: Nat, timeout_ms: Nat, backoff_ms: U32, operation: String, path: String}
+  ReadClock{file: File, started_us: Nat, timeout_ms: Nat, backoff_ms: U32,
     operation: String, path: String, purpose: WaitPurpose}
-  ClockSample{file: File, started_ns: Nat, timeout_ms: Nat, backoff_ms: U32,
+  ClockSample{file: File, started_us: Nat, timeout_ms: Nat, backoff_ms: U32,
     operation: String, path: String, purpose: WaitPurpose,
     result: Result<&1, &1, U32 & String, Nat>}
-  Pause{file: File, started_ns: Nat, timeout_ms: Nat, backoff_ms: U32,
+  Pause{file: File, started_us: Nat, timeout_ms: Nat, backoff_ms: U32,
     operation: String, path: String, duration_ms: U32}
-  PauseResult{file: File, started_ns: Nat, timeout_ms: Nat, backoff_ms: U32,
+  PauseResult{file: File, started_us: Nat, timeout_ms: Nat, backoff_ms: U32,
     operation: String, path: String,
     result: Result<&1, &1, U32 & String, Unit>}
   WaitFatal{file: File, error: U32 & String, operation: String, path: String}
@@ -180,7 +180,7 @@ def wait.attempt.decision(error: U32 & String) -> AttemptDecision:
 def wait.attempt.state(
   decision: AttemptDecision,
   file: File,
-  started_ns: Nat,
+  started_us: Nat,
   timeout_ms: Nat,
   backoff_ms: U32,
   operation: String,
@@ -188,7 +188,7 @@ def wait.attempt.state(
 ) -> WaitState:
   match decision:
     case Contended{}:
-      ReadClock{file, started_ns, timeout_ms, backoff_ms,
+      ReadClock{file, started_us, timeout_ms, backoff_ms,
         operation, path, ChooseDelay{}}
     case Failed{error}:
       WaitFatal{file, error, operation, path}
@@ -197,7 +197,7 @@ def wait.attempt.state(
 def wait.delay.state(
   decision: Policy.WaitDecision,
   file: File,
-  started_ns: Nat,
+  started_us: Nat,
   timeout_ms: Nat,
   backoff_ms: U32,
   operation: String,
@@ -205,7 +205,7 @@ def wait.delay.state(
 ) -> WaitState:
   match decision:
     case Policy.LockRetry{sleep_ms}:
-      Pause{file, started_ns, timeout_ms, backoff_ms, operation, path,
+      Pause{file, started_us, timeout_ms, backoff_ms, operation, path,
         U32.from_nat(sleep_ms)}
     case _:
       WaitExpired{file, operation, path}
@@ -214,7 +214,7 @@ def wait.delay.state(
 def wait.deadline.state(
   remaining_ms: Nat,
   file: File,
-  started_ns: Nat,
+  started_us: Nat,
   timeout_ms: Nat,
   backoff_ms: U32,
   operation: String,
@@ -224,13 +224,13 @@ def wait.deadline.state(
     case 0n:
       WaitExpired{file, operation, path}
     case 1n+_:
-      TryLock{file, started_ns, timeout_ms, backoff_ms, operation, path}
+      TryLock{file, started_us, timeout_ms, backoff_ms, operation, path}
 
 # Selects backoff or deadline logic from a monotonic elapsed-time sample.
 def wait.clock.decision(
   purpose: WaitPurpose,
   file: File,
-  started_ns: Nat,
+  started_us: Nat,
   +timeout_ms: Nat,
   +backoff_ms: U32,
   operation: String,
@@ -240,10 +240,10 @@ def wait.clock.decision(
   match purpose:
     case ChooseDelay{}:
       wait.delay.state(Policy.busy_wait_decision(elapsed_ms, timeout_ms,
-        U32.to_nat(backoff_ms)), file, started_ns, timeout_ms, backoff_ms,
+        U32.to_nat(backoff_ms)), file, started_us, timeout_ms, backoff_ms,
         operation, path)
     case CheckDeadline{}:
-      wait.deadline.state(Nat.sub(timeout_ms, elapsed_ms), file, started_ns,
+      wait.deadline.state(Nat.sub(timeout_ms, elapsed_ms), file, started_us,
         timeout_ms, backoff_ms, operation, path)
 
 # Closes a handle if the finite retry budget is unexpectedly exhausted.
@@ -275,44 +275,44 @@ def wait.loop(fuel: Nat, state: WaitState) -> IO(Result<&1, &1, DurableError.Err
       wait.exhausted(state)
     case 1n+rest:
       match state:
-        case TryLock{file, started_ns, timeout_ms, backoff_ms, operation, path}:
+        case TryLock{file, started_us, timeout_ms, backoff_ms, operation, path}:
           do IO<Result<&1, &1, DurableError.Error, Lock>>:
             pair : File & Result<&1, &1, U32 & String, Unit> <- DbLock.try_lock(file)
-            wait.loop(rest, LockAttempt{pair, started_ns, timeout_ms,
+            wait.loop(rest, LockAttempt{pair, started_us, timeout_ms,
               backoff_ms, operation, path})
-        case LockAttempt{pair, started_ns, timeout_ms, backoff_ms, operation, path}:
+        case LockAttempt{pair, started_us, timeout_ms, backoff_ms, operation, path}:
           match pair:
             case (file, Done{Unit{}}):
               IO.pure(Result<&1, &1, DurableError.Error, Lock>, Done{Lock{file}})
             case (file, Fail{error}):
               wait.loop(rest, wait.attempt.state(wait.attempt.decision(error),
-                file, started_ns, timeout_ms, backoff_ms, operation, path))
-        case ReadClock{file, started_ns, timeout_ms, backoff_ms, operation, path, purpose}:
+                file, started_us, timeout_ms, backoff_ms, operation, path))
+        case ReadClock{file, started_us, timeout_ms, backoff_ms, operation, path, purpose}:
           do IO<Result<&1, &1, DurableError.Error, Lock>>:
             result : Result<&1, &1, U32 & String, Nat> <- Fs.clock_monotonic()
-            wait.loop(rest, ClockSample{file, started_ns, timeout_ms,
+            wait.loop(rest, ClockSample{file, started_us, timeout_ms,
               backoff_ms, operation, path, purpose, result})
-        case ClockSample{file, +started_ns, +timeout_ms, +backoff_ms,
+        case ClockSample{file, +started_us, +timeout_ms, +backoff_ms,
             operation, path, purpose, result}:
           match result:
             case Fail{error}:
               wait.host_error(file, error, operation, path)
-            case Done{now_ns}:
-              +elapsed_ns = Nat.sub(now_ns, started_ns)
-              +elapsed_ms = Nat.div(elapsed_ns, 1000000n)
-              wait.loop(rest, wait.clock.decision(purpose, file, started_ns,
+            case Done{now_us}:
+              +elapsed_us = Nat.sub(now_us, started_us)
+              +elapsed_ms = Nat.div(elapsed_us, 1000n)
+              wait.loop(rest, wait.clock.decision(purpose, file, started_us,
                 timeout_ms, backoff_ms, operation, path, elapsed_ms))
-        case Pause{file, started_ns, timeout_ms, backoff_ms, operation, path, duration_ms}:
+        case Pause{file, started_us, timeout_ms, backoff_ms, operation, path, duration_ms}:
           do IO<Result<&1, &1, DurableError.Error, Lock>>:
             result : Result<&1, &1, U32 & String, Unit> <- Fs.sleep_ms(duration_ms)
-            wait.loop(rest, PauseResult{file, started_ns, timeout_ms,
+            wait.loop(rest, PauseResult{file, started_us, timeout_ms,
               backoff_ms, operation, path, result})
-        case PauseResult{file, started_ns, timeout_ms, backoff_ms, operation, path, result}:
+        case PauseResult{file, started_us, timeout_ms, backoff_ms, operation, path, result}:
           match result:
             case Fail{error}:
               wait.host_error(file, error, operation, path)
             case Done{Unit{}}:
-              wait.loop(rest, ReadClock{file, started_ns, timeout_ms,
+              wait.loop(rest, ReadClock{file, started_us, timeout_ms,
                 backoff_ms, operation, path, CheckDeadline{}})
         case WaitFatal{file, error, operation, path}:
           lock_failed(file, error, operation, path)
@@ -331,10 +331,10 @@ def acquire_wait.started(
   match result:
     case Fail{error}:
       wait.host_error(file, error, operation, path)
-    case Done{started_ns}:
+    case Done{started_us}:
       +timeout = U32.to_nat(timeout_ms)
       fuel = Nat.add(Nat.mul(timeout, 8n), 8n)
-      wait.loop(fuel, TryLock{file, started_ns, timeout, backoff_ms,
+      wait.loop(fuel, TryLock{file, started_us, timeout, backoff_ms,
         operation, path})
 
 # Opens the stable lock file and samples the monotonic start time.
