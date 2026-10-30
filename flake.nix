@@ -88,6 +88,7 @@
               [
                 bend
                 bolt
+                elan
                 nixfmt
                 formatter
                 lefthook
