@@ -4,7 +4,6 @@ import ./Policy.bend as Policy
 import ./Runtime.bend as Runtime
 import ../../src/Console.bend as Console
 import ../../src/Fs.bend as Fs
-import ../../src/Flush.bend as Flush
 
 # Tracks whether the REPL launcher should run again or finish.
 type State is Data:
@@ -35,7 +34,7 @@ def read_small(ok: Bool, path: String) -> IO(Maybe<&2, String>):
     case False{}: IO.die(Maybe<&2, String>, 70, "invalid thread restart request")
     case True{}:
       do IO<Maybe<&2, String>>:
-        value : String <- IO.try(String, Flush.read_file(path))
+        value : String <- IO.try(String, Fs.read_text(path))
         return Some{String.trim(value)}
 
 # Reads restart state only when a sidecar is present.

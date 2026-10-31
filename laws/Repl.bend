@@ -1,11 +1,9 @@
 import Base
-import ../src/MemTable.bend as MemTable
 import ../app/repl/repl_types.bend as Repl
 import ../app/repl/repl_parser.bend as ReplParser
 import ../app/repl/repl_policy.bend as ReplExec
 import ../app/repl/repl_lexer.bend as ReplLexer
 import ../app/repl/interchange.bend as Interchange
-import ../src/Wal.bend as Wal
 # --- Phase 1 REPL parser and timing policy ---
 law repl_parse_put:
   {ReplParser.parse_command("put a 1") == Repl.Put{"a", "1"} : Repl.Command}
@@ -50,13 +48,13 @@ law repl_parse_quoted_put:
 law repl_parse_import:
   {ReplParser.parse_command("import data.db") == Repl.Import{"data.db"} : Repl.Command}
 
-# Handle interchange fixture in the interactive shell laws.
-def interchange_fixture() -> List<&2, MemTable.Entry>:
-  Con{MemTable.Entry{"a", Some{"b"}}, Nil{}}
+# Builds the one-record interchange fixture.
+def interchange_fixture() -> List<&2, Interchange.Record>:
+  [Interchange.Record{"hello world", "value with spaces"}]
 
 def interchange_roundtrip.result(
-  result: Result<&1, &1, Wal.Error, String>
-) -> Maybe<&2, List<&2, MemTable.Entry>>:
+  result: Result<&1, &1, U32 & String, String>
+) -> Maybe<&2, List<&2, Interchange.Record>>:
   match result:
     case Fail{_}:
       None{}
@@ -65,15 +63,37 @@ def interchange_roundtrip.result(
 
 # State the interchange roundtrip property for the interactive shell laws.
 law interchange_roundtrip:
-  {interchange_roundtrip.result(Interchange.serialize(interchange_fixture())) == Some{interchange_fixture()} : Maybe<&2, List<&2, MemTable.Entry>>}
+  {interchange_roundtrip.result(Interchange.serialize(interchange_fixture())) ==
+    Some{interchange_fixture()} : Maybe<&2, List<&2, Interchange.Record>>}
 
-# State the interchange rejects version one property for the interactive shell laws.
-law interchange_rejects_version_one:
-  {Interchange.parse("MYLSM-EXPORT-1::#1394614482") == None{} : Maybe<&2, List<&2, MemTable.Entry>>}
+# Verifies an export with no records parses to an empty list.
+law interchange_empty_export_parses:
+  {Interchange.parse("MYLSM-EXPORT-3\n") ==
+    Some{[]} : Maybe<&2, List<&2, Interchange.Record>>}
 
-# State the interchange uses version two property for the interactive shell laws.
-law interchange_uses_version_two:
-  {Interchange.version_marker() == "MYLSM-EXPORT-2" : String}
+# Verifies a version two export is rejected.
+law interchange_rejects_version_two:
+  {Interchange.parse("MYLSM-EXPORT-2:6162") ==
+    None{} : Maybe<&2, List<&2, Interchange.Record>>}
+
+# Verifies a record with malformed hexadecimal is rejected.
+law interchange_rejects_odd_hex:
+  {Interchange.parse("MYLSM-EXPORT-3\n6 62\n") ==
+    None{} : Maybe<&2, List<&2, Interchange.Record>>}
+
+# Verifies a record line needs exactly a key and a value.
+law interchange_rejects_missing_value:
+  {Interchange.parse("MYLSM-EXPORT-3\n61\n") ==
+    None{} : Maybe<&2, List<&2, Interchange.Record>>}
+
+# State the interchange uses version three property for the interactive shell laws.
+law interchange_uses_version_three:
+  {Interchange.version_marker() == "MYLSM-EXPORT-3" : String}
+
+# Verifies maintain is no longer a command.
+law repl_maintain_is_not_a_command:
+  {ReplParser.parse_command("maintain") ==
+    Repl.Invalid{"unknown command: maintain"} : Repl.Command}
 
 # State the repl restart zero rejected property for the interactive shell laws.
 law repl_restart_zero_rejected:

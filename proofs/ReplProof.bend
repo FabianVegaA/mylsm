@@ -37,10 +37,22 @@ def Laws.repl_parse_import():
 def Laws.interchange_roundtrip():
   {==}
 
-def Laws.interchange_rejects_version_one():
+def Laws.interchange_empty_export_parses():
   {==}
 
-def Laws.interchange_uses_version_two():
+def Laws.interchange_rejects_version_two():
+  {==}
+
+def Laws.interchange_rejects_odd_hex():
+  {==}
+
+def Laws.interchange_rejects_missing_value():
+  {==}
+
+def Laws.interchange_uses_version_three():
+  {==}
+
+def Laws.repl_maintain_is_not_a_command():
   {==}
 
 def Laws.repl_restart_zero_rejected():

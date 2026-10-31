@@ -469,3 +469,55 @@ def read_dir(+path: String) -> IO(Result<&1, &1, U32 & String, List<String>>):
     n : Nat <- IO.try(Nat, read_dir_count(path))
     names : List<String> <- read_go(Nat.add(n, 1n), path, 0n, Nil{})
     return Done{names}
+
+def write_text.closed(
+  pair: File & Result<&1, &1, U32 & String, Unit>
+) -> IO(Result<&1, &1, U32 & String, Unit>):
+  match pair:
+    case (file, result):
+      do IO<Result<&1, &1, U32 & String, Unit>>:
+        _closed : Unit <- File.close(file)
+        return result
+
+def write_text.opened(
+  opened: Result<&1, &1, U32 & String, File>,
+  data: String
+) -> IO(Result<&1, &1, U32 & String, Unit>):
+  match opened:
+    case Fail{error}: IO.pure(Result<&1, &1, U32 & String, Unit>, Fail{error})
+    case Done{file}:
+      do IO<Result<&1, &1, U32 & String, Unit>>:
+        pair : File & Result<&1, &1, U32 & String, Unit> <- File.write(file, data)
+        write_text.closed(pair)
+
+# Writes a whole text file, replacing what was there.
+def write_text(path: String, data: String) -> IO(Result<&1, &1, U32 & String, Unit>):
+  do IO<Result<&1, &1, U32 & String, Unit>>:
+    opened : Result<&1, &1, U32 & String, File> <- File.open(path, "w")
+    write_text.opened(opened, data)
+
+def read_text.closed(
+  pair: File & Result<&1, &1, U32 & String, String>
+) -> IO(Result<&1, &1, U32 & String, String>):
+  match pair:
+    case (file, result):
+      do IO<Result<&1, &1, U32 & String, String>>:
+        _closed : Unit <- File.close(file)
+        return result
+
+def read_text.opened(
+  opened: Result<&1, &1, U32 & String, File>
+) -> IO(Result<&1, &1, U32 & String, String>):
+  match opened:
+    case Fail{error}: IO.pure(Result<&1, &1, U32 & String, String>, Fail{error})
+    case Done{file}:
+      do IO<Result<&1, &1, U32 & String, String>>:
+        pair : File & Result<&1, &1, U32 & String, String> <-
+          File.read(file, U32.from_nat(4294967295n))
+        read_text.closed(pair)
+
+# Reads a whole text file in one bounded call.
+def read_text(path: String) -> IO(Result<&1, &1, U32 & String, String>):
+  do IO<Result<&1, &1, U32 & String, String>>:
+    opened : Result<&1, &1, U32 & String, File> <- File.open(path, "r")
+    read_text.opened(opened)

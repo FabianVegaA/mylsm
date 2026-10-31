@@ -21,7 +21,6 @@ type Command is Data:
   Scan{lo: String, hi: String}
   Flush{}
   Compact{}
-  Maintain{}
   Stats{}
   Runtime{}
   Timing{mode: TimingMode}

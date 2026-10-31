@@ -1,15 +1,5 @@
 import Base
-import ../../src/Db.bend as Db
-import ../../src/DbIo.bend as DbIo
-import ../../src/Recover.bend as Recover
-import ../../src/Flush.bend as Flush
-import ../../src/Compact.bend as Compact
-import ../../src/CompactIo.bend as CompactIo
-import ../../src/MergeIter.bend as MergeIter
-import ../../src/MemTable.bend as MemTable
-import ../../src/Sstable.bend as Sstable
-import ../../src/SortedRun.bend as SortedRun
-import ../../src/Wal.bend as Wal
+import ../../mylsm.bend as MyLSM
 import ../../src/Fs.bend as Fs
 import ../../src/Console.bend as Console
 import ../demo/demo_helpers.bend as Demo
@@ -18,442 +8,500 @@ import ./repl_types.bend as Repl
 import ./repl_parser.bend as Parser
 import ./repl_policy.bend as Policy
 
-# Represent Session data used by the interactive command execution.
-type Session is Data:
-  Session{db: Db.Db, dir: String, timing: Repl.TimingMode, mode: Repl.ComputeMode, gpu: Bool, workers: Nat, staged: List<&2, Wal.Batch>}
+# Holds the session settings that do not own a resource.
+type Settings is Data:
+  Settings{dir: String, timing: Repl.TimingMode, mode: Repl.ComputeMode,
+    gpu: Bool, workers: Nat, batch_cap: Nat}
 
-# Represent LoopState data used by the interactive command execution.
-type LoopState is Data:
+# Owns the open database handle, the settings, and the queued mutations.
+type Session is Type:
+  Session{handle: MyLSM.Utf8.Handle, settings: Settings,
+    staged: List<&1, MyLSM.Utf8.Mutation>}
+
+# Says whether the REPL keeps reading commands.
+type LoopState is Type:
   Running{session: Session}
   Stopped{}
 
-# Handle the mode for name for the interactive command execution.
+# Names a compute mode the way the REPL prints it.
 def mode_name(mode: Repl.ComputeMode) -> String:
   match mode:
     case Repl.Cpu{}: "cpu"
     case Repl.Gpu{}: "gpu"
     case Repl.Auto{}: "auto"
 
-# Evaluate name for the interactive command execution.
+# Prints a flag as yes or no.
 def bool_name(value: Bool) -> String:
   match value:
     case True{}: "yes"
     case False{}: "no"
 
-# Handle the entry line for the interactive command execution.
-def entry_line(entry: MemTable.Entry) -> String:
-  match entry:
-    case MemTable.Entry{key, val}:
-      key ++ "=" ++ Demo.show_maybe(val)
-
-# Print entries for the interactive command execution.
-def print_entries(es: List<&2, MemTable.Entry>) -> IO(Unit):
-  match es:
-    case Nil{}:
-      IO.pure(Unit, Unit{})
-    case Con{h, t}:
-      do IO<Unit>:
-        _u : Unit <- IO.print(entry_line(h))
-        print_entries(t)
-
-# Return the memory count for the interactive command execution.
-def mem_count(db: Db.Db) -> Nat:
-  match db:
-    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
-      MemTable.count(mem)
-
-# Return the level count for the interactive command execution.
-def level_count(db: Db.Db) -> Nat:
-  match db:
-    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
-      List.length(&2, List<&2, Sstable.Table>, levels)
-
-# Component budget counters (Phase 2C): stored counts, never walks, except
-# the bounded bcache list and the open-table census (both documented caps).
-def stored_mem_count(db: Db.Db) -> Nat:
-  match db:
-    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mc, fc}:
-      mc
-
-# Handle stored frozen count in the interactive command execution.
-def stored_frozen_count(db: Db.Db) -> Nat:
-  match db:
-    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mc, fc}:
-      fc
-
-# Handle bcache len in the interactive command execution.
-def bcache_len(db: Db.Db) -> Nat:
-  match db:
-    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mc, fc}:
-      List.length(&2, Db.BEntry, bcache)
-
-# Open tables go for the interactive command execution.
-def open_tables_go(+lvls: List<&2, List<&2, Sstable.Table>>, acc: Nat) -> Nat:
-  match lvls:
-    case Nil{}:
-      acc
-    case Con{+h, t}:
-      open_tables_go(t, Nat.add(acc, List.length(&2, Sstable.Table, h)))
-
-# Open tables for the interactive command execution.
-def open_tables(db: Db.Db) -> Nat:
-  match db:
-    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mc, fc}:
-      open_tables_go(levels, 0n)
-
-# Compute gpu ok for the interactive command execution.
-def compute_gpu_ok(enabled: Bool, fuel: Nat) -> IO(Nat):
+def compute.gpu(enabled: Bool, fuel: Nat) -> IO(Nat):
   match enabled:
-    case True{}:
-      IO.pure(Nat, Demo.worker_gpu!(fuel, 0n))
+    case True{}: IO.pure(Nat, Demo.worker_gpu!(fuel, 0n))
     case False{}:
       do IO<Nat>:
-        _u : Unit <- IO.print("error: GPU runtime is not enabled")
+        _printed : Unit <- IO.print("error: GPU runtime is not enabled")
         return 0n
 
-# Compute auto for the interactive command execution.
-def compute_auto(enabled: Bool, fuel: Nat) -> IO(Nat):
+def compute.auto(enabled: Bool, fuel: Nat) -> IO(Nat):
   match enabled:
     case True{}: IO.pure(Nat, Demo.worker_gpu!(fuel, 0n))
     case False{}: IO.pure(Nat, Demo.worker(fuel, 0n))
 
-# Handle compute in the interactive command execution.
+# Runs the compute worker in the selected mode.
 def compute(mode: Repl.ComputeMode, enabled: Bool, fuel: Nat) -> IO(Nat):
   match mode:
     case Repl.Cpu{}: IO.pure(Nat, Demo.worker(fuel, 0n))
-    case Repl.Gpu{}: compute_gpu_ok(enabled, fuel)
-    case Repl.Auto{}: compute_auto(enabled, fuel)
+    case Repl.Gpu{}: compute.gpu(enabled, fuel)
+    case Repl.Auto{}: compute.auto(enabled, fuel)
 
-# Handle live entries in the interactive command execution.
-def live_entries(es: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
-  match es:
-    case Nil{}:
-      Nil{}
-    case Con{MemTable.Entry{key, val}, t}:
-      match val:
-        case None{}:
-          live_entries(t)
-        case Some{value}:
-          Con{MemTable.Entry{key, Some{value}}, live_entries(t)}
+# Keeps the session running after printing a line.
+def say(message: String, session: Session) -> IO(LoopState):
+  do IO<LoopState>:
+    _printed : Unit <- IO.print(message)
+    return Running{session}
 
-# Export entries for the interactive command execution.
-def export_entries(db: Db.Db) -> List<&2, MemTable.Entry>:
-  live_entries(SortedRun.sort_newest(Db.all_entries(db)))
+# Takes the handle back after a committed write; a failed write stops the REPL.
+def written(
+  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome>
+) -> IO(MyLSM.Utf8.Handle):
+  match pair:
+    case (handle, Done{_}): IO.pure(MyLSM.Utf8.Handle, handle)
+    case (_, Fail{_}): IO.die(MyLSM.Utf8.Handle, 1, "error: write failed")
 
-# Export result for the interactive command execution.
-def export_result(
-  +path: String,
-  result: Result<&1, &1, Wal.Error, String>,
-  session: Session
-) -> IO(LoopState):
-  match result:
-    case Fail{_}:
-      do IO<LoopState>:
-        _u : Unit <- IO.print("error: export exceeds packed frame limits")
-        return Running{session}
-    case Done{data}:
-      do IO<LoopState>:
-        _u0 : Unit <- IO.try(Unit, Flush.write_file(path ++ ".tmp", data))
-        _u1 : Unit <- IO.try(Unit, Fs.rename(path ++ ".tmp", path))
-        _u2 : Unit <- IO.try(Unit, Fs.fsync(Policy.parent_path(path)))
-        _u3 : Unit <- IO.print("OK export")
-        return Running{session}
+# Commits the queued mutations as one batch.
+def commit(handle: MyLSM.Utf8.Handle, staged: List<&1, MyLSM.Utf8.Mutation>) -> IO(MyLSM.Utf8.Handle):
+  do IO<MyLSM.Utf8.Handle>:
+    pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome> <-
+      MyLSM.Utf8.write_batch(handle, staged)
+    written(pair)
 
-# Handle return session in the interactive command execution.
-def return_session(session: Session) -> IO(LoopState):
-  IO.pure(LoopState, Running{session})
+def staged.count.pushed(
+  mutation: MyLSM.Utf8.Mutation,
+  pair: List<&1, MyLSM.Utf8.Mutation> & Nat
+) -> List<&1, MyLSM.Utf8.Mutation> & Nat:
+  match pair:
+    case (rest, count): (Con{mutation, rest}, Nat.add(count, 1n))
 
-# Import decoded for the interactive command execution.
-def import_decoded(decoded: Maybe<&2, List<&2, MemTable.Entry>>, session: Session) -> IO(LoopState):
-  match decoded:
-    case None{}:
-      do IO<LoopState>:
-        _u : Unit <- IO.print("error: invalid or corrupt import file")
-        return Running{session}
-    case Some{entries}:
-      match session:
-        case Session{db, dir, timing, mode, gpu, workers, staged}:
-          do IO<LoopState>:
-            db2 : Db.Db <- IO.try(Db.Db, Recover.write(db, Wal.Batch{Interchange.muts_of_entries(entries)}))
-            _u : Unit <- IO.print("OK import")
-            return Running{Session{db2, dir, timing, mode, gpu, workers, staged}}
+def staged.count(staged: List<&1, MyLSM.Utf8.Mutation>) -> List<&1, MyLSM.Utf8.Mutation> & Nat:
+  match staged:
+    case Nil{}: (Nil{}, 0n)
+    case Con{mutation, rest}: staged.count.pushed(mutation, staged.count(rest))
 
-# Replace mode for the interactive command execution.
-def replace_mode(+new_mode: Repl.ComputeMode, session: Session) -> IO(LoopState):
-  match session:
-    case Session{db, dir, timing, mode, gpu, workers, staged}:
-      do IO<LoopState>:
-        _u : Unit <- IO.print("mode=" ++ mode_name(new_mode))
-        return Running{Session{db, dir, timing, new_mode, gpu, workers, staged}}
-
-# Handle GPU mode for enabled for the interactive command execution.
-def gpu_enabled(session: Session) -> Bool:
-  match session:
-    case Session{db, dir, timing, mode, gpu, workers, staged}:
-      gpu
-
-# Update gpu mode for the interactive command execution.
-def set_gpu_mode(enabled: Bool, session: Session) -> IO(LoopState):
-  match enabled:
-    case False{}:
-      do IO<LoopState>:
-        _u : Unit <- IO.print("error: GPU runtime is not enabled")
-        return Running{session}
-    case True{}:
-      replace_mode(Repl.Gpu{}, session)
-
-# Update mode for the interactive command execution.
-def update_mode(new_mode: Repl.ComputeMode, +session: Session) -> IO(LoopState):
-  match new_mode:
-    case Repl.Gpu{}:
-      set_gpu_mode(gpu_enabled(session), session)
-    case Repl.Cpu{}:
-      replace_mode(Repl.Cpu{}, session)
-    case Repl.Auto{}:
-      replace_mode(Repl.Auto{}, session)
-
-# Restart write for the interactive command execution.
-def restart_write(valid: Bool, +count: Nat, +dir: String, session: Session) -> IO(LoopState):
-  match valid:
-    case False{}:
-      do IO<LoopState>:
-        _u : Unit <- IO.print("error: threads must be 1..256 and differ from the current value")
-        return Running{session}
-    case True{}:
-      do IO<LoopState>:
-        _u0 : Unit <- IO.try(Unit, Flush.write_file(dir ++ "/.mylsm-restart-threads", Nat.show(count)))
-        _u1 : Unit <- IO.print("restarting with threads=" ++ Nat.show(count))
-        IO.die(LoopState, U32.from_nat(75n), "thread restart requested")
-
-# Restart runtime for the interactive command execution.
-def restart_runtime(native: Bool, +count: Nat, +current: Nat, +dir: String, session: Session) -> IO(LoopState):
-  match native:
-    case False{}:
-      do IO<LoopState>:
-        _u : Unit <- IO.print("error: threads is available only in native mode")
-        return Running{session}
-    case True{}:
-      restart_write(Policy.restart_bounds(count, current), count, dir, session)
-
-# Restart env for the interactive command execution.
-def restart_env(runtime: String, count: Nat, current: Nat, dir: String, session: Session) -> IO(LoopState):
-  restart_runtime(String.eq(runtime, "native"), count, current, dir, session)
-
-# Handle put flush in the interactive command execution.
-def put_flush(
+def stage.decided(
   full: Bool,
-  +staged: List<&2, Wal.Batch>,
-  +db: Db.Db,
-  +dir: String,
-  +timing: Repl.TimingMode,
-  +mode: Repl.ComputeMode,
-  +gpu: Bool,
-  +workers: Nat
+  handle: MyLSM.Utf8.Handle,
+  settings: Settings,
+  staged: List<&1, MyLSM.Utf8.Mutation>
 ) -> IO(LoopState):
   match full:
     case True{}:
       do IO<LoopState>:
-        db2 : Db.Db <- IO.try(Db.Db, DbIo.db_write_staged(db, staged))
-        _u : Unit <- IO.print("OK")
-        return Running{Session{db2, dir, timing, mode, gpu, workers, Nil{}}}
-    case False{}:
-      do IO<LoopState>:
-        _u : Unit <- IO.print("QUEUED")
-        return Running{Session{db, dir, timing, mode, gpu, workers, staged}}
+        committed : MyLSM.Utf8.Handle <- commit(handle, staged)
+        say("OK", Session{committed, settings, Nil{}})
+    case False{}: say("QUEUED", Session{handle, settings, staged})
 
-# Execute go for the interactive command execution.
-def execute_go(command: Repl.Command, session: Session) -> IO(LoopState):
-  match command:
-    case Repl.Noop{}:
-      return_session(session)
-    case Repl.Put{key, value}:
+def stage.counted(
+  handle: MyLSM.Utf8.Handle,
+  +settings: Settings,
+  pair: List<&1, MyLSM.Utf8.Mutation> & Nat
+) -> IO(LoopState):
+  match settings:
+    case Settings{_, _, _, _, _, +batch_cap}:
+      match pair:
+        case (staged, count):
+          stage.decided(Nat.is_le(batch_cap, count), handle, settings, staged)
+
+# Queues one mutation and commits once the batch reaches its cap.
+def stage(session: Session, mutation: MyLSM.Utf8.Mutation) -> IO(LoopState):
+  match session:
+    case Session{handle, settings, staged}:
+      stage.counted(handle, settings,
+        staged.count(List.append(&1, MyLSM.Utf8.Mutation, staged, [mutation])))
+
+# Prints the value a get returned.
+def got(
+  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Maybe<&2, String>>,
+  settings: Settings
+) -> IO(LoopState):
+  match pair:
+    case (handle, Done{value}): say(Demo.show_maybe(value), Session{handle, settings, Nil{}})
+    case (handle, Fail{_}): say("error: read failed", Session{handle, settings, Nil{}})
+
+def scan.closed(pair: MyLSM.Utf8.Cursor & Result<&1, &1, MyLSM.Utf8.Error, Unit>) -> IO(Unit):
+  match pair:
+    case (_, _): IO.pure(Unit, Unit{})
+
+def scan.close(cursor: MyLSM.Utf8.Cursor) -> IO(Unit):
+  do IO<Unit>:
+    pair : MyLSM.Utf8.Cursor & Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
+      MyLSM.Utf8.scan_close(cursor)
+    scan.closed(pair)
+
+# Prints every live entry the cursor yields as key=value.
+def scan.print(fuel: Nat, step: MyLSM.Utf8.ScanStep) -> IO(Unit):
+  match fuel:
+    case 0n:
+      match step:
+        case MyLSM.Utf8ScanItem{_, _, cursor}: scan.close(cursor)
+        case MyLSM.Utf8ScanSkip{cursor}: scan.close(cursor)
+        case MyLSM.Utf8ScanEnd{cursor}: scan.close(cursor)
+        case MyLSM.Utf8ScanFailure{_, cursor}: scan.close(cursor)
+    case 1n+rest:
+      match step:
+        case MyLSM.Utf8ScanItem{key, value, cursor}:
+          do IO<Unit>:
+            _printed : Unit <- IO.print(key ++ "=" ++ value)
+            next : MyLSM.Utf8.ScanStep <- MyLSM.Utf8.scan_next(cursor)
+            scan.print(rest, next)
+        case MyLSM.Utf8ScanSkip{cursor}:
+          do IO<Unit>:
+            next : MyLSM.Utf8.ScanStep <- MyLSM.Utf8.scan_next(cursor)
+            scan.print(rest, next)
+        case MyLSM.Utf8ScanEnd{cursor}: scan.close(cursor)
+        case MyLSM.Utf8ScanFailure{_, cursor}:
+          do IO<Unit>:
+            _printed : Unit <- IO.print("error: scan failed")
+            scan.close(cursor)
+
+def scan.opened(
+  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Cursor>,
+  settings: Settings
+) -> IO(LoopState):
+  match pair:
+    case (handle, Fail{_}): say("error: scan failed", Session{handle, settings, Nil{}})
+    case (handle, Done{cursor}):
+      do IO<LoopState>:
+        first : MyLSM.Utf8.ScanStep <- MyLSM.Utf8.scan_next(cursor)
+        _printed : Unit <- scan.print(4294967295n, first)
+        return Running{Session{handle, settings, Nil{}}}
+
+# Prints the outcome of a flush or compaction.
+def maintained(
+  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>,
+  settings: Settings,
+  message: String
+) -> IO(LoopState):
+  match pair:
+    case (handle, Done{Unit{}}): say(message, Session{handle, settings, Nil{}})
+    case (handle, Fail{_}): say("error: " ++ message ++ " failed", Session{handle, settings, Nil{}})
+
+def stats.line(stats: MyLSM.Utf8.Stats) -> String:
+  match stats:
+    case MyLSM.Utf8Stats{MyLSM.ByteStats{entries, payload_bytes, snapshots, retained_bytes, cursors}}:
+      "entries=" ++ Nat.show(entries) ++ " payload_bytes=" ++ Nat.show(payload_bytes) ++
+        " snapshots=" ++ Nat.show(snapshots) ++ " retained_bytes=" ++
+        Nat.show(retained_bytes) ++ " cursors=" ++ Nat.show(cursors)
+
+def stats.read(
+  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Stats>,
+  settings: Settings
+) -> IO(LoopState):
+  match pair:
+    case (handle, Done{stats}): say(stats.line(stats), Session{handle, settings, Nil{}})
+    case (handle, Fail{_}): say("error: stats failed", Session{handle, settings, Nil{}})
+
+def export.collect(
+  fuel: Nat,
+  step: MyLSM.Utf8.ScanStep,
+  found: List<&2, Interchange.Record>
+) -> IO(List<&2, Interchange.Record>):
+  match fuel:
+    case 0n:
+      match step:
+        case MyLSM.Utf8ScanItem{_, _, cursor}:
+          do IO<List<&2, Interchange.Record>>:
+            _closed : Unit <- scan.close(cursor)
+            return List.reverse(&2, Interchange.Record, found)
+        case MyLSM.Utf8ScanSkip{cursor}:
+          do IO<List<&2, Interchange.Record>>:
+            _closed : Unit <- scan.close(cursor)
+            return List.reverse(&2, Interchange.Record, found)
+        case MyLSM.Utf8ScanEnd{cursor}:
+          do IO<List<&2, Interchange.Record>>:
+            _closed : Unit <- scan.close(cursor)
+            return List.reverse(&2, Interchange.Record, found)
+        case MyLSM.Utf8ScanFailure{_, cursor}:
+          do IO<List<&2, Interchange.Record>>:
+            _closed : Unit <- scan.close(cursor)
+            IO.die(List<&2, Interchange.Record>, 1, "error: export scan failed")
+    case 1n+rest:
+      match step:
+        case MyLSM.Utf8ScanItem{key, value, cursor}:
+          do IO<List<&2, Interchange.Record>>:
+            next : MyLSM.Utf8.ScanStep <- MyLSM.Utf8.scan_next(cursor)
+            export.collect(rest, next, Con{Interchange.Record{key, value}, found})
+        case MyLSM.Utf8ScanSkip{cursor}:
+          do IO<List<&2, Interchange.Record>>:
+            next : MyLSM.Utf8.ScanStep <- MyLSM.Utf8.scan_next(cursor)
+            export.collect(rest, next, found)
+        case MyLSM.Utf8ScanEnd{cursor}:
+          do IO<List<&2, Interchange.Record>>:
+            _closed : Unit <- scan.close(cursor)
+            return List.reverse(&2, Interchange.Record, found)
+        case MyLSM.Utf8ScanFailure{_, cursor}:
+          do IO<List<&2, Interchange.Record>>:
+            _closed : Unit <- scan.close(cursor)
+            IO.die(List<&2, Interchange.Record>, 1, "error: export scan failed")
+
+def export.write(
+  +path: String,
+  encoded: Result<&1, &1, U32 & String, String>,
+  session: Session
+) -> IO(LoopState):
+  match encoded:
+    case Fail{_}: say("error: export could not encode a value", session)
+    case Done{data}:
+      do IO<LoopState>:
+        _written : Unit <- IO.try(Unit, Fs.write_text(path ++ ".tmp", data))
+        _renamed : Unit <- IO.try(Unit, Fs.rename(path ++ ".tmp", path))
+        _synced : Unit <- IO.try(Unit, Fs.fsync(Policy.parent_path(path)))
+        say("OK export", session)
+
+def export.opened(
+  +path: String,
+  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Cursor>,
+  settings: Settings
+) -> IO(LoopState):
+  match pair:
+    case (handle, Fail{_}): say("error: export scan failed", Session{handle, settings, Nil{}})
+    case (handle, Done{cursor}):
+      do IO<LoopState>:
+        first : MyLSM.Utf8.ScanStep <- MyLSM.Utf8.scan_next(cursor)
+        records : List<&2, Interchange.Record> <- export.collect(4294967295n, first, Nil{})
+        export.write(path, Interchange.serialize(records), Session{handle, settings, Nil{}})
+
+def import.mutations(records: List<&2, Interchange.Record>) -> List<&1, MyLSM.Utf8.Mutation>:
+  match records:
+    case Nil{}: Nil{}
+    case Con{Interchange.Record{key, value}, rest}:
+      Con{MyLSM.Utf8SetValue{key, value}, import.mutations(rest)}
+
+def import.decoded(
+  decoded: Maybe<&2, List<&2, Interchange.Record>>,
+  session: Session
+) -> IO(LoopState):
+  match decoded:
+    case None{}: say("error: invalid or corrupt import file", session)
+    case Some{records}:
       match session:
-        case Session{+db, dir, timing, mode, gpu, workers, +staged}:
-          put_flush(Nat.is_le(Db.batch_cap_of(db), Nat.add(List.length(&2, Wal.Batch, staged), 1n)), Wal.stage(staged, Wal.Batch{Con{Wal.Put{key, value}, Nil{}}}), db, dir, timing, mode, gpu, workers)
+        case Session{handle, settings, staged}:
+          do IO<LoopState>:
+            committed : MyLSM.Utf8.Handle <- commit(handle, import.mutations(records))
+            say("OK import", Session{committed, settings, staged})
+
+def threads.write(valid: Bool, +count: Nat, +dir: String, session: Session) -> IO(LoopState):
+  match valid:
+    case False{}: say("error: threads must be 1..256 and differ from the current value", session)
+    case True{}:
+      do IO<LoopState>:
+        _written : Unit <- IO.try(Unit, Fs.write_text(dir ++ "/.mylsm-restart-threads", Nat.show(count)))
+        _printed : Unit <- IO.print("restarting with threads=" ++ Nat.show(count))
+        IO.die(LoopState, U32.from_nat(75n), "thread restart requested")
+
+def threads.native(native: Bool, +count: Nat, +settings: Settings, session: Session) -> IO(LoopState):
+  match native:
+    case False{}: say("error: threads is available only in native mode", session)
+    case True{}:
+      match settings:
+        case Settings{dir, _, _, _, +workers, _}:
+          threads.write(Policy.restart_bounds(count, workers), count, dir, session)
+
+def mode.set(+new_mode: Repl.ComputeMode, session: Session) -> IO(LoopState):
+  match session:
+    case Session{handle, Settings{dir, timing, _, gpu, workers, batch_cap}, staged}:
+      say("mode=" ++ mode_name(new_mode),
+        Session{handle, Settings{dir, timing, new_mode, gpu, workers, batch_cap}, staged})
+
+def mode.gpu(enabled: Bool, session: Session) -> IO(LoopState):
+  match enabled:
+    case False{}: say("error: GPU runtime is not enabled", session)
+    case True{}: mode.set(Repl.Gpu{}, session)
+
+# Prints the command summary.
+def help(session: Session) -> IO(LoopState):
+  do IO<LoopState>:
+    _line0 : Unit <- IO.print("put/get/del/scan <args>")
+    _line1 : Unit <- IO.print("flush compact stats runtime")
+    _line2 : Unit <- IO.print("timing <on|off|once> mode <cpu|gpu|auto> compute <fuel>")
+    _line3 : Unit <- IO.print("import <path> export <path> help exit")
+    return Running{session}
+
+# Prints the runtime settings.
+def runtime(+settings: Settings, session: Session) -> IO(LoopState):
+  match settings:
+    case Settings{_, _, mode, gpu, workers, _}:
+      do IO<LoopState>:
+        _mode : Unit <- IO.print("mode=" ++ mode_name(mode))
+        _gpu : Unit <- IO.print("gpu_enabled=" ++ bool_name(gpu))
+        _threads : Unit <- IO.print("threads=" ++ Nat.show(workers))
+        say("storage=cpu/io", session)
+
+# Closes the database before the REPL stops.
+def exit(session: Session) -> IO(LoopState):
+  match session:
+    case Session{handle, _, _}:
+      do IO<LoopState>:
+        _closed : Result<&1, &1, MyLSM.Utf8.Error, Unit> <- MyLSM.Utf8.close(handle)
+        _printed : Unit <- IO.print("bye")
+        return Stopped{}
+
+def import.read(data: Result<&1, &1, U32 & String, String>, session: Session) -> IO(LoopState):
+  match data:
+    case Fail{_}: say("error: import file could not be read", session)
+    case Done{text}: import.decoded(Interchange.parse(text), session)
+
+def execute.go(command: Repl.Command, session: Session) -> IO(LoopState):
+  match command:
+    case Repl.Noop{}: IO.pure(LoopState, Running{session})
+    case Repl.Put{key, value}: stage(session, MyLSM.Utf8SetValue{key, value})
+    case Repl.Del{key}: stage(session, MyLSM.Utf8DeleteKey{key})
     case Repl.Get{key}:
       match session:
-        case Session{+db, dir, timing, mode, gpu, workers, staged}:
+        case Session{handle, settings, _}:
           do IO<LoopState>:
-            _u : Unit <- IO.print(Demo.show_maybe(Db.db_get(db, key)))
-            return Running{Session{db, dir, timing, mode, gpu, workers, staged}}
-    case Repl.Del{key}:
-      match session:
-        case Session{+db, dir, timing, mode, gpu, workers, +staged}:
-          put_flush(Nat.is_le(Db.batch_cap_of(db), Nat.add(List.length(&2, Wal.Batch, staged), 1n)), Wal.stage(staged, Wal.Batch{Con{Wal.Del{key}, Nil{}}}), db, dir, timing, mode, gpu, workers)
+            pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Maybe<&2, String>> <-
+              MyLSM.Utf8.get(handle, key)
+            got(pair, settings)
     case Repl.Scan{lo, hi}:
       match session:
-        case Session{+db, dir, timing, mode, gpu, workers, staged}:
+        case Session{handle, settings, _}:
           do IO<LoopState>:
-            _u : Unit <- print_entries(MergeIter.scan(Db.all_entries(db), lo, hi))
-            return Running{Session{db, dir, timing, mode, gpu, workers, staged}}
+            pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Cursor> <-
+              MyLSM.Utf8.scan_range(handle, Some{lo}, Some{hi})
+            scan.opened(pair, settings)
     case Repl.Flush{}:
       match session:
-        case Session{db, dir, timing, mode, gpu, workers, staged}:
+        case Session{handle, settings, _}:
           do IO<LoopState>:
-            db2 : Db.Db <- IO.try(Db.Db, Flush.flush(db))
-            _u : Unit <- IO.print("OK flush")
-            return Running{Session{db2, dir, timing, mode, gpu, workers, staged}}
+            pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
+              MyLSM.Utf8.flush(handle)
+            maintained(pair, settings, "OK flush")
     case Repl.Compact{}:
       match session:
-        case Session{db, dir, timing, mode, gpu, workers, staged}:
+        case Session{handle, settings, _}:
           do IO<LoopState>:
-            db2 : Db.Db <- IO.try(Db.Db, CompactIo.compact(db))
-            _u : Unit <- IO.print("OK compact")
-            return Running{Session{db2, dir, timing, mode, gpu, workers, staged}}
-    case Repl.Maintain{}:
-      match session:
-        case Session{db, dir, timing, mode, gpu, workers, staged}:
-          do IO<LoopState>:
-            db2 : Db.Db <- IO.try(Db.Db, Recover.maintain(db))
-            _u : Unit <- IO.print("OK maintain")
-            return Running{Session{db2, dir, timing, mode, gpu, workers, staged}}
+            pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
+              MyLSM.Utf8.compact(handle)
+            maintained(pair, settings, "OK compact")
     case Repl.Stats{}:
       match session:
-        case Session{+db, dir, timing, mode, gpu, workers, staged}:
+        case Session{handle, settings, _}:
           do IO<LoopState>:
-            _u0 : Unit <- IO.print("mem_entries=" ++ Nat.show(mem_count(db)))
-            _u1 : Unit <- IO.print("levels=" ++ Nat.show(level_count(db)))
-            _u2 : Unit <- IO.print("mem_stored=" ++ Nat.show(stored_mem_count(db)) ++ " mem_cap=4096 frozen_stored=" ++ Nat.show(stored_frozen_count(db)) ++
-            " frozen_cap=4096 bcache_entries=" ++ Nat.show(bcache_len(db)) ++ " bcache_cap=256 open_tables=" ++ Nat.show(open_tables(db)))
-            return Running{Session{db, dir, timing, mode, gpu, workers, staged}}
+            pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Stats> <-
+              MyLSM.Utf8.stats(handle)
+            stats.read(pair, settings)
     case Repl.Runtime{}:
       match session:
-        case Session{db, dir, timing, +mode, +gpu, +workers, staged}:
-          do IO<LoopState>:
-            _u0 : Unit <- IO.print("mode=" ++ mode_name(mode))
-            _u1 : Unit <- IO.print("gpu_enabled=" ++ bool_name(gpu))
-            _u2 : Unit <- IO.print("threads=" ++ Nat.show(workers))
-            _u3 : Unit <- IO.print("storage=cpu/io")
-            return Running{Session{db, dir, timing, mode, gpu, workers, staged}}
+        case Session{handle, +settings, staged}:
+          runtime(settings, Session{handle, settings, staged})
     case Repl.Timing{new_timing}:
       match session:
-        case Session{db, dir, timing, mode, gpu, workers, staged}:
-          do IO<LoopState>:
-            _u : Unit <- IO.print("timing updated")
-            return Running{Session{db, dir, new_timing, mode, gpu, workers, staged}}
+        case Session{handle, Settings{dir, _, mode, gpu, workers, batch_cap}, staged}:
+          say("timing updated",
+            Session{handle, Settings{dir, new_timing, mode, gpu, workers, batch_cap}, staged})
     case Repl.Mode{new_mode}:
-      update_mode(new_mode, session)
+      match new_mode:
+        case Repl.Gpu{}:
+          match session:
+            case Session{handle, +settings, staged}:
+              match settings:
+                case Settings{_, _, _, +gpu, _, _}:
+                  mode.gpu(gpu, Session{handle, settings, staged})
+        case Repl.Cpu{}: mode.set(Repl.Cpu{}, session)
+        case Repl.Auto{}: mode.set(Repl.Auto{}, session)
     case Repl.Threads{+count}:
       match session:
-        case Session{db, +dir, timing, mode, gpu, +workers, staged}:
+        case Session{handle, +settings, staged}:
           do IO<LoopState>:
-            runtime : String <- IO.try(String, Console.get_env("MYLSM_RUNTIME"))
-            restart_env(runtime, count, workers, dir, Session{db, dir, timing, mode, gpu, workers, staged})
+            runtime_name : String <- IO.try(String, Console.get_env("MYLSM_RUNTIME"))
+            threads.native(String.eq(runtime_name, "native"), count, settings,
+              Session{handle, settings, staged})
     case Repl.Compute{fuel}:
       match session:
-        case Session{db, dir, timing, +mode, +gpu, workers, staged}:
-          do IO<LoopState>:
-            value : Nat <- compute(mode, gpu, fuel)
-            _u : Unit <- IO.print("compute=" ++ Nat.show(value))
-            return Running{Session{db, dir, timing, mode, gpu, workers, staged}}
+        case Session{handle, +settings, staged}:
+          match settings:
+            case Settings{_, _, +mode, +gpu, _, _}:
+              do IO<LoopState>:
+                value : Nat <- compute(mode, gpu, fuel)
+                say("compute=" ++ Nat.show(value), Session{handle, settings, staged})
     case Repl.Import{path}:
       do IO<LoopState>:
-        data : String <- IO.try(String, Flush.read_file(path))
-        import_decoded(Interchange.parse(data), session)
+        data : Result<&1, &1, U32 & String, String> <- Fs.read_text(path)
+        import.read(data, session)
     case Repl.Export{+path}:
       match session:
-        case Session{+db, _, _, _, _, _, _}:
-          export_result(path, Interchange.serialize(export_entries(db)), session)
-    case Repl.Time{inner}:
-      do IO<LoopState>:
-        _u : Unit <- IO.print("use 'timing once' before the command: " ++ inner)
-        return Running{session}
-    case Repl.Help{}:
-      do IO<LoopState>:
-        _u0 : Unit <- IO.print("put/get/del/scan <args>")
-        _u1 : Unit <- IO.print("flush compact maintain stats runtime")
-        _u2 : Unit <- IO.print("timing <on|off|once> mode <cpu|gpu|auto> compute <fuel>")
-        _u3 : Unit <- IO.print("import <path> export <path> help exit")
-        return Running{session}
-    case Repl.ExitCommand{}:
-      do IO<LoopState>:
-        _u : Unit <- IO.print("bye")
-        return Stopped{}
-    case Repl.Invalid{message}:
-      do IO<LoopState>:
-        _u : Unit <- IO.print("error: " ++ message)
-        return Running{session}
+        case Session{handle, settings, _}:
+          do IO<LoopState>:
+            pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Cursor> <-
+              MyLSM.Utf8.scan_range(handle, None{}, None{})
+            export.opened(path, pair, settings)
+    case Repl.Time{inner}: say("use 'timing once' before the command: " ++ inner, session)
+    case Repl.Help{}: help(session)
+    case Repl.ExitCommand{}: exit(session)
+    case Repl.Invalid{message}: say("error: " ++ message, session)
 
-# Execute flushed for the interactive command execution.
-def execute_flushed(
-  command: Repl.Command,
-  +db: Db.Db,
-  +dir: String,
-  +timing: Repl.TimingMode,
-  +mode: Repl.ComputeMode,
-  +gpu: Bool,
-  +workers: Nat,
-  +staged: List<&2, Wal.Batch>
-) -> IO(LoopState):
-  match staged:
-    case Nil{}:
-      execute_go(command, Session{db, dir, timing, mode, gpu, workers, Nil{}})
-    case Con{_, _}:
-      do IO<LoopState>:
-        db2 : Db.Db <- IO.try(Db.Db, DbIo.db_write_staged(db, staged))
-        execute_go(command, Session{db2, dir, timing, mode, gpu, workers, Nil{}})
-
-# Handle execute in the interactive command execution.
+# Commits queued mutations before running the next command.
 def execute(command: Repl.Command, session: Session) -> IO(LoopState):
   match session:
-    case Session{db, dir, timing, mode, gpu, workers, staged}:
-      execute_flushed(command, db, dir, timing, mode, gpu, workers, staged)
+    case Session{handle, settings, staged}:
+      match staged:
+        case Nil{}: execute.go(command, Session{handle, settings, Nil{}})
+        case Con{first, rest}:
+          do IO<LoopState>:
+            committed : MyLSM.Utf8.Handle <- commit(handle, Con{first, rest})
+            execute.go(command, Session{committed, settings, Nil{}})
 
-# Reset once state for the interactive command execution.
-def reset_once_state(once: Bool, state: LoopState) -> LoopState:
-  match once state:
-    case False{} _:
-      state
-    case True{} Stopped{}:
-      Stopped{}
-    case True{} Running{Session{db, dir, timing, mode, gpu, workers, staged}}:
-      Running{Session{db, dir, Repl.TimingOff{}, mode, gpu, workers, staged}}
+def once.reset(once: Bool, state: LoopState) -> LoopState:
+  match once:
+    case False{}: state
+    case True{}:
+      match state:
+        case Stopped{}: Stopped{}
+        case Running{Session{handle, Settings{dir, _, mode, gpu, workers, batch_cap}, staged}}:
+          Running{Session{handle, Settings{dir, Repl.TimingOff{}, mode, gpu, workers, batch_cap}, staged}}
 
-# Run the timed run for the interactive command execution.
-def timed_run(once: Bool, command: Repl.Command, session: Session) -> IO(LoopState):
+def timed.run(once: Bool, command: Repl.Command, session: Session) -> IO(LoopState):
   do IO<LoopState>:
     start : Nat <- IO.now()
     state : LoopState <- execute(command, session)
     finish : Nat <- IO.now()
-    _u : Unit <- IO.print("time_ms=" ++ Nat.show(Nat.sub(finish, start)))
-    return reset_once_state(once, state)
+    _printed : Unit <- IO.print("time_ms=" ++ Nat.show(Nat.sub(finish, start)))
+    return once.reset(once, state)
 
-# Run the timed dispatch for the interactive command execution.
-def timed_dispatch(enabled: Bool, once: Bool, command: Repl.Command, session: Session) -> IO(LoopState):
+def timed.dispatch(enabled: Bool, once: Bool, command: Repl.Command, session: Session) -> IO(LoopState):
   match enabled:
-    case True{}: timed_run(once, command, session)
+    case True{}: timed.run(once, command, session)
     case False{}: execute(command, session)
 
-# Run regular for the interactive command execution.
-def run_regular(command: Repl.Command, session: Session) -> IO(LoopState):
+def run.regular(command: Repl.Command, session: Session) -> IO(LoopState):
   match session:
-    case Session{db, dir, +timing, mode, gpu, workers, staged}:
-      timed_dispatch(Policy.timing_should(timing), Policy.timing_once(timing), command, Session{db, dir, timing, mode, gpu, workers, staged})
+    case Session{handle, +settings, staged}:
+      match settings:
+        case Settings{_, +timing, _, _, _, _}:
+          timed.dispatch(Policy.timing_should(timing), Policy.timing_once(timing), command,
+            Session{handle, settings, staged})
 
-# Run time for the interactive command execution.
-def run_time(inner: String, session: Session) -> IO(LoopState):
-  timed_dispatch(True{}, False{}, Parser.parse_command(inner), session)
-
-# Time is expanded exactly once here; execute itself never recurses on Command.
+# Runs one parsed command; a time prefix is expanded here exactly once.
 def run_command(command: Repl.Command, session: Session) -> IO(LoopState):
   match command:
-    case Repl.Time{inner}: run_time(inner, session)
-    case Repl.Noop{}: run_regular(Repl.Noop{}, session)
-    case Repl.Put{key, value}: run_regular(Repl.Put{key, value}, session)
-    case Repl.Get{key}: run_regular(Repl.Get{key}, session)
-    case Repl.Del{key}: run_regular(Repl.Del{key}, session)
-    case Repl.Scan{lo, hi}: run_regular(Repl.Scan{lo, hi}, session)
-    case Repl.Flush{}: run_regular(Repl.Flush{}, session)
-    case Repl.Compact{}: run_regular(Repl.Compact{}, session)
-    case Repl.Maintain{}: run_regular(Repl.Maintain{}, session)
-    case Repl.Stats{}: run_regular(Repl.Stats{}, session)
-    case Repl.Runtime{}: run_regular(Repl.Runtime{}, session)
-    case Repl.Timing{mode}: run_regular(Repl.Timing{mode}, session)
-    case Repl.Mode{mode}: run_regular(Repl.Mode{mode}, session)
-    case Repl.Threads{count}: run_regular(Repl.Threads{count}, session)
-    case Repl.Compute{fuel}: run_regular(Repl.Compute{fuel}, session)
-    case Repl.Import{path}: run_regular(Repl.Import{path}, session)
-    case Repl.Export{path}: run_regular(Repl.Export{path}, session)
-    case Repl.Help{}: run_regular(Repl.Help{}, session)
-    case Repl.ExitCommand{}: run_regular(Repl.ExitCommand{}, session)
-    case Repl.Invalid{message}: run_regular(Repl.Invalid{message}, session)
+    case Repl.Time{inner}: timed.dispatch(True{}, False{}, Parser.parse_command(inner), session)
+    case Repl.Noop{}: run.regular(Repl.Noop{}, session)
+    case Repl.Put{key, value}: run.regular(Repl.Put{key, value}, session)
+    case Repl.Get{key}: run.regular(Repl.Get{key}, session)
+    case Repl.Del{key}: run.regular(Repl.Del{key}, session)
+    case Repl.Scan{lo, hi}: run.regular(Repl.Scan{lo, hi}, session)
+    case Repl.Flush{}: run.regular(Repl.Flush{}, session)
+    case Repl.Compact{}: run.regular(Repl.Compact{}, session)
+    case Repl.Stats{}: run.regular(Repl.Stats{}, session)
+    case Repl.Runtime{}: run.regular(Repl.Runtime{}, session)
+    case Repl.Timing{mode}: run.regular(Repl.Timing{mode}, session)
+    case Repl.Mode{mode}: run.regular(Repl.Mode{mode}, session)
+    case Repl.Threads{count}: run.regular(Repl.Threads{count}, session)
+    case Repl.Compute{fuel}: run.regular(Repl.Compute{fuel}, session)
+    case Repl.Import{path}: run.regular(Repl.Import{path}, session)
+    case Repl.Export{path}: run.regular(Repl.Export{path}, session)
+    case Repl.Help{}: run.regular(Repl.Help{}, session)
+    case Repl.ExitCommand{}: run.regular(Repl.ExitCommand{}, session)
+    case Repl.Invalid{message}: run.regular(Repl.Invalid{message}, session)

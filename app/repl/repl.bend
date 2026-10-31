@@ -1,7 +1,6 @@
 import Base
 import ../../src/Console.bend as Console
-import ../../src/Db.bend as Db
-import ../../src/Recover.bend as Recover
+import ../../mylsm.bend as MyLSM
 import ./repl_types.bend as Repl
 import ./repl_parser.bend as Parser
 import ./repl_exec.bend as Exec
@@ -35,19 +34,73 @@ def nat_default(value: Maybe<&2, Nat>) -> Nat:
 def batch_clamp(count: Nat) -> Nat:
   Nat.max(1n, Nat.min(count, 1024n))
 
-# Handle repl loop in the interactive shell loop.
+# Reads commands until exit or the per-process command budget runs out.
 def repl_loop(commands: Nat, state: Exec.LoopState) -> IO(Unit):
-  match commands state:
-    case 0n _:
-      IO.print("session command limit reached")
-    case 1n+rest Exec.Stopped{}:
-      IO.pure(Unit, Unit{})
-    case 1n+rest Exec.Running{session}:
-      do IO<Unit>:
-        _u : Unit <- IO.print("mylsm>")
-        line : String <- IO.try(String, Console.read_line())
-        next : Exec.LoopState <- Exec.run_command(Parser.parse_command(line), session)
-        repl_loop(rest, next)
+  match commands:
+    case 0n:
+      match state:
+        case Exec.Stopped{}: IO.print("session command limit reached")
+        case Exec.Running{session}:
+          do IO<Unit>:
+            _stopped : Exec.LoopState <- Exec.exit(session)
+            IO.print("session command limit reached")
+    case 1n+rest:
+      match state:
+        case Exec.Stopped{}: IO.pure(Unit, Unit{})
+        case Exec.Running{session}:
+          do IO<Unit>:
+            _prompt : Unit <- IO.print("mylsm>")
+            line : String <- IO.try(String, Console.read_line())
+            next : Exec.LoopState <- Exec.run_command(Parser.parse_command(line), session)
+            repl_loop(rest, next)
+
+def legacy.checked(is_legacy: Bool) -> IO(MyLSM.Utf8.Handle):
+  match is_legacy:
+    case True{}:
+      IO.die(MyLSM.Utf8.Handle, 1,
+        "error: database uses the 0.5 format; run migrate_legacy first")
+    case False{}: IO.die(MyLSM.Utf8.Handle, 1, "error: database could not be opened")
+
+def legacy.inspected(
+  result: Result<&1, &1, MyLSM.InspectionError, MyLSM.ManifestInspection>
+) -> IO(MyLSM.Utf8.Handle):
+  match result:
+    case Done{MyLSM.ManifestInspection{_, _, generation, _}}:
+      legacy.checked(U32.is_eq(generation, 3))
+    case Fail{_}: legacy.checked(False{})
+
+# Takes the new handle, or explains why the directory cannot be opened.
+def created(
+  +dir: String,
+  result: Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle>
+) -> IO(MyLSM.Utf8.Handle):
+  match result:
+    case Done{handle}: IO.pure(MyLSM.Utf8.Handle, handle)
+    case Fail{_}:
+      do IO<MyLSM.Utf8.Handle>:
+        inspected : Result<&1, &1, MyLSM.InspectionError, MyLSM.ManifestInspection> <-
+          MyLSM.inspect(dir)
+        legacy.inspected(inspected)
+
+# Takes the existing handle, or creates the database when none exists.
+def opened(
+  +dir: String,
+  result: Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle>
+) -> IO(MyLSM.Utf8.Handle):
+  match result:
+    case Done{handle}: IO.pure(MyLSM.Utf8.Handle, handle)
+    case Fail{_}:
+      do IO<MyLSM.Utf8.Handle>:
+        result : Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle> <-
+          MyLSM.Utf8.create(dir)
+        created(dir, result)
+
+# Opens the REPL database, creating it when the directory has none.
+def open(+dir: String) -> IO(MyLSM.Utf8.Handle):
+  do IO<MyLSM.Utf8.Handle>:
+    result : Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle> <-
+      MyLSM.Utf8.open_existing(dir)
+    opened(dir, result)
 
 def main() -> IO(Unit):
   do IO<Unit>:
@@ -57,8 +110,10 @@ def main() -> IO(Unit):
     workers_env : String <- IO.try(String, Console.get_env("MYLSM_THREADS"))
     batch_env : String <- IO.try(String, Console.get_env("MYLSM_BATCH_CAP"))
     +dir : String <- IO.pure(String, env_default(dir_env, ".mylsm-repl-data"))
-    db : Db.Db <- IO.try(Db.Db, Recover.open_db(dir))
-    +capped : Db.Db <- IO.pure(Db.Db, Db.with_batch_cap(db, batch_clamp(nat_default(Nat.read(batch_env)))))
-    _u0 : Unit <- IO.print("MyLSM REPL")
-    _u1 : Unit <- IO.print("database=" ++ dir)
-    repl_loop(256n, Exec.Running{Exec.Session{capped, dir, Repl.TimingOff{}, env_mode(mode_env), env_gpu(gpu_env), nat_default(Nat.read(workers_env)), Nil{}}})
+    handle : MyLSM.Utf8.Handle <- open(dir)
+    _title : Unit <- IO.print("MyLSM REPL")
+    _database : Unit <- IO.print("database=" ++ dir)
+    repl_loop(256n, Exec.Running{Exec.Session{handle,
+      Exec.Settings{dir, Repl.TimingOff{}, env_mode(mode_env), env_gpu(gpu_env),
+        nat_default(Nat.read(workers_env)),
+        batch_clamp(nat_default(Nat.read(batch_env)))}, Nil{}}})

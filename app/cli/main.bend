@@ -6,7 +6,6 @@ import ./Runtime.bend as Runtime
 import ./Runner.bend as Runner
 import ./ReplLauncher.bend as ReplLauncher
 import ../../src/Fs.bend as Fs
-import ../../src/Flush.bend as Flush
 import ../../src/Console.bend as Console
 
 # Returns the CLI usage and supported environment settings.

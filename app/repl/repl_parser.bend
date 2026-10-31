@@ -292,21 +292,13 @@ def dispatch_stats(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.C
     case False{}:
       dispatch_runtime(String.eq(cmd, "runtime"), cmd, tokens)
 
-# Dispatch maintain for the interactive command parser.
-def dispatch_maintain(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
-  match hit:
-    case True{}:
-      parse_no_args(tokens, Repl.Maintain{}, "usage: maintain")
-    case False{}:
-      dispatch_stats(String.eq(cmd, "stats"), cmd, tokens)
-
 # Dispatch compact for the interactive command parser.
 def dispatch_compact(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
   match hit:
     case True{}:
       parse_no_args(tokens, Repl.Compact{}, "usage: compact")
     case False{}:
-      dispatch_maintain(String.eq(cmd, "maintain"), cmd, tokens)
+      dispatch_stats(String.eq(cmd, "stats"), cmd, tokens)
 
 # Dispatch flush for the interactive command parser.
 def dispatch_flush(hit: Bool, +cmd: String, +tokens: List<&2, String>) -> Repl.Command:
