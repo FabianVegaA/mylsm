@@ -5,6 +5,23 @@ Linux runtime gates, Bun FFI effects, and snapshot-generation reclamation pass.
 Release acceptance is not complete: the repeated workload matrix and Linux
 cursor memory ceiling remain open.
 
+## Full proof gate after the reactor and response-limit changes
+
+Darwin 25.6.0 arm64, Bend 2.0.39, revision `d64feb0` plus the uncommitted
+`UnusedDefs` law/witness pair, run inside `nix develop`.
+
+| Check | Result |
+| --- | --- |
+| `nix develop -c ./proofs/run.sh` | `NAME PASS`; `SUMMARY PASS=97 FAIL=0 TIMEOUT=0 TOTAL=97` in 8 min 25 s |
+
+Modules added since revision `b7ae44d`: `CleanupPolicy`,
+`ConnectionPolicy`, `ConnectionStore`, `CursorPreviewPolicy`, `OptionsCodec`,
+`OwnerOpenPolicy`, `RequestQueue`, `ResourceAccounting`, `ResourceOptions`,
+`ResponseBoundPolicy`, `SnapshotValueLengthPolicy`, `TransportBudgetPolicy`,
+`UnusedDefs` and `ValueLengthPolicy`. The owner smoke gate
+(`bench/smoke/owner_gate.sh`, 20 smokes plus the transport oracle unit test)
+also passes on `d64feb0`. This does not change the open items below.
+
 ## Bend 2.0.39 compatibility rerun
 
 Darwin arm64, Bend 2.0.39, and `bend-mathlib@0.7.5.0` pinned to
