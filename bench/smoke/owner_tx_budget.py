@@ -5,6 +5,7 @@ import struct
 import sys
 import time
 import fcntl
+import termios
 import array
 import hashlib
 
@@ -51,7 +52,67 @@ def receive(connection, request_id):
 key = b"large"
 value = b"v" * 256
 
-if mode == "seed":
+if mode == "seed_boundaries":
+    for size in (127, 128, 129):
+        item_key = b"~boundary" + str(size).encode()
+        item_value = b"v" * size
+        status, _ = exchange(size, 2, struct.pack(">II", len(item_key), size) +
+                             item_key + item_value)
+        assert status == 0, "boundary value could not be stored"
+elif mode == "boundaries":
+    for size in (127, 128, 129):
+        status, body = exchange(size, 1, b"~boundary" + str(size).encode())
+        assert status == (5 if size == 129 else 0), "incorrect individual TX boundary"
+        assert body == (b"" if size == 129 else b"v" * size)
+elif mode == "slots":
+    from pathlib import Path
+    from owner_transport_oracle import read
+    peers = [connect() for _ in range(64)]
+    for peer in peers:
+        peer.sendall(b"M")
+    deadline = time.monotonic() + 10
+    while len(read(Path(os.environ["MYLSM_TRANSPORT_LOG"])).connections) != 64:
+        assert time.monotonic() < deadline, "owner did not admit all fixed slots"
+        time.sleep(0.01)
+    rejected = connect()
+    rejected.settimeout(10)
+    try:
+        assert rejected.recv(1) == b"", "connection without control credit was admitted"
+    except ConnectionResetError:
+        pass
+    rejected.close()
+    for peer in peers:
+        peer.close()
+elif mode in ("free_below", "free_exact", "free_above"):
+    from pathlib import Path
+    from owner_transport_oracle import read
+    blocker = connect()
+    blocker.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4096)
+    blocker.sendall(request(500, 1, b"b"))
+    header = receive_exact(blocker, 24)
+    length = struct.unpack(">I", header[20:24])[0]
+    assert length == 32 * 1024 * 1024 + 4
+    queued = array.array("i", [0])
+    fcntl.ioctl(blocker, termios.FIONREAD, queued, True)
+    assert queued[0] < length, "boundary fixture lacks TX backpressure"
+    following = connect()
+    following.sendall(request(501, 1, b"~boundary128"))
+    if mode == "free_below":
+        ready, _, _ = select.select([following], [], [], 0.05)
+        assert not ready, "response exceeded remaining TX credit"
+    else:
+        status, body = receive(following, 501)
+        assert status == 0 and body == b"v" * 128
+        observation = read(Path(os.environ["MYLSM_TRANSPORT_LOG"]))
+        assert observation.peak == 2 * (32 * 1024 * 1024) + 312
+    body = receive_exact(blocker, length)
+    assert body == bytes(4) + b"z" * (32 * 1024 * 1024)
+    if mode == "free_below":
+        status, body = receive(following, 501)
+        assert status == 0 and body == b"v" * 128
+    following.close()
+    blocker.close()
+elif mode == "seed":
     payload = struct.pack(">II", len(key), len(value)) + key + value
     status, _ = exchange(1, 2, payload)
     if status != 0:
@@ -236,7 +297,7 @@ elif mode == "cursor_race":
     header = receive_exact(blocker, 24)
     blocker_length = struct.unpack(">I", header[20:24])[0]
     queued_bytes = array.array("i", [0])
-    fcntl.ioctl(blocker, 0x4004667F, queued_bytes, True)
+    fcntl.ioctl(blocker, termios.FIONREAD, queued_bytes, True)
     if queued_bytes[0] >= blocker_length - 24:
         raise AssertionError("cursor race blocker did not retain TX backpressure")
 
@@ -338,7 +399,7 @@ elif mode == "fifo":
     if response_length < 32 * 1024 * 1024:
         raise AssertionError("TX fixture did not produce a backpressured frame")
     queued_bytes = array.array("i", [0])
-    fcntl.ioctl(blocked, 0x4004667F, queued_bytes, True)
+    fcntl.ioctl(blocked, termios.FIONREAD, queued_bytes, True)
     if queued_bytes[0] >= response_length - 24:
         raise AssertionError("peer socket buffered the whole frame; TX pressure was not established")
 
@@ -415,7 +476,7 @@ elif mode == "timeout":
     if response_length < 32 * 1024 * 1024:
         raise AssertionError("timeout fixture did not retain its TX frame")
     queued_bytes = array.array("i", [0])
-    fcntl.ioctl(blocked, 0x4004667F, queued_bytes, True)
+    fcntl.ioctl(blocked, termios.FIONREAD, queued_bytes, True)
     if queued_bytes[0] >= response_length - 24:
         raise AssertionError("timeout fixture did not establish TX pressure")
 

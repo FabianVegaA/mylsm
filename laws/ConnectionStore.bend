@@ -101,7 +101,7 @@ law transmit_metrics_retain_full_response_buffers:
       Store.Connection{1, socket, 4,
         Store.WritingResponse{Bytes.new(3), 1, 90n,
           TxPolicy.FrameReservation{1, 3n}}},
-      Store.Connection{2, socket, 1, Store.Closing{}}], 3n, 2n} :
+      Store.Connection{2, socket, 1, Store.Closing{}}], 3n, 2n, 3n, 56n, 48n} :
     Store.TransmitCount}
 
 # Verifies response reservation counts the whole encoded frame.
@@ -229,3 +229,18 @@ law empty_payload_becomes_admissible_without_socket_read:
       Store.AwaitingAdmission{Protocol.Request{1, 1, 9, 2, Bytes.new(0)},
         50n, 24n}}, Store.PayloadReady{}) : Store.Connection &
       Store.PayloadStatus}
+
+# Closing the census retains separate control/header credit for every live slot.
+law transport_census_preserves_fixed_slots_and_data_reservations:
+  for reserved: Nat
+  for count: Nat
+  for live: Nat
+  {Store.transmit.summary(Nil{}, reserved, count, live) ==
+    Store.TransmitCount{Nil{}, reserved, count, live,
+      TxPolicy.slots.control.bytes(count), TxPolicy.slots.header.bytes(count)} :
+    Store.TransmitCount}
+
+# No connection leaves no data, frame, control, or header reservation behind.
+law empty_transport_census_has_no_retained_credit:
+  {Store.transmit.metrics(Nil{}) ==
+    Store.TransmitCount{Nil{}, 0n, 0n, 0n, 0n, 0n} : Store.TransmitCount}

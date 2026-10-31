@@ -21,6 +21,8 @@ cleanup() {
 
 trap cleanup EXIT HUP INT TERM
 
+python3 "$ROOT/bench/smoke/test_owner_transport_oracle.py"
+
 bend "$ROOT/bench/smoke/owner_frame_limit_setup.bend" -o "$WORK/setup"
 bend "$ROOT/app/owner/mylsm_owner.bend" -o "$WORK/owner"
 MYLSM_DB_PATH="$DB" MYLSM_SESSION_MODE=create "$WORK/setup" >"$WORK/setup.log"
@@ -43,7 +45,7 @@ PY
 }
 
 start_owner() {
-  MYLSM_DB_PATH="$DB" "$WORK/owner" --resource-options-v1 "$(options "$@")" >"$WORK/owner.log" 2>&1 &
+  MYLSM_TRANSPORT_OBSERVE=1 MYLSM_DB_PATH="$DB" "$WORK/owner" --resource-options-v1 "$(options "$@")" >"$WORK/owner.log" 2>&1 &
   OWNER_PID=$!
   for _ in $(seq 1 100); do
     if [[ -S "$ENDPOINT" ]] && kill -0 "$OWNER_PID" 2>/dev/null; then
@@ -72,6 +74,7 @@ PY
 }
 
 stop_owner() {
+  python3 "$ROOT/bench/smoke/owner_transport_oracle.py" "$WORK/owner.log"
   kill -TERM "$OWNER_PID" 2>/dev/null || true
   wait "$OWNER_PID" 2>/dev/null || true
   OWNER_PID=
@@ -117,6 +120,26 @@ python3 "$ROOT/bench/smoke/owner_tx_budget.py" "$ENDPOINT" post_matrix
 stop_owner
 start_owner 512
 python3 "$ROOT/bench/smoke/owner_tx_budget.py" "$ENDPOINT" reopen_post_matrix
+stop_owner
+
+start_owner 512
+python3 "$ROOT/bench/smoke/owner_tx_budget.py" "$ENDPOINT" seed_boundaries
+stop_owner
+start_owner 128
+python3 "$ROOT/bench/smoke/owner_tx_budget.py" "$ENDPOINT" boundaries
+stop_owner
+start_owner 128
+python3 "$ROOT/bench/smoke/owner_transport_oracle.py" "$WORK/owner.log"
+MYLSM_TRANSPORT_LOG="$WORK/owner.log" python3 "$ROOT/bench/smoke/owner_tx_budget.py" "$ENDPOINT" slots
+stop_owner
+start_owner 33554573
+MYLSM_TRANSPORT_LOG="$WORK/owner.log" python3 "$ROOT/bench/smoke/owner_tx_budget.py" "$ENDPOINT" free_below
+stop_owner
+start_owner 33554574
+MYLSM_TRANSPORT_LOG="$WORK/owner.log" python3 "$ROOT/bench/smoke/owner_tx_budget.py" "$ENDPOINT" free_exact
+stop_owner
+start_owner 33554575
+MYLSM_TRANSPORT_LOG="$WORK/owner.log" python3 "$ROOT/bench/smoke/owner_tx_budget.py" "$ENDPOINT" free_above
 stop_owner
 
 DB="$WORK/cdb"

@@ -14,6 +14,7 @@ import ./ConnectionStore.bend as Connections
 import ./ConnectionPolicy.bend as ConnectionPolicy
 import ./RequestQueue.bend as RequestQueue
 import ./TransportBudgetPolicy.bend as TxPolicy
+import ./TransportObservation.bend as Observation
 import ./QueuePolicy.bend as QueuePolicy
 import ./OwnerSnapshotStore.bend as SnapshotStore
 import ./OwnerCursorStore.bend as CursorStore
@@ -183,7 +184,7 @@ type ReactorCleanupResult is Type:
 
 # Carries the state for ReactorCloseAction.
 type ReactorCloseAction is Type:
-  CloseConnection{socket: File, cancelled: List<&1, RequestQueue.Pending>}
+  CloseConnection{id: U32, socket: File, cancelled: List<&1, RequestQueue.Pending>}
 
 # Carries the state for ReactorCleanupState.
 type ReactorCleanupState is Type:
@@ -192,7 +193,7 @@ type ReactorCleanupState is Type:
     actions: List<&1, ReactorCloseAction>, queue: RequestQueue.Queue}
   CleanupCancelled{remaining: List<&1, Connections.Connection>,
     retained: List<&1, Connections.Connection>,
-    actions: List<&1, ReactorCloseAction>, socket: File,
+    actions: List<&1, ReactorCloseAction>, id: U32, socket: File,
     result: RequestQueue.CancelResult}
 
 # Carries the state for ReactorCleanupFoldResult.
@@ -934,19 +935,19 @@ def reactor.cleanup.fold.loop(
                 actions, queue}
             case Con{connection, tail}:
               match connection:
-                case Connections.Connection{id, socket, _,
+                case Connections.Connection{+id, socket, _,
                     Connections.Closing{}}:
                   reactor.cleanup.fold.loop(rest, CleanupCancelled{tail,
-                    retained, actions, socket,
+                    retained, actions, id, socket,
                     RequestQueue.cancel_connection(queue, id)})
                 case connection:
                   reactor.cleanup.fold.loop(rest, CleanupScanning{tail,
                     Con{connection, retained}, actions, queue})
-        case CleanupCancelled{remaining, retained, actions, socket, result}:
+        case CleanupCancelled{remaining, retained, actions, id, socket, result}:
           match result:
             case RequestQueue.CancelResult{queue, cancelled, _, _}:
               reactor.cleanup.fold.loop(rest, CleanupScanning{remaining,
-                retained, Con{CloseConnection{socket, cancelled}, actions},
+                retained, Con{CloseConnection{id, socket, cancelled}, actions},
                 queue})
 
 def reactor.cleanup.fold(
@@ -966,8 +967,9 @@ def reactor.cleanup.actions(
     case Nil{}: IO.pure(ReactorCleanupResult, result)
     case Con{action, tail}:
       match action:
-        case CloseConnection{socket, cancelled}:
+        case CloseConnection{id, socket, cancelled}:
           do IO<ReactorCleanupResult>:
+            _observed : Unit <- Observation.closed(id)
             _closed : Unit <- File.close(socket)
             _discarded : Unit = RequestQueue.cancelled.discard(cancelled)
             reactor.cleanup.actions(tail, result)
@@ -2463,6 +2465,26 @@ def reactor.dispatch.response.context(
           response_connections},
         next_connection_id, accepted_sequence, queue}
 
+def reactor.dispatch.observe.measured(
+  handle: ByteDb.Handle,
+  snapshots: SnapshotStore.Store,
+  cursors: CursorStore.Store,
+  reservation: TxPolicy.FrameReservation,
+  measured: Bytes.Bytes & U32
+) -> IO(EncodedDispatch):
+  match measured:
+    case (bytes, length):
+      do IO<EncodedDispatch>:
+        observed : TxPolicy.FrameReservation <- Observation.framed(reservation, length)
+        return EncodedDispatch{handle, snapshots, cursors, bytes, observed}
+
+# Records the encoded frame while retaining its affine reservation.
+def reactor.dispatch.observe.encoded(result: EncodedDispatch) -> IO(EncodedDispatch):
+  match result:
+    case EncodedDispatch{handle, snapshots, cursors, bytes, reservation}:
+      reactor.dispatch.observe.measured(handle, snapshots, cursors,
+        reservation, Bytes.length(bytes))
+
 def serve.reactor.dispatch.response(
   result: DispatchResult,
   reservation: TxPolicy.DispatchReservation,
@@ -2477,7 +2499,8 @@ def serve.reactor.dispatch.response(
   queue: RequestQueue.Queue
 ) -> IO(ReactorContext):
   do IO<ReactorContext>:
-    encoded : EncodedDispatch = reactor.dispatch.encode(result, reservation)
+    encoded : EncodedDispatch <- reactor.dispatch.observe.encoded(
+      reactor.dispatch.encode(result, reservation))
     clock : Result<&1, &1, U32 & String, Nat> <- Fs.clock_monotonic()
     return reactor.dispatch.response.context(encoded, id, socket, endpoint,
       generation, options, response_connections, next_connection_id,
@@ -2490,8 +2513,9 @@ def close.connections(connections: List<&1, Connections.Connection>) -> IO(Unit)
     case Nil{}: IO.pure(Unit, Unit{})
     case Con{connection, rest}:
       match connection:
-        case Connections.Connection{_, socket, _, _}:
+        case Connections.Connection{id, socket, _, _}:
           do IO<Unit>:
+            _observed : Unit <- Observation.closed(id)
             _closed : Unit <- File.close(socket)
             close.connections(rest)
 
@@ -2502,8 +2526,9 @@ def close.poll.interests(
     case Nil{}: IO.pure(Unit, Unit{})
     case Con{interest, rest}:
       match interest:
-        case SocketTypes.PollInterest{_, socket, _}:
+        case SocketTypes.PollInterest{id, socket, _}:
           do IO<Unit>:
+            _observed : Unit <- Observation.closed(id)
             _closed : Unit <- File.close(socket)
             close.poll.interests(rest)
 
@@ -2534,6 +2559,7 @@ def serve.reactor.dispatch.completed(
         return serve.reactor.dispatch.complete(server, next_context)
     case TxPolicy.DispatchCompletionRejected{_, _}:
       do IO<ServiceState>:
+        _observed : Unit <- Observation.closed(id)
         _closed_socket : Unit <- File.close(socket)
         _closed_peers : Unit <- close.connections(other_connections)
         return Stopping{server, handle, endpoint,
@@ -2580,14 +2606,16 @@ def serve.reactor.dispatch.started(
     case (dispatch_generation, (response_generation, _))
       TxPolicy.DispatchStarted{flight, request}:
       do IO<ServiceState>:
+        observed_flight : TxPolicy.InFlight <- Observation.dispatched(flight)
         dispatched : DispatchResult <-
           dispatch.request.with_options(handle, snapshots, cursors, request,
             dispatch_generation, options)
         serve.reactor.dispatch.finished(server, endpoint, response_generation,
           options, other_connections, next_connection_id, accepted_sequence,
-          queue, id, socket, flight, dispatched)
+          queue, id, socket, observed_flight, dispatched)
     case _ TxPolicy.DispatchAlreadyStarted{_}:
       do IO<ServiceState>:
+        _observed : Unit <- Observation.closed(id)
         _closed_socket : Unit <- File.close(socket)
         _closed_peers : Unit <- close.connections(other_connections)
         return Stopping{server, handle, endpoint,
@@ -2736,7 +2764,7 @@ def serve.reactor.dispatch.queue.result(
 
 def reactor.transmit.used(metrics: Connections.TransmitCount) -> Nat:
   match metrics:
-    case Connections.TransmitCount{_, bytes, _}: bytes
+    case Connections.TransmitCount{_, bytes, _, _, _, _}: bytes
 
 def reactor.resource.limit.response(request: Protocol.Request)
   -> Protocol.Response:
@@ -2907,7 +2935,7 @@ def serve.reactor.dispatch.queue.reserved(
   now: Nat
 ) -> IO(ServiceState):
   match measured:
-    case Connections.TransmitCount{retained_connections, _, _}:
+    case Connections.TransmitCount{retained_connections, _, _, _, _, _}:
       serve.reactor.dispatch.queue.decided(server, handle, endpoint,
         generation, options, snapshots, cursors, retained_connections,
         next_connection_id, accepted_sequence, now, decision)
@@ -2928,7 +2956,7 @@ def serve.reactor.dispatch.queue.peeked.measured(
   result: RequestQueue.PeekResult
 ) -> IO(ServiceState):
   match measured result:
-    case Connections.TransmitCount{connections, +bytes, count} peeked:
+    case Connections.TransmitCount{connections, +bytes, count, live, control, header} peeked:
       serve.reactor.dispatch.queue.reserved(server, handle, endpoint,
         generation, options, snapshots, cursors, next_connection_id,
         accepted_sequence,
@@ -2936,7 +2964,7 @@ def serve.reactor.dispatch.queue.peeked.measured(
           TxPolicy.tx.capacity(
             ResourceOptions.transport.response.bytes(options)),
           reservation_now),
-        Connections.TransmitCount{connections, bytes, count}, dispatch_now)
+        Connections.TransmitCount{connections, bytes, count, live, control, header}, dispatch_now)
 
 def serve.reactor.dispatch.queue.peeked(
   server: File,
@@ -4043,19 +4071,23 @@ def serve.reactor.insert.result(
   handle: ByteDb.Handle,
   endpoint: String,
   generation: U32,
-  options: ResourceOptions.Options,
+  +options: ResourceOptions.Options,
   snapshots: SnapshotStore.Store,
   cursors: CursorStore.Store,
-  next_connection_id: U32,
+  +next_connection_id: U32,
   accepted_sequence: Nat,
   queue: RequestQueue.Queue,
   inserted: Connections.InsertResult
 ) -> IO(ReactorContext):
   match inserted:
     case Connections.Inserted{next_connections}:
-      IO.pure(ReactorContext, ReactorContext{handle, endpoint,
-        generation, options, snapshots, cursors, next_connections,
-        U32.add(next_connection_id, 1), accepted_sequence, queue})
+      do IO<ReactorContext>:
+        _observed : Unit <- Observation.opened(next_connection_id,
+          ResourceOptions.transport.connections(options),
+          TxPolicy.tx.capacity(ResourceOptions.transport.response.bytes(options)))
+        return ReactorContext{handle, endpoint, generation, options, snapshots,
+          cursors, next_connections, U32.add(next_connection_id, 1),
+          accepted_sequence, queue}
     case Connections.Full{next_connections, rejected}:
       match rejected:
         case Connections.Connection{_, rejected_socket, _, _}:
@@ -4570,6 +4602,42 @@ def serve.reactor.carry(
       Stopping{server, handle, endpoint, reason, cursors}
     case state: state
 
+def reactor.observe.measured(
+  server: File,
+  context: ReactorContext,
+  metrics: Connections.TransmitCount
+) -> ServiceState:
+  match context metrics:
+    case ReactorContext{handle, endpoint, generation, options,
+      snapshots, cursors, _, next_id, sequence, queue}
+      Connections.TransmitCount{connections, _, _, _, _, _}:
+      ReactorServing{server, handle, endpoint, generation, options,
+        snapshots, cursors, connections, next_id, sequence, queue}
+
+# Exposes fixed slots and TX occupancy before polling, independently of dispatch.
+def reactor.observe.active(state: ServiceState) -> IO(ServiceState):
+  match state:
+    case ReactorServing{server, handle, endpoint, generation, options,
+        snapshots, cursors, connections, next_id, sequence, queue}:
+      do IO<ServiceState>:
+        metrics : Connections.TransmitCount <- Observation.census(
+          Connections.transmit.metrics(connections))
+        return reactor.observe.measured(server,
+          ReactorContext{handle, endpoint, generation, options,
+            snapshots, cursors, Nil{}, next_id, sequence, queue}, metrics)
+    case other: IO.pure(ServiceState, other)
+
+def reactor.observe.enabled(state: ServiceState, active: Bool) -> IO(ServiceState):
+  match active:
+    case False{}: IO.pure(ServiceState, state)
+    case True{}: reactor.observe.active(state)
+
+# Avoids the extra connection census when fixture observation is disabled.
+def reactor.observe.state(state: ServiceState) -> IO(ServiceState):
+  do IO<ServiceState>:
+    active : Bool <- Observation.enabled()
+    reactor.observe.enabled(state, active)
+
 def serve.loop(fuel: Nat, state: ServiceState) -> IO(Unit):
   match fuel:
     case 0n:
@@ -4597,7 +4665,8 @@ def serve.loop(fuel: Nat, state: ServiceState) -> IO(Unit):
             serve.loop(rest, next)
         case ReactorServing{_, _, _, _, _, _, _, _, _, _, _}:
           do IO<Unit>:
-            next : ServiceState <- serve.reactor.wait(state)
+            observed : ServiceState <- reactor.observe.state(state)
+            next : ServiceState <- serve.reactor.wait(observed)
             serve.loop(rest, next)
         case Stopping{server, handle, endpoint, reason, cursors}:
           serve.stop(server, handle, endpoint, reason, cursors)

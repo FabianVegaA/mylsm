@@ -51,7 +51,8 @@ type ReceiveLoopState is Type:
 
 # Carries the state for TransmitCount.
 type TransmitCount is Type:
-  TransmitCount{connections: List<&1, Connection>, bytes: Nat, count: Nat}
+  TransmitCount{connections: List<&1, Connection>, bytes: Nat, count: Nat,
+    live_bytes: Nat, control_bytes: Nat, header_bytes: Nat}
 
 # Carries the state for DetachSearch.
 type DetachSearch is Type:
@@ -682,78 +683,55 @@ def receive.metrics(
 def transmit.bytes.response.bytes(+len: U32) -> Nat:
   U32.to_nat(len)
 
-def transmit.bytes.loop(
-  remaining: List<&1, Connection>,
-  retained: List<&1, Connection>,
-  total: Nat,
-  count: Nat
-) -> TransmitCount:
-  match remaining:
-    case Nil{}:
-      TransmitCount{reverse.connections(retained, Nil{}), total, count}
-    case Con{connection, rest}:
-      match connection:
-        case Connection{id, socket, poll_events, phase}:
-          match phase:
-            case WritingResponse{encoded, written_bytes, deadline_ms,
-                reservation}:
-              match reservation:
-                case TxPolicy.FrameReservation{reservation_id,
-                    +reserved_bytes}:
-                  transmit.bytes.loop(rest,
-                    Con{Connection{id, socket, poll_events,
-                      WritingResponse{encoded, written_bytes,
-                        deadline_ms, TxPolicy.FrameReservation{reservation_id,
-                          reserved_bytes}}}, retained},
-                    Nat.add(total, reserved_bytes),
-                    Nat.add(count, 1n))
-            case ReadingHeader{chunks, received_bytes, deadline_ms}:
-              transmit.bytes.loop(rest,
-                Con{Connection{id, socket, poll_events,
-                  ReadingHeader{chunks, received_bytes, deadline_ms}},
-                  retained}, total, Nat.add(count, 1n))
-            case ReadingPayload{header, chunks, expected_bytes,
-              received_bytes, deadline_ms}:
-              transmit.bytes.loop(rest,
-                Con{Connection{id, socket, poll_events,
-                  ReadingPayload{header, chunks, expected_bytes,
-                    received_bytes, deadline_ms}}, retained}, total,
-                Nat.add(count, 1n))
-            case AwaitingAdmission{request, deadline_ms, encoded_bytes}:
-              transmit.bytes.loop(rest,
-                Con{Connection{id, socket, poll_events,
-                  AwaitingAdmission{request, deadline_ms, encoded_bytes}},
-                retained}, total, Nat.add(count, 1n))
-            case BoundedAdmission{request, deadline_ms, encoded_bytes,
-              bound}:
-              transmit.bytes.loop(rest,
-                Con{Connection{id, socket, poll_events,
-                  BoundedAdmission{request, deadline_ms, encoded_bytes,
-                    bound}}, retained}, total, Nat.add(count, 1n))
-            case WaitingAdmission{pending}:
-              transmit.bytes.loop(rest,
-                Con{Connection{id, socket, poll_events,
-                  WaitingAdmission{pending}}, retained}, total,
-                Nat.add(count, 1n))
-            case Queued{accepted_sequence, bound}:
-              transmit.bytes.loop(rest,
-                Con{Connection{id, socket, poll_events,
-                  Queued{accepted_sequence, bound}}, retained}, total,
-                Nat.add(count, 1n))
-            case InFlight{request_id}:
-              transmit.bytes.loop(rest,
-                Con{Connection{id, socket, poll_events,
-                  InFlight{request_id}}, retained}, total,
-                Nat.add(count, 1n))
-            case Closing{}:
-              transmit.bytes.loop(rest,
-                Con{Connection{id, socket, poll_events, Closing{}}, retained},
-                total, Nat.add(count, 1n))
+def transmit.frame.measured(
+  id: U32,
+  socket: File,
+  events: U32,
+  written: U32,
+  deadline: Nat,
+  measured: Bytes.Bytes & U32,
+  reservation: TxPolicy.FrameReservation
+) -> Connection & Nat & Nat:
+  match measured reservation:
+    case (encoded, length) TxPolicy.FrameReservation{reservation_id, +reserved}:
+      (Connection{id, socket, events, WritingResponse{encoded, written,
+        deadline, TxPolicy.FrameReservation{reservation_id, reserved}}},
+        (reserved, U32.to_nat(length)))
 
-def transmit.metrics(
-  connections: List<&1, Connection>
+def transmit.connection.measured(connection: Connection) -> Connection & Nat & Nat:
+  match connection:
+    case Connection{id, socket, events,
+        WritingResponse{encoded, written, deadline, reservation}}:
+      transmit.frame.measured(id, socket, events, written, deadline,
+        Bytes.length(encoded), reservation)
+    case other: (other, (0n, 0n))
+
+# Reserves one control frame and header slot for each admitted connection.
+def transmit.summary(
+  connections: List<&1, Connection>,
+  reserved: Nat,
+  +count: Nat,
+  live: Nat
 ) -> TransmitCount:
-  transmit.bytes.loop(connections, Nil{}, 0n, 0n)
+  TransmitCount{connections, reserved, count, live,
+    TxPolicy.slots.control.bytes(count), TxPolicy.slots.header.bytes(count)}
+
+def transmit.prepend(
+  measured: Connection & Nat & Nat,
+  remaining: TransmitCount
+) -> TransmitCount:
+  match measured remaining:
+    case (connection, (reserved, live))
+      TransmitCount{connections, tail_reserved, count, tail_live, _, _}:
+      transmit.summary(Con{connection, connections}, Nat.add(reserved, tail_reserved),
+        Nat.add(count, 1n), Nat.add(live, tail_live))
+
+def transmit.metrics(connections: List<&1, Connection>) -> TransmitCount:
+  match connections:
+    case Nil{}: transmit.summary(Nil{}, 0n, 0n, 0n)
+    case Con{connection, remaining}:
+      transmit.prepend(transmit.connection.measured(connection),
+        transmit.metrics(remaining))
 
 def detach.comparison.id(
   ids: U32 & U32 & U32,

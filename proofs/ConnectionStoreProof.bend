@@ -81,3 +81,11 @@ def Laws.awaiting_admission_keeps_request_when_queue_is_saturated(_socket):
 
 def Laws.empty_payload_becomes_admissible_without_socket_read(_socket):
   {==}
+
+def Laws.transport_census_preserves_fixed_slots_and_data_reservations(
+  _reserved, _count, _live
+):
+  {==}
+
+def Laws.empty_transport_census_has_no_retained_credit():
+  {==}
