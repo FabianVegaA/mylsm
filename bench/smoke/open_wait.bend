@@ -3,17 +3,17 @@ import ../../mylsm.bend as MyLSM
 import ../../src/Console.bend as Console
 
 # Creates and closes the database used by lock-wait process tests.
-def create_result(result: Result<&1, &1, MyLSM.Error, MyLSM.Handle>) -> IO(Unit):
+def create_result(result: Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle>) -> IO(Unit):
   match result:
     case Fail{_}:
       IO.die(Unit, 1, "lock-wait fixture database creation failed")
     case Done{handle}:
       do IO<Unit>:
-        _closed : Result<&1, &1, MyLSM.Error, Unit> <- MyLSM.close(handle)
+        _closed : Result<&1, &1, MyLSM.Utf8.Error, Unit> <- MyLSM.Utf8.close(handle)
         IO.print("DATABASE_READY")
 
 # Holds the process lock long enough for timeout and waiting clients.
-def hold_result(result: Result<&1, &1, MyLSM.Error, MyLSM.Handle>) -> IO(Unit):
+def hold_result(result: Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle>) -> IO(Unit):
   match result:
     case Fail{_}:
       IO.die(Unit, 1, "lock-wait fixture owner failed to open")
@@ -21,7 +21,7 @@ def hold_result(result: Result<&1, &1, MyLSM.Error, MyLSM.Handle>) -> IO(Unit):
       do IO<Unit>:
         IO.print("OWNER_LOCKED")
         IO.sleep(800)
-        _closed : Result<&1, &1, MyLSM.Error, Unit> <- MyLSM.close(handle)
+        _closed : Result<&1, &1, MyLSM.Utf8.Error, Unit> <- MyLSM.Utf8.close(handle)
         IO.print("OWNER_RELEASED")
 
 # Checks that the returned public error is the timeout category.
@@ -33,24 +33,24 @@ def timeout_result.kind(is_timeout: Bool) -> IO(Unit):
       IO.die(Unit, 1, "open wait returned a non-timeout error")
 
 # Checks a public open timeout and closes any unexpected successful handle.
-def timeout_result(result: Result<&1, &1, MyLSM.Error, MyLSM.Handle>) -> IO(Unit):
+def timeout_result(result: Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle>) -> IO(Unit):
   match result:
-    case Fail{error}:
-      timeout_result.kind(MyLSM.error_is_timeout(error))
+    case Fail{MyLSM.Utf8Failure{MyLSM.Timeout{}}}: timeout_result.kind(True{})
+    case Fail{_}: timeout_result.kind(False{})
     case Done{handle}:
       do IO<Unit>:
-        _closed : Result<&1, &1, MyLSM.Error, Unit> <- MyLSM.close(handle)
+        _closed : Result<&1, &1, MyLSM.Utf8.Error, Unit> <- MyLSM.Utf8.close(handle)
         IO.die(Unit, 1, "open wait acquired a lock after its deadline")
 
 # Checks that a public timed open succeeds after the owner releases.
-def wait_result(result: Result<&1, &1, MyLSM.Error, MyLSM.Handle>) -> IO(Unit):
+def wait_result(result: Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle>) -> IO(Unit):
   match result:
     case Fail{_}:
       IO.die(Unit, 1, "open wait failed after the owner released")
     case Done{handle}:
       do IO<Unit>:
         IO.print("OPEN_ACQUIRED")
-        _closed : Result<&1, &1, MyLSM.Error, Unit> <- MyLSM.close(handle)
+        _closed : Result<&1, &1, MyLSM.Utf8.Error, Unit> <- MyLSM.Utf8.close(handle)
         IO.print("OPEN_RELEASED")
 
 # Selects timeout or successful timed open.
@@ -58,13 +58,13 @@ def wait_mode(is_timeout: Bool, path: String) -> IO(Unit):
   match is_timeout:
     case True{}:
       do IO<Unit>:
-        result : Result<&1, &1, MyLSM.Error, MyLSM.Handle> <-
-          MyLSM.open_existing_wait(path, 100, 10)
+        result : Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle> <-
+          MyLSM.Utf8.open_existing_wait(path, 100, 10)
         timeout_result(result)
     case False{}:
       do IO<Unit>:
-        result : Result<&1, &1, MyLSM.Error, MyLSM.Handle> <-
-          MyLSM.open_existing_wait(path, 2000, 10)
+        result : Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle> <-
+          MyLSM.Utf8.open_existing_wait(path, 2000, 10)
         wait_result(result)
 
 # Selects the database owner or timed-open client role.
@@ -72,7 +72,7 @@ def hold_mode(is_hold: Bool, mode: String, path: String) -> IO(Unit):
   match is_hold:
     case True{}:
       do IO<Unit>:
-        result : Result<&1, &1, MyLSM.Error, MyLSM.Handle> <- MyLSM.open_existing(path)
+        result : Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle> <- MyLSM.Utf8.open_existing(path)
         hold_result(result)
     case False{}:
       wait_mode(String.eq(mode, "timeout"), path)
@@ -82,7 +82,7 @@ def setup_mode(is_create: Bool, +mode: String, path: String) -> IO(Unit):
   match is_create:
     case True{}:
       do IO<Unit>:
-        result : Result<&1, &1, MyLSM.Error, MyLSM.Handle> <- MyLSM.create(path)
+        result : Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle> <- MyLSM.Utf8.create(path)
         create_result(result)
     case False{}:
       hold_mode(String.eq(mode, "hold"), mode, path)

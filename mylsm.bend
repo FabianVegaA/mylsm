@@ -422,6 +422,31 @@ def Bytes.owner.wait.endpoint.path(
         Bytes.owner.wait.endpoint(canonical, timeout_ms, backoff_ms,
           exists)
 
+def Bytes.owner.wait.decided(
+  canonical: String,
+  decision: EndpointPath.Decision,
+  timeout_ms: U32,
+  backoff_ms: U32
+) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
+  match decision:
+    case EndpointPath.Endpoint{endpoint}:
+      Bytes.owner.wait.endpoint.path((canonical, endpoint), timeout_ms,
+        backoff_ms)
+    case EndpointPath.PathTooLong{}:
+      Bytes.owner.wait.endpoint(canonical, timeout_ms, backoff_ms,
+        Done{False{}})
+
+def Bytes.owner.wait.located(
+  paths: String & String,
+  timeout_ms: U32,
+  backoff_ms: U32
+) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
+  match paths:
+    case (canonical, endpoint_source):
+      Bytes.owner.wait.decided(canonical,
+        EndpointPath.for_canonical_path(endpoint_source), timeout_ms,
+        backoff_ms)
+
 def Bytes.owner.wait.canonical(
   timeout_ms: U32,
   backoff_ms: U32,
@@ -432,7 +457,7 @@ def Bytes.owner.wait.canonical(
       IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
         Fail{Io{code, message}})
     case Done{canonical}:
-      Bytes.owner.wait.endpoint.path(Bytes.endpoint.path.pair(canonical),
+      Bytes.owner.wait.located(Bytes.endpoint.path.pair(canonical),
         timeout_ms, backoff_ms)
 
 def Bytes.owner.wait.candidate(
