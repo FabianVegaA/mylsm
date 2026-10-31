@@ -18,7 +18,7 @@ def enabled() -> IO(Bool):
   do IO<Bool>:
     configured : String <- IO.try(String,
       Console.get_env("MYLSM_TRANSPORT_OBSERVE"))
-    return String.is_eq(configured, "1")
+    return String.eq(configured, "1")
 
 # Keeps fixture activation and record formatting in Bend.
 def record(line: String) -> IO(Unit):
