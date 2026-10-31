@@ -21,7 +21,7 @@ def read(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Maybe<&2, St
         IO.die(Unit, 1, "could not read the text value")
 
 # Threads the returned handle into the next operation.
-def written(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome>) -> IO(Unit):
+def written(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>) -> IO(Unit):
   match pair:
     case (handle, Done{_}):
       do IO<Unit>:
@@ -38,7 +38,7 @@ def created(result: Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle>) -> IO(U
   match result:
     case Done{handle}:
       do IO<Unit>:
-        pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome> <-
+        pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
           MyLSM.Utf8.put(handle, "saludo", "¡Hola, Bend!")
         written(pair)
     case Fail{_}: IO.die(Unit, 1, "could not create the database")

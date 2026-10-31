@@ -9,7 +9,7 @@ def fail(-A: Type, message: String) -> IO(A):
 
 # Takes the handle back after a write or stops the run.
 def written(
-  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome>
+  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>
 ) -> IO(MyLSM.Utf8.Handle):
   match pair:
     case (handle, Done{_}): IO.pure(MyLSM.Utf8.Handle, handle)
@@ -43,7 +43,7 @@ def write_many(
     case 0n: IO.pure(MyLSM.Utf8.Handle, handle)
     case 1n+rest:
       do IO<MyLSM.Utf8.Handle>:
-        pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome> <-
+        pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
           MyLSM.Utf8.put(handle, "key-" ++ Nat.show(index), "value-" ++ Nat.show(index))
         next : MyLSM.Utf8.Handle <- written(pair)
         maintained : MyLSM.Utf8.Handle <- flush.due(

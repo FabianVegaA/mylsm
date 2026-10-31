@@ -49,7 +49,7 @@ def backup.started(
 
 # Starts a UTF-8 backup after a successful text write.
 def written(
-  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome>
+  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>
 ) -> IO(Unit):
   match pair:
     case (_, Fail{_}): IO.die(Unit, 1, "UTF-8 fixture write failed")
@@ -65,7 +65,7 @@ def created(result: Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle>) -> IO(U
     case Fail{_}: IO.die(Unit, 1, "UTF-8 database creation failed")
     case Done{handle}:
       do IO<Unit>:
-        pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome> <-
+        pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
           MyLSM.Utf8.put(handle, "key", "value")
         written(pair)
 

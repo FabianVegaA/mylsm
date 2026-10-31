@@ -20,7 +20,7 @@ def close_seed(handle: MyLSM.Utf8.Handle) -> IO(Unit):
 # Tracks seeding progress for the compaction error fixture.
 type SeedState is Type:
   SeedWrite{remaining: Nat, handle: MyLSM.Utf8.Handle}
-  SeedWriteResult{remaining: Nat, pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome>}
+  SeedWriteResult{remaining: Nat, pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>}
   SeedFlush{remaining: Nat, handle: MyLSM.Utf8.Handle}
   SeedFlushResult{pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>, remaining: Nat}
 
@@ -33,7 +33,7 @@ def seed_step(fuel: Nat, state: SeedState) -> IO(Unit):
       match state:
         case SeedWrite{remaining, handle}:
           do IO<Unit>:
-            pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome> <- MyLSM.Utf8.put(handle, "a", "value")
+            pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit> <- MyLSM.Utf8.put(handle, "a", "value")
             seed_step(fuel_rest, SeedWriteResult{remaining, pair})
         case SeedWriteResult{remaining, pair}:
           match pair:

@@ -91,40 +91,13 @@ generaciones persistidas para esta fachada. La aceptación 0.6 está incompleta;
 el [informe de evidencia](../../bench/results/mylsm-0.6.0.0-acceptance.md) para el alcance
 de las ejecuciones registradas.
 
-## API histórica
+## Motor único
 
-La fachada también conserva operaciones superiores de texto de la API 0.5 y `Session`
-sobre [DurableDb.bend](../../src/DurableDb.bend). Esta ruta usa el motor histórico;
-su API y estadísticas no son intercambiables con las de `Bytes`/`Utf8`.
-
-`Session` compone operaciones en notación `do` y los runners `create_database` y
-`open_database` cierran la propiedad al terminar. `run_session` devuelve el handle para
-continuar con otros programas. La sesión se detiene ante el primer error, pero no es
-una transacción: escrituras ya confirmadas permanecen aunque falle otro paso.
-`OperationAndCloseFailure` conserva ambos errores cuando fallan la operación y el cierre.
-Los errores al abrir o crear usan `SessionError.OpenFailure`; una operación o cierre
-fallidos usan `OperationFailure`, `CloseFailure` o la combinación anterior.
-
-Las escrituras históricas devuelven `WriteOutcome`: `MaintenanceComplete` o
-`MaintenancePending`. El segundo conserva el commit y permite lecturas y cierre, pero
-bloquea nuevas escrituras hasta resolver el estado. Sus estadísticas se interpretan así:
-
-| Campo | Medida |
-| --- | --- |
-| `active_bytes` | Manifest más SST publicadas que referencia; excluye archivos huérfanos y temporales |
-| `wal_bytes` | Tamaño del WAL en bytes |
-| `memtable_entries` | Conteo agregado de entradas activas y congeladas |
-| `memtable_payload_bytes` | Bytes UTF-8 de claves y valores residentes; un tombstone aporta solo su clave |
-| `cache_entries` | Entradas de cache residentes, con máximo 256 |
-| `operation_errors` | Operaciones fallidas observadas durante la vida del handle |
-| `state` | Estado del handle, incluido el mantenimiento pendiente |
-
-Los bytes activos se obtienen con consultas de tamaño por SST publicada, sin leer sus
-contenidos. Payload excluye estructuras, cache y overhead del runtime. Un mantenimiento
-pendiente incrementa el contador de errores aunque la escritura siga confirmada. Reabrir
-reinicia el contador; los errores anteriores a obtener el handle y del cierre que lo consume
-quedan fuera. `InMemory.Session` no persiste; `open_recovering` deja al consumidor la
-gestión de propiedad.
+Desde 0.7.0.0 la fachada expone solo `Bytes` y `Utf8`, ambas sobre el motor byte. La
+API de texto 0.5 (`create`, `open_existing`, `put`, `get`, `Session`, `run_session`,
+`create_database`, `open_database`, `InMemory.Session` y `open_recovering`) y su motor
+de niveles se retiraron. `Utf8.put`, `Utf8.delete` y `Utf8.write_batch` devuelven `Unit`.
+Una base con formato 0.5 se migra con `migrate_legacy`; `inspect` sigue reconociéndola.
 
 ## Implementación y comprobaciones
 
@@ -132,9 +105,10 @@ gestión de propiedad.
   [ByteWalIo.bend](../../src/ByteWalIo.bend) y [ByteSstIo.bend](../../src/ByteSstIo.bend).
 - Contratos puros: [DurableBatchPolicy.bend](../../laws/DurableBatchPolicy.bend),
   [ByteRecoveryPolicy.bend](../../laws/ByteRecoveryPolicy.bend) y
-  [DurableDbPolicy.bend](../../laws/DurableDbPolicy.bend), con testigos en [proofs](../../proofs/).
+  [OwnerOpenPolicy.bend](../../laws/OwnerOpenPolicy.bend), con testigos en [proofs](../../proofs/).
 - Consumidores: [shared_utf8_bytes.sh](../../bench/smoke/shared_utf8_bytes.sh),
   [public_bytes_sst.sh](../../bench/smoke/public_bytes_sst.sh),
-  [resource_limits.sh](../../bench/smoke/resource_limits.sh) y
-  [durable_session.sh](../../bench/smoke/durable_session.sh).
+  [resource_limits.sh](../../bench/smoke/resource_limits.sh),
+  [durable_poisoned_close.sh](../../bench/smoke/durable_poisoned_close.sh) y
+  [durable_open_wait.sh](../../bench/smoke/durable_open_wait.sh).
 - Recuperación ante fallo: [durable_commit.sh](../../bench/crash/durable_commit.sh).

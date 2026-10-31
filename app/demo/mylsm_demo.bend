@@ -39,7 +39,7 @@ def open(+dir: String) -> IO(MyLSM.Utf8.Handle):
 
 # Takes the handle back after a write or stops the demo.
 def written(
-  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome>
+  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>
 ) -> IO(MyLSM.Utf8.Handle):
   match pair:
     case (handle, Done{_}): IO.pure(MyLSM.Utf8.Handle, handle)
@@ -48,14 +48,14 @@ def written(
 # Writes one key and value.
 def put(handle: MyLSM.Utf8.Handle, key: String, value: String) -> IO(MyLSM.Utf8.Handle):
   do IO<MyLSM.Utf8.Handle>:
-    pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome> <-
+    pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
       MyLSM.Utf8.put(handle, key, value)
     written(pair)
 
 # Deletes one key.
 def delete(handle: MyLSM.Utf8.Handle, key: String) -> IO(MyLSM.Utf8.Handle):
   do IO<MyLSM.Utf8.Handle>:
-    pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome> <-
+    pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
       MyLSM.Utf8.delete(handle, key)
     written(pair)
 

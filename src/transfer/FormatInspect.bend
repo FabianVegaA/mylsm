@@ -68,7 +68,7 @@ def describe(format: StorageFormat) -> Identity:
     case Format04{}:
       Identity{"0.5.0.0", "0.4.0.0", 3}
     case Format06{}:
-      Identity{"0.6.0.0", "0.6.0.0", 4}
+      Identity{"0.7.0.0", "0.6.0.0", 4}
     case UnknownFormat{}:
       Identity{"unknown", "unknown", 0}
 

@@ -5,7 +5,7 @@ import ../../src/Console.bend as Console
 # Reports checksummed-manifest corruption as inspection data.
 def inspected(result: Result<&1, &1, MyLSM.InspectionError, MyLSM.ManifestInspection>) -> IO(Unit):
   match result:
-    case Done{MyLSM.ManifestInspection{"0.6.0.0", "0.6.0.0", 4,
+    case Done{MyLSM.ManifestInspection{"0.7.0.0", "0.6.0.0", 4,
         MyLSM.ManifestCorrupt{}}}:
       IO.print("FORMAT_INSPECT_CORRUPT_PASSED")
     case _:

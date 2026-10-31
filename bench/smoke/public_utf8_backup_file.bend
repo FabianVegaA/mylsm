@@ -23,7 +23,7 @@ def exported(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>) -
 # Publishes a backup after one successful UTF-8 write.
 def written(
   +destination: String,
-  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome>
+  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>
 ) -> IO(Unit):
   match pair:
     case (_, Fail{_}): IO.die(Unit, 1, "UTF-8 fixture write failed")
@@ -42,7 +42,7 @@ def created(
     case Fail{_}: IO.die(Unit, 1, "UTF-8 database creation failed")
     case Done{handle}:
       do IO<Unit>:
-        pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome> <-
+        pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
           MyLSM.Utf8.put(handle, "café", "niño")
         written(destination, pair)
 

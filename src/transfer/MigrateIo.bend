@@ -2,10 +2,9 @@ import Base
 import ../DbLock.bend as DbLock
 import ../DurableError.bend as DurableError
 import ../Fs.bend as Fs
-import ../Flush.bend as Flush
+import ../legacy/ManifestIo.bend as LegacyManifestIo
 import ../Manifest.bend as Manifest
 import ../MemTable.bend as MemTable
-import ../Recover.bend as Recover
 import ../Sstable.bend as Sstable
 import ../SstStreamIo.bend as SstStreamIo
 import ../Wal.bend as Wal
@@ -237,7 +236,7 @@ def table.walk.level.path(
   match indices:
     case (lookup_index, next_index):
       LegacyPath{lock, read_path, release_path,
-        Recover.ldir_of(lookup_index), names, levels, next_index,
+        LegacyManifestIo.ldir_of(lookup_index), names, levels, next_index,
         total_bytes, entries, records}
 
 def table.walk.go(fuel: Nat, state: LegacyTableWalk) -> IO(TableValidation):
@@ -371,7 +370,7 @@ def table.manifest.read(
     case (read_path, retained_path):
       do IO<TableValidation>:
         manifest : Result<&1, &1, U32 & String, Manifest.Manifest> <-
-          Flush.load_mfst(read_path ++ "/MANIFEST")
+          LegacyManifestIo.load_mfst(read_path ++ "/MANIFEST")
         table.manifest.loaded(
           table.validation(lock, retained_path, Done{(0n, 0n)}), manifest)
 

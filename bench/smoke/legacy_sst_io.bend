@@ -1,6 +1,6 @@
 import Base
 import ../../src/Console.bend as Console
-import ../../src/Flush.bend as Flush
+import ../../src/legacy/ManifestIo.bend as LegacyManifestIo
 import ../../src/Fs.bend as Fs
 import ../../src/Manifest.bend as Manifest
 import ../../src/MemTable.bend as MemTable
@@ -62,7 +62,7 @@ def table.manifest.publish(paths: String & String) -> IO(Unit):
     case (manifest_path, retained_path):
       do IO<Unit>:
         result : Result<&1, &1, U32 & String, Unit> <-
-          Flush.write_manifest(manifest_path ++ "/MANIFEST",
+          LegacyManifestIo.write_manifest(manifest_path ++ "/MANIFEST",
             Manifest.M{Con{Con{"0.tbl", Nil{}},
               Con{Nil{}, Con{Nil{}, Con{Nil{}, Nil{}}}}}})
         manifest.write(retained_path, result)
@@ -135,7 +135,7 @@ def root.ensure(paths: String & String) -> IO(Unit):
   match paths:
     case (root_path, retained_path):
       do IO<Unit>:
-        created : Result<&1, &1, U32 & String, Unit> <- Flush.ensure_dir(root_path)
+        created : Result<&1, &1, U32 & String, Unit> <- LegacyManifestIo.ensure_dir(root_path)
         root.ready(retained_path, created)
 
 def main() -> IO(Unit):

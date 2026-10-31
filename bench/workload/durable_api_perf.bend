@@ -10,7 +10,7 @@ def close_public(result: Result<&1, &1, MyLSM.Utf8.Error, Unit>) -> IO(Unit):
     case Done{Unit{}}: IO.pure(Unit, Unit{})
 
 # Continues the public step result fixture step.
-def public_step_result(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome>) -> IO(MyLSM.Utf8.Handle):
+def public_step_result(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>) -> IO(MyLSM.Utf8.Handle):
   match pair:
     case (handle, Fail{_}):
       do IO<MyLSM.Utf8.Handle>:
@@ -21,7 +21,7 @@ def public_step_result(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error
 # Continues the public step fixture step.
 def public_step(handle: MyLSM.Utf8.Handle) -> IO(MyLSM.Utf8.Handle):
   do IO<MyLSM.Utf8.Handle>:
-    pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome> <- MyLSM.Utf8.put(handle, "key", "value")
+    pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit> <- MyLSM.Utf8.put(handle, "key", "value")
     public_step_result(pair)
 
 # Continues the public loop fixture step.

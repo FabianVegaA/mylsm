@@ -45,8 +45,8 @@ launcher; shared REPL commands apply to both interfaces.
 | `timing`, `time` | Available in REPL | Per-command millisecond timing |
 | `mode`, `runtime`, `compute` | Available in REPL | Compute runtime controls |
 | `threads` | Available in native REPL | Controlled durable process restart |
-| `scan`, `stats`, `flush`, `compact`, `maintain` | Available in REPL | Local administration |
-| Quoted strings, `import`, `export` | Available in REPL | Checksummed data interchange |
+| `scan`, `stats`, `flush`, `compact` | Available in REPL | Local administration |
+| Quoted strings, `import`, `export` | Available in REPL | Text data interchange |
 
 ## Launcher usage
 
@@ -127,7 +127,7 @@ scripts/mylsm.sh demo
 
 The demo:
 
-1. opens or recovers `.mylsm-demo-data` with `Recover.open_db`;
+1. opens `.mylsm-demo-data` with `MyLSM.Utf8`, creating it on first use;
 2. durably writes `hello=world` and `answer=42`;
 3. reads both values;
 4. deletes `hello` and observes `<missing>`;
@@ -143,8 +143,9 @@ scripts/mylsm.sh repl
 scripts/mylsm.sh repl --dir ./my-data
 ```
 
-The REPL opens the selected directory through `Recover.open_db` and threads one
-`Db.Db` state through the session. The loop is bounded to 256 commands to satisfy
+The REPL opens the selected directory with `MyLSM.Utf8.open_existing`, creates it
+when it does not exist, and threads one handle through the session. A directory in
+the 0.5 format is refused without changes; migrate it with `migrate_legacy` first. The loop is bounded to 256 commands to satisfy
 Bend termination without `@unsafe`. Start a new session to continue after the
 limit; acknowledged data is recovered from disk.
 
@@ -162,8 +163,8 @@ help
 exit
 ```
 
-- `put` and `del` use `Recover.write`, including durable WAL behavior and normal
-  maintenance.
+- `put` and `del` queue a mutation and commit it with `Utf8.write_batch` once the
+  batch reaches `MYLSM_BATCH_CAP` (default 1) or before the next command.
 - `get` prints the value or `<missing>`.
 - `scan` prints live entries as `key=value` for the requested range.
 
@@ -173,16 +174,14 @@ exit
 stats
 flush
 compact
-maintain
 ```
 
-- `stats` reports the current MemTable entry count and loaded level count.
-- `flush` calls `Flush.flush`.
-- `compact` calls `Compact.compact`.
-- `maintain` calls `Recover.maintain`.
+- `stats` prints `entries`, `payload_bytes`, `snapshots`, `retained_bytes` and `cursors`.
+- `flush` calls `Utf8.flush`; `compact` calls `Utf8.compact`.
+- The byte engine has no automatic maintenance, so there is no `maintain` command.
 
-Failures propagate through `IO.try`; a failed operation does not print a success
-marker.
+A failed operation prints an `error:` line instead of a success marker; a failed write
+stops the REPL.
 
 ### Timing
 
@@ -242,11 +241,12 @@ export <path>
 import <path>
 ```
 
-Export writes a sorted, deduplicated live view as a version-2 envelope around a
-hex-encoded WAL v3 frame. The frame carries its SHA-256 digest. Export writes
-`<path>.tmp`, renames it into place, and syncs the parent directory. Import
-validates the version and complete frame before applying one durable batch;
-version-1 exports are rejected. Quoted paths are accepted.
+Export writes the live entries in key order as text: a first line
+`MYLSM-EXPORT-3`, then one line per entry with the hex UTF-8 key and value
+separated by a space. Export writes `<path>.tmp`, renames it into place, and
+syncs the parent directory. Import checks the marker and every line before
+applying one durable batch; version-1 and version-2 exports are rejected.
+Quoted paths are accepted.
 
 ## Current limitations
 

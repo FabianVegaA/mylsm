@@ -180,7 +180,7 @@ def opened.snapshot(
     case _: fail("UTF-8 owner snapshot open failed")
 
 # Opens a UTF-8 snapshot after the seed write has committed.
-def written(result: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome>) -> IO(Unit):
+def written(result: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>) -> IO(Unit):
   match result:
     case (next, Done{_}):
       do IO<Unit>:
@@ -196,7 +196,7 @@ def opened(result: Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle>) -> IO(Un
     case Done{handle}:
       do IO<Unit>:
         result : MyLSM.Utf8.Handle &
-          Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome> <-
+          Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
             MyLSM.Utf8.write_batch(handle, Con{
               MyLSM.Utf8SetValue{"alpha", "uno"},
               Con{MyLSM.Utf8SetValue{"beta", "dos"}, Nil{}}})

@@ -1,7 +1,6 @@
 import Base
 import ../src/MemTable.bend as MemTable
 import ../src/Sstable.bend as Sstable
-import ../src/Db.bend as Db
 import ../src/SortedRun.bend as SortedRun
 
 # Closed SSTable vectors. Open sortedness/lookup need comparison facts on open

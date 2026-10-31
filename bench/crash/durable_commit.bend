@@ -11,7 +11,7 @@ def close_result(result: Result<&1, &1, MyLSM.Utf8.Error, Unit>) -> IO(Unit):
       IO.print("CLOSED")
 
 # Runs the seed written step of this fixture.
-def seed_written(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome>) -> IO(Unit):
+def seed_written(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>) -> IO(Unit):
   match pair:
     case (handle, Fail{_}):
       do IO<Unit>:
@@ -29,13 +29,13 @@ def seed_created(result: Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle>) ->
       IO.die(Unit, 1, "seed create failed")
     case Done{handle}:
       do IO<Unit>:
-        pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome> <-
+        pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
           MyLSM.Utf8.write_batch(handle,
             [MyLSM.Utf8SetValue{"a", "old"}, MyLSM.Utf8SetValue{"b", "old"}])
         seed_written(pair)
 
 # Runs the write finished step of this fixture.
-def write_finished(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome>) -> IO(Unit):
+def write_finished(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>) -> IO(Unit):
   match pair:
     case (handle, Fail{_}):
       do IO<Unit>:
@@ -49,7 +49,7 @@ def write_finished(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, My
 # Continues the crash write fixture step.
 def crash_write(handle: MyLSM.Utf8.Handle) -> IO(Unit):
   do IO<Unit>:
-    pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome> <-
+    pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
       MyLSM.Utf8.write_batch(handle, [MyLSM.Utf8SetValue{"a", "new"},
         MyLSM.Utf8SetValue{"b", "new"}, MyLSM.Utf8SetValue{"pad", String.repeat("x", 70000n)}])
     write_finished(pair)
@@ -67,7 +67,7 @@ def flush_result(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit
         close_result(result)
 
 # Runs the flush finished step of this fixture.
-def flush_finished(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome>) -> IO(Unit):
+def flush_finished(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>) -> IO(Unit):
   match pair:
     case (handle, Fail{_}):
       do IO<Unit>:
@@ -81,7 +81,7 @@ def flush_finished(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, My
 # Continues the crash flush fixture step.
 def crash_flush(handle: MyLSM.Utf8.Handle) -> IO(Unit):
   do IO<Unit>:
-    pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome> <- MyLSM.Utf8.write_batch(handle, Con{MyLSM.Utf8SetValue{"a", "new"}, Con{MyLSM.Utf8SetValue{"b", "new"}, Nil{}}})
+    pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit> <- MyLSM.Utf8.write_batch(handle, Con{MyLSM.Utf8SetValue{"a", "new"}, Con{MyLSM.Utf8SetValue{"b", "new"}, Nil{}}})
     flush_finished(pair)
 
 # Runs the inspection step of this fixture.

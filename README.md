@@ -87,7 +87,7 @@ With flakes enabled in your Nix configuration, the entry command is simply
 
 ```sh
 nix develop --command bash proofs/run.sh
-nix develop --command bash bench/smoke/durable_session.sh
+nix develop --command bash bench/smoke/shared_utf8_bytes.sh
 nix build .#bolt --no-link
 ```
 

@@ -68,10 +68,6 @@ def implies(s1: Bool, s2: Bool) -> Bool:
     case True{}:
       s2
 
-# Select f for the key ordering and comparison.
-def iff(+s1: Bool, +s2: Bool) -> Bool:
-  Bool.and(implies(s1, s2), implies(s2, s1))
-
 # True exactly when one of three arbitrary predicates is true.
 def one_hot3(first: Bool, second: Bool, third: Bool) -> Bool:
   match first second third:

@@ -19,7 +19,7 @@ def created(result: Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle>) -> IO(M
 
 # Takes the handle back after a write or stops the run.
 def written(
-  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome>
+  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>
 ) -> IO(MyLSM.Utf8.Handle):
   match pair:
     case (handle, Done{_}): IO.pure(MyLSM.Utf8.Handle, handle)
@@ -32,7 +32,7 @@ def main() -> IO(Unit):
     result : Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle> <- MyLSM.Utf8.create("bench-data")
     handle : MyLSM.Utf8.Handle <- created(result)
     t0 : Nat <- IO.now()
-    pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome> <-
+    pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
       MyLSM.Utf8.put(handle, "bench-key", "v")
     stored : MyLSM.Utf8.Handle <- written(pair)
     t1 : Nat <- IO.now()

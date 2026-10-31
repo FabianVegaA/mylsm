@@ -421,20 +421,6 @@ def table_count(tab: Table) -> Nat:
     case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
       count
 
-# Total table identity for the read cache: smallest|largest|count.
-def opt_name(+opt: Maybe<&2, String>) -> String:
-  match opt:
-    case None{}:
-      "<none>"
-    case Some{s}:
-      s
-
-# Return the table id for the SSTable indexes, filters, and lookup.
-def table_id(tab: Table) -> String:
-  match tab:
-    case Tbl{entries, filter, nbits, smallest, largest, count, chunks, blocks}:
-      opt_name(smallest) ++ "|" ++ opt_name(largest) ++ "|" ++ Nat.show(count)
-
 # Open bridge: metadata is matched explicitly so the Bloom schedule projects
 # through `build` without relying on reduction of an open entry list.
 def table_bits_from_meta(
@@ -456,10 +442,6 @@ def table_bits_build(
   +effective = Nat.max(est_keys, List.length(&2, MemTable.Entry, entries))
   table_bits_from_meta(SortedRun.sort_newest(entries), level, effective, metadata(SortedRun.sort_newest(entries)))
 
-
-# Check key ranges for disjoint for the SSTable indexes, filters, and lookup.
-def ranges_disjoint(+ta: Table, +tb: Table) -> Bool:
-  SortedRun.range_disjoint_bounds(table_smallest(ta), table_largest(ta), table_smallest(tb), table_largest(tb))
 
 # Block-scoped lookup. Checker constraints (proven by scratch experiments):
 # multi-scrutinee matches follow declaration order, and only Nat answers flow

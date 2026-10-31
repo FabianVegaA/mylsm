@@ -8,7 +8,7 @@ def inspected(
 ) -> IO(Unit):
   match result:
     case Fail{_}: IO.die(Unit, 1, "public manifest inspection failed")
-    case Done{MyLSM.ManifestInspection{"0.6.0.0", "0.6.0.0", 4,
+    case Done{MyLSM.ManifestInspection{"0.7.0.0", "0.6.0.0", 4,
         MyLSM.ManifestValid{}}}:
       IO.print("PUBLIC_FORMAT_INSPECT_PASSED")
     case Done{_}:

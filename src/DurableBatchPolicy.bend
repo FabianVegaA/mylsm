@@ -62,22 +62,6 @@ def validate_frame_bytes(
     Nat.is_le(encoded_bytes, frame_byte_limit(count, batch_limit, single_limit)),
     ValidBatch{}, BatchBytesExceeded{})
 
-# Counts the exact encoded size of one UTF-8 WAL mutation record.
-def utf8_mutation_bytes(mutation: Wal.Mut) -> Nat:
-  match mutation:
-    case Wal.Put{key, value}:
-      put_record_bytes(StorageBytes.string_size(key),
-        StorageBytes.string_size(value))
-    case Wal.Del{key}:
-      delete_record_bytes(StorageBytes.string_size(key))
-
-# Sums encoded UTF-8 record lengths without constructing a WAL frame.
-def utf8_records_bytes(mutations: List<&2, Wal.Mut>) -> Nat:
-  match mutations:
-    case Nil{}: 0n
-    case Con{mutation, tail}:
-      Nat.add(utf8_mutation_bytes(mutation), utf8_records_bytes(tail))
-
 # Adds the fixed generation-four WAL frame header and checksum size.
 def frame_bytes(record_bytes: Nat) -> Nat:
   Nat.add(36n, record_bytes)
@@ -127,10 +111,6 @@ def byte_batch.measure(
 ) -> ByteBatchMeasurement:
   byte_batch.measure.loop(max_batch_count(),
     MeasureNeed{mutations, Nil{}, 0n, 0n})
-
-# Counts a UTF-8 batch's exact serialized frame size before allocation.
-def utf8_batch_bytes(mutations: List<&2, Wal.Mut>) -> Nat:
-  frame_bytes(utf8_records_bytes(mutations))
 
 # Checks whether a batch count is within the allowed range.
 def within_batch_count(count: Nat) -> Bool:

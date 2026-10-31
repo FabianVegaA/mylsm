@@ -11,7 +11,7 @@ def closed(result: Result<&1, &1, MyLSM.Utf8.Error, Unit>, label: String) -> IO(
       IO.die(Unit, 1, "database close failed")
 
 # Runs the seeded step of this fixture.
-def seeded(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome>) -> IO(Unit):
+def seeded(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>) -> IO(Unit):
   match pair:
     case (handle, Done{_}):
       do IO<Unit>:
@@ -27,13 +27,13 @@ def seed_created(result: Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle>) ->
   match result:
     case Done{handle}:
       do IO<Unit>:
-        pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome> <- MyLSM.Utf8.put(handle, "seed", "value")
+        pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit> <- MyLSM.Utf8.put(handle, "seed", "value")
         seeded(pair)
     case Fail{_}:
       IO.die(Unit, 1, "database create failed")
 
 # Continues the poisoned write fixture step.
-def poisoned_write(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome>) -> IO(Unit):
+def poisoned_write(pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>) -> IO(Unit):
   match pair:
     case (handle, Fail{MyLSM.Utf8Failure{MyLSM.CommitUnknown{_, _}}}):
       do IO<Unit>:
@@ -51,7 +51,7 @@ def poisoned_open(result: Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle>) -
     case Done{handle}:
       do IO<Unit>:
         IO.print("POISON_READY")
-        pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome> <- MyLSM.Utf8.put(handle, "unknown",
+        pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit> <- MyLSM.Utf8.put(handle, "unknown",
           String.repeat("x", 70000n))
         poisoned_write(pair)
     case Fail{_}:

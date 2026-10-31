@@ -64,7 +64,7 @@ def say(message: String, session: Session) -> IO(LoopState):
 
 # Takes the handle back after a committed write; a failed write stops the REPL.
 def written(
-  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome>
+  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>
 ) -> IO(MyLSM.Utf8.Handle):
   match pair:
     case (handle, Done{_}): IO.pure(MyLSM.Utf8.Handle, handle)
@@ -73,7 +73,7 @@ def written(
 # Commits the queued mutations as one batch.
 def commit(handle: MyLSM.Utf8.Handle, staged: List<&1, MyLSM.Utf8.Mutation>) -> IO(MyLSM.Utf8.Handle):
   do IO<MyLSM.Utf8.Handle>:
-    pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome> <-
+    pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
       MyLSM.Utf8.write_batch(handle, staged)
     written(pair)
 

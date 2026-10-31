@@ -121,7 +121,7 @@ def scan.opened(
 # Scans the retained snapshot after the live database changes.
 def updated(
   snapshot: MyLSM.Utf8.Snapshot,
-  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome>
+  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>
 ) -> IO(Unit):
   match pair:
     case (handle, Done{_}):
@@ -138,14 +138,14 @@ def retained(
   match pair:
     case (handle, Done{snapshot}):
       do IO<Unit>:
-        update : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome> <-
+        update : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
           MyLSM.Utf8.put(handle, "acct/1", "new")
         updated(snapshot, update)
     case (handle, Fail{_}): fail(handle, "could not retain the snapshot")
 
 # Retains a snapshot after committing the initial value.
 def seeded(
-  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome>
+  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>
 ) -> IO(Unit):
   match pair:
     case (handle, Done{_}):
@@ -160,7 +160,7 @@ def created(result: Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle>) -> IO(U
   match result:
     case Done{handle}:
       do IO<Unit>:
-        pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome> <-
+        pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
           MyLSM.Utf8.put(handle, "acct/1", "old")
         seeded(pair)
     case Fail{_}: IO.die(Unit, 1, "could not create the database")

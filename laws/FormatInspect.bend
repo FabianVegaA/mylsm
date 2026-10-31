@@ -23,7 +23,7 @@ law legacy_versions_are_separate:
 # The current API and storage identity use generation four.
 law current_versions_are_separate:
   {FormatInspect.describe(FormatInspect.Format06{}) ==
-    FormatInspect.Identity{"0.6.0.0", "0.6.0.0", 4} : FormatInspect.Identity}
+    FormatInspect.Identity{"0.7.0.0", "0.6.0.0", 4} : FormatInspect.Identity}
 
 # Unknown manifest generations are classified without a fallback.
 law unknown_magic_rejected:
@@ -41,7 +41,7 @@ law valid_legacy_manifest_integrity:
 law valid_current_manifest_integrity:
   {FormatInspect.inspect_manifest_bytes(ByteManifest.encode(ByteManifest.Empty{})) ==
     FormatInspect.Inspection{
-      FormatInspect.Identity{"0.6.0.0", "0.6.0.0", 4},
+      FormatInspect.Identity{"0.7.0.0", "0.6.0.0", 4},
       FormatInspect.Valid{}} : FormatInspect.Inspection}
 
 # An unknown signature is not reported as a valid manifest.

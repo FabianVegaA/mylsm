@@ -1,6 +1,6 @@
 import Base
 import ../../src/Console.bend as Console
-import ../../src/Flush.bend as Flush
+import ../../src/legacy/ManifestIo.bend as LegacyManifestIo
 import ../../src/Fs.bend as Fs
 import ../../src/Manifest.bend as Manifest
 import ../../src/hub_sha/sha256.bend as SHA
@@ -92,7 +92,7 @@ def level.created(
       do IO<Unit>:
         _table : Unit <- write(path ++ "/l0/0.tbl", fixture.file())
         manifest : Result<&1, &1, U32 & String, Unit> <-
-          Flush.write_manifest(path ++ "/MANIFEST",
+          LegacyManifestIo.write_manifest(path ++ "/MANIFEST",
             Manifest.M{Con{Con{"0.tbl", Nil{}},
               Con{Nil{}, Con{Nil{}, Con{Nil{}, Nil{}}}}}})
         manifest.result(path, manifest)
@@ -111,5 +111,5 @@ def root.ready(
 def main() -> IO(Unit):
   do IO<Unit>:
     +path : String <- IO.try(String, Console.get_env("MYLSM_DB_PATH"))
-    created : Result<&1, &1, U32 & String, Unit> <- Flush.ensure_dir(path)
+    created : Result<&1, &1, U32 & String, Unit> <- LegacyManifestIo.ensure_dir(path)
     root.ready(path, created)

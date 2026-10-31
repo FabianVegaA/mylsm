@@ -33,7 +33,7 @@ Commands:
 ```text
 put <key> <value>   get <key>        del <key>
 scan <lo> <hi>      stats            flush
-compact             maintain         runtime
+compact             runtime
 timing on|off|once  time <command>   mode cpu|gpu|auto
 compute <fuel>      threads <n>      help / exit
 ```
@@ -41,5 +41,5 @@ compute <fuel>      threads <n>      help / exit
 The session is bounded to 256 commands to preserve Bend termination and can be
 restarted against the same directory. In native mode, `threads <n>` performs a
 controlled restart against the same durable directory. The REPL supports quoted
-keys/values with `\\`, `\"`, `\n`, and `\t` escapes, plus checksummed
+keys/values with `\\`, `\"`, `\n`, and `\t` escapes, plus
 `import <path>` and `export <path>` commands.
