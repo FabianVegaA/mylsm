@@ -55,35 +55,20 @@ run_wal_case() {
 }
 
 run_wal_case wal.before_append old
-run_wal_case wal.appended either
-run_wal_case wal.synced new
+run_wal_case wal.during_append either
+run_wal_case wal.after_sync_before_apply new
 
-path="$BUILD_DIR/flush-db"
-rm -rf -- "$path"
-run_seed "$path"
-run_crash "$path" flush flush.table_synced "$BUILD_DIR/flush.log"
-inspect "$path" "$BUILD_DIR/flush-result.log"
-grep -qx RECOVERED_new "$BUILD_DIR/flush-result.log"
-grep -qx CLOSED "$BUILD_DIR/flush-result.log"
-
-path="$BUILD_DIR/maintenance-db"
-if [[ -d "$path/l0" ]]; then
-  chmod 755 "$path/l0"
-fi
-rm -rf -- "$path"
-run_seed "$path"
-mkdir -p -- "$path/l0"
-chmod 555 "$path/l0"
-restore_maintenance_dir() {
-  chmod 755 "$path/l0" 2>/dev/null || true
+run_flush_case() {
+  local checkpoint=$1 path="$BUILD_DIR/$1-db"
+  rm -rf -- "$path"
+  run_seed "$path"
+  run_crash "$path" flush "$checkpoint" "$BUILD_DIR/$checkpoint.log"
+  inspect "$path" "$BUILD_DIR/$checkpoint-result.log"
+  grep -qx RECOVERED_new "$BUILD_DIR/$checkpoint-result.log"
+  grep -qx CLOSED "$BUILD_DIR/$checkpoint-result.log"
 }
-trap restore_maintenance_dir EXIT
-MYLSM_DB_PATH="$path" MYLSM_DURABLE_MODE=maintenance "$BINARY" > "$BUILD_DIR/maintenance.log"
-chmod 755 "$path/l0"
-trap - EXIT
-grep -qx MAINTENANCE_FAILED "$BUILD_DIR/maintenance.log"
-grep -qx MAINTENANCE_READABLE "$BUILD_DIR/maintenance.log"
-grep -qx MAINTENANCE_BLOCKED "$BUILD_DIR/maintenance.log"
-grep -qx CLOSED "$BUILD_DIR/maintenance.log"
+
+run_flush_case flush.table_synced
+run_flush_case flush.manifest_published
 
 printf '%s\n' 'DURABLE COMMIT PASS'

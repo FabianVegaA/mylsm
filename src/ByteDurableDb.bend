@@ -607,6 +607,8 @@ def flush.manifest(
         (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}}, Fail{Io{code, message}}))
     case Done{Unit{}}:
       do IO<Handle & Result<&1, &1, Error, Unit>>:
+        _checkpoint : Result<&1, &1, U32 & String, Unit> <-
+          CrashPoint.hit("flush.manifest_published")
         reset : Result<&1, &1, U32 & String, Unit> <- ByteWalIo.reset_atomic(path)
         return flush.wal.reset(path, lock, table, entries, reset)
 
@@ -717,6 +719,8 @@ def flush.written(
         (Handle{path, lock, table, Open{}, VisibleStats.Stats{0n, 0n}}, Fail{Io{code, message}}))
     case Done{Unit{}}:
       do IO<Handle & Result<&1, &1, Error, Unit>>:
+        _checkpoint : Result<&1, &1, U32 & String, Unit> <-
+          CrashPoint.hit("flush.table_synced")
         published : Result<&1, &1, U32 & String, Unit> <-
           ByteManifestIo.write_atomic(path, ByteManifest.GenerationSst{file_id})
         flush.manifest(path, lock, table, entries, published)
