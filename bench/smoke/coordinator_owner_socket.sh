@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/mylsm-owner-socket.XXXXXX")
 DB="$WORK/db"
+BUDGET_DB="$WORK/budget-db"
 SERVER_PID=
 CLIENT_ONE_PID=
 CLIENT_TWO_PID=
@@ -51,16 +52,35 @@ MYLSM_DB_PATH="$DB" "$WORK/public-utf8-owner-client"
 MYLSM_DB_PATH="$DB" MYLSM_OWNER_ACTION=backup \
 MYLSM_BACKUP_PATH="$WORK/owner-backup" "$WORK/public-owner-client" &
 OWNER_BACKUP_PID=$!
-wait "$SERVER_PID"
-SERVER_PID=
 wait "$OWNER_BACKUP_PID"
 OWNER_BACKUP_PID=
+kill -TERM "$SERVER_PID"
+wait "$SERVER_PID" 2>/dev/null || true
+SERVER_PID=
+rm -f -- "$DB/MYLSM.sock"
 MYLSM_BACKUP_PATH="$WORK/owner-backup" \
 MYLSM_RESTORE_DESTINATION="$WORK/owner-restored" \
 MYLSM_RESTORE_CHECK_PATH="$WORK/owner-restored" \
   bend "$ROOT/bench/smoke/public_owner_backup_restore.bend"
-cat "$WORK/server.log"
-if [[ -S "$DB/MYLSM.sock" ]]; then
+MYLSM_DB_PATH="$DB" "$WORK/owner-reacquire"
+MYLSM_DB_PATH="$BUDGET_DB" MYLSM_OWNER_FUEL=1 "$WORK/owner-server" >"$WORK/budget.log" 2>&1 &
+SERVER_PID=$!
+for ((attempt = 0; attempt < 500; attempt += 1)); do
+  if [[ -S "$BUDGET_DB/MYLSM.sock" ]]; then
+    break
+  fi
+  if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+    cat "$WORK/budget.log"
+    exit 1
+  fi
+  sleep 0.02
+done
+[[ -S "$BUDGET_DB/MYLSM.sock" ]]
+MYLSM_OWNER_ENDPOINT="$BUDGET_DB/MYLSM.sock" "$WORK/owner-client" >/dev/null 2>&1 || true
+wait "$SERVER_PID"
+SERVER_PID=
+grep -qx OWNER_STOPPED "$WORK/budget.log"
+if [[ -S "$BUDGET_DB/MYLSM.sock" ]]; then
   exit 1
 fi
-MYLSM_DB_PATH="$DB" "$WORK/owner-reacquire"
+MYLSM_DB_PATH="$BUDGET_DB" "$WORK/owner-reacquire"

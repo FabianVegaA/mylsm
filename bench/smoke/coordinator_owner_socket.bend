@@ -35,7 +35,31 @@ def failed(
     _closed : Result<&1, &1, ByteDb.Error, Unit> <- ByteDb.close(handle)
     IO.die(Unit, 1, message)
 
-# Starts the serialized owner request loop after the listener is ready.
+# Uses the requested reactor tick budget, or an unbounded one when unset.
+def fuel(configured: Maybe<&2, Nat>) -> Nat:
+  match configured:
+    case Some{ticks}: ticks
+    case None{}: 4294967295n
+
+# Runs the reactor once the listener no longer blocks on accept.
+def listening.nonblocking(
+  pair: File & Result<&1, &1, UnixSocket.Error, Unit>,
+  handle: ByteDb.Handle,
+  endpoint: String
+) -> IO(Unit):
+  match pair:
+    case (server, Done{Unit{}}):
+      do IO<Unit>:
+        configured : String <- IO.try(String,
+          Console.get_env("MYLSM_OWNER_FUEL"))
+        Owner.serve.loop(fuel(Nat.read(configured)),
+          Owner.Serving{server, handle, endpoint, 1,
+            ResourceOptions.defaults(), OwnerSnapshots.empty(),
+            OwnerCursorStore.empty()})
+    case (server, Fail{_}):
+      failed(server, handle, endpoint, "owner listener nonblocking failed")
+
+# Starts the owner reactor after the listener is ready.
 def listening(
   pair: File & Result<&1, &1, UnixSocket.Error, Unit>,
   handle: ByteDb.Handle,
@@ -43,10 +67,10 @@ def listening(
 ) -> IO(Unit):
   match pair:
     case (server, Done{Unit{}}):
-      Owner.serve.loop(117n,
-        Owner.Serving{server, handle, endpoint, 1,
-          ResourceOptions.defaults(), OwnerSnapshots.empty(),
-          OwnerCursorStore.empty()})
+      do IO<Unit>:
+        nonblocking : File & Result<&1, &1, UnixSocket.Error, Unit> <-
+          UnixSocket.nonblocking(server)
+        listening.nonblocking(nonblocking, handle, endpoint)
     case (server, Fail{_}): failed(server, handle, endpoint, "owner listen failed")
 
 # Restricts endpoint access before accepting client connections.
