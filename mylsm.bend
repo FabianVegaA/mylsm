@@ -41,6 +41,7 @@ import ./src/coordinator/StatsCodec.bend as OwnerStatsCodec
 import ./src/coordinator/Io.bend as OwnerIo
 import ./src/coordinator/UnixSocketIo.bend as OwnerSocket
 import ./src/coordinator/CoordinatorPolicy.bend as OwnerPolicy
+import ./src/coordinator/OwnerOpenPolicy.bend as OwnerOpenPolicy
 import ./src/ResourceOptions.bend as ResourceOptions
 import ./src/coordinator/OptionsCodec.bend as OwnerOptionsCodec
 
@@ -466,60 +467,51 @@ def Bytes.open_existing(+path: String) -> IO(Result<&1, &1, Bytes.Error, Bytes.H
       RawByteDb.open_existing(path)
     Bytes.owner.candidate(path, opened)
 
-def Bytes.options.local.raw(
-  raw: RawByteDb.Handle,
-  matches: Bool
+def Bytes.options.rejected(
+  handle: Bytes.Handle
 ) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
-  match matches:
-    case True{}:
-      IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
-        Done{ByteHandle{raw}})
-    case False{}:
+  match handle:
+    case ByteHandle{raw}:
       do IO<Result<&1, &1, Bytes.Error, Bytes.Handle>>:
         _closed : Result<&1, &1, RawByteDb.Error, Unit> <- RawByteDb.close(raw)
         return Fail{InvalidArgument{}}
+    case RemoteByteHandle{_}:
+      IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
+        Fail{InvalidArgument{}})
 
-def Bytes.options.local.result(
-  handle: Bytes.Handle,
-  matches: Bool
+def Bytes.options.decided(
+  decision: OwnerOpenPolicy.Decision,
+  handle: Bytes.Handle
 ) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
-  match handle:
-    case ByteHandle{raw}: Bytes.options.local.raw(raw, matches)
-    case RemoteByteHandle{session}:
-      match matches:
-        case True{}:
-          IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
-            Done{RemoteByteHandle{session}})
-        case False{}:
-          IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
-            Fail{InvalidArgument{}})
+  match decision:
+    case OwnerOpenPolicy.UseLocal{}:
+      IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>, Done{handle})
+    case OwnerOpenPolicy.UseRemote{}:
+      IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>, Done{handle})
+    case OwnerOpenPolicy.RejectOptions{}: Bytes.options.rejected(handle)
 
 def Bytes.options.local(
   options: ResourceOptions.Options,
   handle: Bytes.Handle
 ) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
-  Bytes.options.local.result(handle,
-    ResourceOptions.same(options, ResourceOptions.defaults()))
-
-def Bytes.options.remote.checked(
-  session: OwnerClient.Session,
-  matches: Bool
-) -> Result<&1, &1, Bytes.Error, Bytes.Handle>:
-  match matches:
-    case True{}: Done{RemoteByteHandle{session}}
-    case False{}: Fail{InvalidArgument{}}
+  Bytes.options.decided(OwnerOpenPolicy.choose(True{},
+    ResourceOptions.same(options, ResourceOptions.defaults())), handle)
 
 def Bytes.options.remote.result(
   pair: OwnerClient.Session &
     Result<&1, &1, OwnerClient.Error, OwnerOptionsCodec.Decision>,
   expected: ResourceOptions.Options
-) -> Result<&1, &1, Bytes.Error, Bytes.Handle>:
+) -> IO(Result<&1, &1, Bytes.Error, Bytes.Handle>):
   match pair:
-    case (_, Fail{error}): Fail{Bytes.owner.error(error)}
+    case (_, Fail{error}):
+      IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
+        Fail{Bytes.owner.error(error)})
     case (session, Done{OwnerOptionsCodec.Parsed{options}}):
-      Bytes.options.remote.checked(session,
-        ResourceOptions.same(options, expected))
-    case (_, Done{_}): Fail{Corruption{"owner options response is invalid"}}
+      Bytes.options.decided(OwnerOpenPolicy.choose(False{},
+        ResourceOptions.same(options, expected)), RemoteByteHandle{session})
+    case (_, Done{_}):
+      IO.pure(Result<&1, &1, Bytes.Error, Bytes.Handle>,
+        Fail{Corruption{"owner options response is invalid"}})
 
 def Bytes.options.remote(
   session: OwnerClient.Session,
@@ -529,7 +521,7 @@ def Bytes.options.remote(
     described : OwnerClient.Session &
       Result<&1, &1, OwnerClient.Error, OwnerOptionsCodec.Decision> <-
         OwnerByteClient.describe_owner(session)
-    return Bytes.options.remote.result(described, expected)
+    Bytes.options.remote.result(described, expected)
 
 def Bytes.options.opened(
   handle: Bytes.Handle,

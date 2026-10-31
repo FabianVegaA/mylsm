@@ -108,16 +108,6 @@ type AdmissionResult is Type:
   AdmissionResult{connection: Connection, queue: Queue.Queue,
     status: AdmissionStatus}
 
-def response.pending(
-  connection: Connection,
-  encoded: Bytes.Bytes,
-  deadline_ms: Nat
-) -> Connection:
-  match connection:
-    case Connection{+id, socket, _, _}:
-      Connection{id, socket, 4,
-        WritingResponse{encoded, 0, deadline_ms, TxPolicy.tx.frame.control(id)}}
-
 def queued.bound.selected.true(
   connection: Connection,
   bound: TxPolicy.BoundDecision

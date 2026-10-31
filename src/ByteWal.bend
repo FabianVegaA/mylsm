@@ -169,12 +169,6 @@ def bytes.slice(frame: Bytes.Bytes, start: U32, length: U32) -> Bytes.Bytes & By
 def bytes.interval.length(total: U32, start: U32, length: U32) -> Bool:
   Nat.is_le(Nat.add(U32.to_nat(start), U32.to_nat(length)), U32.to_nat(total))
 
-# Checks a byte interval against the source frame.
-def bytes.interval.valid(pair: Bytes.Bytes & U32, start: U32, length: U32) -> Bool:
-  match pair:
-    case (_, total):
-      bytes.interval.length(total, start, length)
-
 # Returns a malformed-record result while retaining the source frame.
 def record.malformed(frame: Bytes.Bytes) -> DecodedRecord:
   RecordError{frame, Wal.Malformed{}}
@@ -599,9 +593,6 @@ def measure.checksum.range(
   measure.checksum.range.prefix(
     Bytes.slice(frame, base, U32.sub(total, 32)), base, total)
 
-def measure.checksum(frame: Bytes.Bytes, +total: U32) -> Bytes.Bytes & Bool:
-  measure.checksum.range(frame, 0, total)
-
 def measure.lookup.finish.absent(exact: Bool)
   -> Result<&1, &1, Wal.Error, ValueMetadata>:
   match exact:
@@ -730,15 +721,6 @@ def measure.lookup.records.bound(
   measure.lookup.loop(Nat.add(Nat.mul(3n, U32.to_nat(count)), 1n),
     MeasureNext{frame, offset, U32.to_nat(count),
       measure.lookup.progress(query, records_end)})
-
-def measure.lookup.records(
-  frame: Bytes.Bytes,
-  query: Bytes.Bytes,
-  +count: U32,
-  +total: U32
-) -> Result<&1, &1, Wal.Error, ValueMetadata>:
-  +records_end = U32.sub(total, 32)
-  measure.lookup.records.bound(frame, query, count, 8, records_end)
 
 def measure.lookup.checksum.result(
   pair: Bytes.Bytes & Bool,

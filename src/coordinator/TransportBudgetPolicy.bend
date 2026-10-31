@@ -303,16 +303,6 @@ def tx.queue.decide.budget(
     case True{}: ExpireHead{}
     case False{}: tx.queue.eligible(tx.request(used, required, capacity))
 
-def tx.queue.reserve.budget(
-  queue: RequestQueue.Queue,
-  +used: Nat,
-  +required: Nat,
-  +capacity: Nat,
-  expired: Bool
-) -> QueueReservation:
-  tx.queue.reserved(queue,
-    tx.queue.decide.budget(used, required, capacity, expired))
-
 def tx.queue.head.policy(
   head: Maybe<&2, RequestQueue.HeadMetadata>,
   +used: Nat,

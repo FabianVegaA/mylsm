@@ -129,9 +129,6 @@ def progress.valid(+offset: U32, +count: U32,
 def progress(+offset: U32, +count: U32, +total: U32) -> Progress:
   progress.valid(offset, count, total, U32.is_le(offset, total))
 
-def progress.within(total: U32, next_offset: U32) -> Bool:
-  U32.is_le(next_offset, total)
-
 def header.classify.decision(
   decision: Protocol.HeaderDecision,
   header: Bytes.Bytes

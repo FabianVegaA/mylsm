@@ -1,19 +1,19 @@
 import Base
 
-# Carries the state for Decision.
+# Says whether an open keeps its handle or rejects the requested options.
 type Decision is Data:
   UseLocal{}
   UseRemote{}
   RejectOptions{}
 
-# Handles remote.
-def remote(matches: Bool) -> Decision:
-  match matches:
-    case True{}: UseRemote{}
-    case False{}: RejectOptions{}
-
-# Handles choose.
-def choose(local: Bool, matches: Bool) -> Decision:
+# Picks the handle kind that a matching open keeps.
+def matched(local: Bool) -> Decision:
   match local:
     case True{}: UseLocal{}
-    case False{}: remote(matches)
+    case False{}: UseRemote{}
+
+# Keeps the opened handle only when the requested options match the effective ones.
+def choose(local: Bool, matches: Bool) -> Decision:
+  match matches:
+    case True{}: matched(local)
+    case False{}: RejectOptions{}

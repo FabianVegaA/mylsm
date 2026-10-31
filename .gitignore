@@ -14,3 +14,4 @@ bench/results/*
 **/wal.log
 .mylsm/
 .mylsm-*/
+__pycache__/

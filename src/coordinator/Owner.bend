@@ -31,17 +31,6 @@ import ../Fs.bend as Fs
 import ../CrashPoint.bend as CrashPoint
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
-# Retains request identifiers while the owner prepares a response.
-def nat.duplicate.pair.from(copies: Nat & Nat) -> Nat & Nat:
-  match copies:
-    case (first, second): (first, second)
-
-def nat.duplicate.sigma(+value: Nat) -> Nat & Nat:
-  (value, value)
-
-def nat.sigma(first: Nat, second: Nat) -> Nat & Nat:
-  Tuple{first, second}
-
 # Carries the state for ReplyContext.
 type ReplyContext is Type:
   ReplyContext{version: U32 & U32,
@@ -230,11 +219,6 @@ type ReactorAcceptState is Type:
     pair: File & Result<&1, &1, UnixSocket.Error, File>}
   AcceptInstalled{pair: File & ReactorContext}
 
-# Carries the state for ConnectionDeadline.
-type ConnectionDeadline is Data:
-  HasDeadline{at: Nat}
-  NoDeadline{}
-
 def reactor.state(server: File, context: ReactorContext) -> ServiceState:
   match context:
     case ReactorContext{handle, endpoint, generation, +options, snapshots,
@@ -258,23 +242,6 @@ def reactor.close.connection(
   match connection:
     case Connections.Connection{id, socket, poll_events, _}:
       Connections.Connection{id, socket, poll_events, Connections.Closing{}}
-
-def reactor.phase.deadline(phase: Connections.Phase) -> ConnectionDeadline:
-  match phase:
-    case Connections.ReadingHeader{_, _, deadline_ms}:
-      HasDeadline{deadline_ms}
-    case Connections.ReadingPayload{_, _, _, _, deadline_ms}:
-      HasDeadline{deadline_ms}
-    case Connections.AwaitingAdmission{_, deadline_ms, _}:
-      HasDeadline{deadline_ms}
-    case Connections.WaitingAdmission{pending}:
-      match pending:
-        case RequestQueue.Pending{_, _, deadline_ms, _, _, _}:
-          HasDeadline{deadline_ms}
-    case Connections.WritingResponse{_, _, deadline_ms, _}:
-      HasDeadline{deadline_ms}
-    case _:
-      NoDeadline{}
 
 def reactor.expire.decision(
   connection: Connections.Connection,
@@ -780,15 +747,6 @@ def reactor.ready.connection(
     case Connections.EventNotReady{}:
       IO.pure(Connections.Connection,
         Connections.Connection{id, socket, poll_events, phase})
-
-def reactor.receive.free.result(limit: Nat, used: Nat,
-  within_limit: Bool) -> Nat:
-  match within_limit:
-    case True{}: Nat.sub(limit, used)
-    case False{}: 0n
-
-def reactor.receive.free(+limit: Nat, +used: Nat) -> Nat:
-  reactor.receive.free.result(limit, used, Nat.is_le(used, limit))
 
 def reactor.receive.used.after(
   counted: Connections.Connection & Nat,
@@ -2327,18 +2285,6 @@ def dispatch.request.state(
   dispatch.request.with_options(handle, snapshots, cursors, request,
     active_generation, ResourceOptions.defaults())
 
-def serve.closed(
-  pair: File & Result<&1, &1, U32 & String, Unit>,
-  handle: ByteDb.Handle,
-  snapshots: SnapshotStore.Store,
-  cursors: CursorStore.Store
-) -> IO(ByteDb.Handle & SnapshotStore.Store & CursorStore.Store):
-  match pair:
-    case (connection, _):
-      do IO<ByteDb.Handle & SnapshotStore.Store & CursorStore.Store>:
-        _closed : Unit <- File.close(connection)
-        return (handle, snapshots, cursors)
-
 def bound.response.bounded(
   version: U32,
   generation: U32,
@@ -2392,49 +2338,11 @@ def bound.response.result(
       bound.response(mutation, version, generation, request_id, status, payload,
         max_bytes)
 
-def serve.response(
-  connection: File,
-  result: DispatchResult,
-  max_response_bytes: U32
-) -> IO(ByteDb.Handle & SnapshotStore.Store & CursorStore.Store):
-  match result:
-    case DispatchResult{handle, snapshots, cursors, response}:
-      do IO<ByteDb.Handle & SnapshotStore.Store & CursorStore.Store>:
-        bounded : Protocol.Response =
-          bound.response.result(False{}, response, max_response_bytes)
-        written : File & Result<&1, &1, U32 & String, Unit> <-
-          Io.write_all(connection, Protocol.encode_response(bounded))
-        serve.closed(written, handle, snapshots, cursors)
-
 def serve.reactor.dispatch.complete(
   server: File,
   context: ReactorContext
 ) -> ServiceState:
   reactor.state(server, context)
-
-def serve.reactor.dispatch.context(
-  updated: ByteDb.Handle & SnapshotStore.Store & CursorStore.Store,
-  endpoint: String,
-  generation: U32,
-  +options: ResourceOptions.Options,
-  _cursors: CursorStore.Store,
-  next_connection_id: U32,
-  accepted_sequence: Nat,
-  queue: RequestQueue.Queue
-) -> ReactorContext:
-  match updated:
-    case (handle, (snapshots, cursors)):
-      ReactorContext{handle, endpoint, generation, options, snapshots,
-        cursors, Nil{}, next_connection_id, accepted_sequence, queue}
-
-def reactor.append.connections(
-  left: List<&1, Connections.Connection>,
-  right: List<&1, Connections.Connection>
-) -> List<&1, Connections.Connection>:
-  match left:
-    case Nil{}: right
-    case Con{connection, rest}:
-      Con{connection, reactor.append.connections(rest, right)}
 
 def reactor.dispatch.deadline(
   result: Result<&1, &1, U32 & String, Nat>,
@@ -2785,10 +2693,6 @@ def serve.reactor.dispatch.queue.result(
             generation, options, snapshots, cursors, connections,
             next_connection_id, accepted_sequence, queue, now,
             connection_id, deadline_ms, request, request_bytes)
-
-def reactor.transmit.used(metrics: Connections.TransmitCount) -> Nat:
-  match metrics:
-    case Connections.TransmitCount{_, bytes, _, _, _, _}: bytes
 
 def reactor.resource.limit.response(request: Protocol.Request)
   -> Protocol.Response:
@@ -3202,17 +3106,6 @@ def reactor.response.preflight.get.result(
     case Fail{_}:
       ResponseBoundRequest{request, TxPolicy.Bounded{0, 28n}}
 
-def reactor.response.preflight.get.measured(
-  pair: ByteDb.Handle & Result<&1, &1, ByteDb.Error, Maybe<&1, U32>>,
-  request: Protocol.Request,
-  response_bytes: U32,
-  capacity: Nat
-) -> ByteDb.Handle & ResponseBoundRequest:
-  match pair:
-    case (handle, result):
-      (handle, reactor.response.preflight.get.result(request, result,
-        response_bytes, capacity))
-
 def reactor.response.preflight.get.bound(
   measured: ByteDb.Handle & Result<&1, &1, ByteDb.Error, Maybe<&1, U32>>,
   snapshots: SnapshotStore.Store,
@@ -3258,29 +3151,6 @@ def reactor.response.preflight.cursor.bound(
       cursor_id)
     return reactor.response.preflight.cursor.bound.result(handle, snapshots,
       request, response_bytes, measured)
-
-def reactor.response.preflight.snapshot.bound.result(
-  handle: ByteDb.Handle,
-  cursors: CursorStore.Store,
-  request: Protocol.Request,
-  measured: SnapshotStore.Store & TxPolicy.BoundDecision
-) -> ResponseBoundState:
-  match measured:
-    case (updated_snapshots, bound):
-      ResponseBoundState{handle, updated_snapshots, cursors,
-        ResponseBoundRequest{request, bound}}
-
-def reactor.response.preflight.snapshot.bound(
-  snapshots: SnapshotStore.Store,
-  cursors: CursorStore.Store,
-  handle: ByteDb.Handle,
-  request: Protocol.Request,
-  snapshot_id: U32,
-  response_bytes: U32
-) -> ResponseBoundState:
-  reactor.response.preflight.snapshot.bound.result(handle, cursors, request,
-    SnapshotStore.snapshot.response.bound(snapshots, snapshot_id,
-      response_bytes))
 
 def reactor.response.preflight.snapshot.value.bound(
   handle: ByteDb.Handle,
@@ -3793,19 +3663,6 @@ def reactor.admission.state.connections(
             Connections.reverse.connections(retained, Nil{}),
             Con{connection, remaining})
 
-def serve.reactor.admission.exhausted(
-  state: ReactorAdmissionState,
-  server: File,
-  handle: ByteDb.Handle,
-  endpoint: String,
-  cursors: CursorStore.Store
-) -> IO(ServiceState):
-  do IO<ServiceState>:
-    _closed : Unit <- close.connections(
-      reactor.admission.state.connections(state))
-    return Stopping{server, handle, endpoint,
-      "owner admission iteration exhausted", cursors}
-
 def serve.reactor.admission.complete(
   server: File,
   handle: ByteDb.Handle,
@@ -4082,15 +3939,6 @@ def serve.stop(
     closed : Result<&1, &1, ByteDb.Error, Unit> <- ByteDb.close(handle)
     serve.stop.result(removed, closed, reason)
 
-def reactor.context(state: ServiceState) -> Maybe<&1, ReactorContext>:
-  match state:
-    case ReactorServing{_, handle, endpoint, generation, options,
-      snapshots, cursors, connections, next_connection_id,
-      accepted_sequence, queue}:
-      Some{ReactorContext{handle, endpoint, generation, options, snapshots,
-        cursors, connections, next_connection_id, accepted_sequence, queue}}
-    case _: None{}
-
 def serve.reactor.insert.result(
   handle: ByteDb.Handle,
   endpoint: String,
@@ -4207,16 +4055,6 @@ def serve.reactor.accept.client(
     next_context : ReactorContext <-
       serve.reactor.accept.mode(context, nonblocking)
     return (server, next_context)
-
-def serve.reactor.accept(
-  context: ReactorContext,
-  pair: File & Result<&1, &1, UnixSocket.Error, File>
-) -> IO(File & ReactorContext):
-  match pair:
-    case (server, Done{connection}):
-      serve.reactor.accept.client(context, server, connection)
-    case (server, Fail{_}):
-      IO.pure(File & ReactorContext, (server, context))
 
 def serve.reactor.accept.batch.done(
   pair: File & ReactorContext
@@ -4351,26 +4189,6 @@ def serve.reactor.poll.prepared.queue.active.split(
         accepted_sequence, queue, metadata,
         reactor.poll.timeout.interests(interests, queue_active))
 
-def serve.reactor.poll.prepared.queue.active(
-  server: File,
-  handle: ByteDb.Handle,
-  endpoint: String,
-  generation: U32,
-  +options: ResourceOptions.Options,
-  snapshots: SnapshotStore.Store,
-  cursors: CursorStore.Store,
-  next_connection_id: U32,
-  accepted_sequence: Nat,
-  _queue: RequestQueue.Queue,
-  split: Connections.Split,
-  active_pair: RequestQueue.Queue & Bool
-) -> ReactorPollPrepared:
-  match active_pair:
-    case (restored_queue, queue_active):
-      serve.reactor.poll.prepared.queue.active.split(server, handle,
-        endpoint, generation, options, snapshots, cursors,
-        next_connection_id, accepted_sequence, restored_queue, queue_active,
-        split)
 def serve.reactor.poll.prepared.with.queue(
   server: File,
   handle: ByteDb.Handle,
@@ -4608,23 +4426,6 @@ def serve.reactor.wait(state: ServiceState) -> IO(ServiceState):
         next_connection_id, accepted_sequence, queue,
         Connections.split(connections)))
     case _: IO.pure(ServiceState, state)
-
-def serve.reactor.carry(
-  next: ServiceState,
-  connections: List<&1, Connections.Connection>,
-  next_connection_id: U32,
-  accepted_sequence: Nat,
-  queue: RequestQueue.Queue
-) -> ServiceState:
-  match next:
-    case Serving{server, handle, endpoint, generation, options,
-      snapshots, cursors}:
-      ReactorServing{server, handle, endpoint, generation, options,
-        snapshots, cursors, connections, next_connection_id,
-        accepted_sequence, queue}
-    case Stopping{server, handle, endpoint, reason, cursors}:
-      Stopping{server, handle, endpoint, reason, cursors}
-    case state: state
 
 def reactor.observe.measured(
   server: File,

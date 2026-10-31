@@ -181,11 +181,6 @@ def transport.response.bytes(options: Options) -> U32:
 def response.admitted(length: U32, max_bytes: U32) -> Bool:
   U32.is_le(length, max_bytes)
 
-def cursor.limits(options: Options) -> U32 & U32:
-  match options:
-    case Options{_, _, ReaderLimits{_, cursors, cursors_per_snapshot, _, _, _, _, _}}:
-      (cursors, cursors_per_snapshot)
-
 # Handles positive.
 def positive(value: U32) -> Bool:
   U32.is_lt(0, value)
