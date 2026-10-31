@@ -13,11 +13,13 @@ else
 fi
 rm -rf -- "$DB"
 MYLSM_DB_PATH="$DB" MYLSM_COMPACTION_MODE=seed "$BINARY" > "$BUILD_DIR/seed.log"
-printf '%s\n' 'occupied' > "$DB/l1"
+last_sst=$(find "$DB" -maxdepth 1 -name 'SST.*' -exec basename {} \; | sed 's/^SST\.//' | sort | tail -n 1)
+next_sst=$(printf 'SST.%08X' $((16#${last_sst:-0} + 1)))
+mkdir -- "$DB/$next_sst"
 MYLSM_DB_PATH="$DB" MYLSM_COMPACTION_MODE=compact "$BINARY" > "$BUILD_DIR/compact.log"
 grep -qx COMPACTION_IO_RETURNED "$BUILD_DIR/compact.log"
 grep -qx DB_CLOSED "$BUILD_DIR/compact.log"
-rm -f -- "$DB/l1"
+rmdir -- "$DB/$next_sst"
 MYLSM_DB_PATH="$DB" MYLSM_COMPACTION_MODE=verify "$BINARY" > "$BUILD_DIR/verify.log"
 grep -qx COMPACTION_DATA_READABLE "$BUILD_DIR/verify.log"
 printf '%s\n' 'DURABLE COMPACTION ERRORS PASS'
