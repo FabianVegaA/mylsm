@@ -20,21 +20,31 @@ def bytes.equal(pair: Bytes.Bytes & Bytes.Bytes & Bool) -> Bool:
   match pair:
     case (_, _, equal): equal
 
-def overbound.response.result() -> Protocol.Response:
-  Owner.bound.response(1, 1, 99, Protocol.Success{}, Bytes.new(2), 1)
+def overbound.read.result() -> Protocol.Response:
+  Owner.bound.response(False{}, 1, 1, 99, Protocol.Success{}, Bytes.new(2), 1)
+
+def overbound.mutation.result() -> Protocol.Response:
+  Owner.bound.response(True{}, 1, 1, 99, Protocol.Success{}, Bytes.new(2), 1)
 
 def overbound.payload.empty(measured: Bytes.Bytes & U32) -> Bool:
   match measured:
     case (_, length): U32.is_eq(length, 0)
 
-def overbound.response.status(response: Protocol.Response) -> Bool:
+def overbound.read.status(response: Protocol.Response) -> Bool:
+  match response:
+    case Protocol.Response{_, _, _, Protocol.ResponseResourceLimit{}, payload}:
+      overbound.payload.empty(Bytes.length(payload))
+    case _: False{}
+
+def overbound.mutation.status(response: Protocol.Response) -> Bool:
   match response:
     case Protocol.Response{_, _, _, Protocol.CommitUnknown{}, payload}:
       overbound.payload.empty(Bytes.length(payload))
     case _: False{}
 
 def overbound.response.valid() -> Bool:
-  overbound.response.status(overbound.response.result())
+  overbound.read.status(overbound.read.result()) &&
+    overbound.mutation.status(overbound.mutation.result())
 
 # Requires the owner service to complete its ordered shutdown.
 def closed(result: Result<&1, &1, ByteDb.Error, Unit>) -> IO(Unit):

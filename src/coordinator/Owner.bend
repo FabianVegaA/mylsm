@@ -6,6 +6,8 @@ import ./Operation.bend as Operation
 import ./OptionsCodec.bend as OptionsCodec
 import ./Protocol.bend as Protocol
 import ./CoordinatorPolicy.bend as Policy
+import ./ClientPolicy.bend as ClientPolicy
+import ./ResponseBoundPolicy.bend as ResponseBound
 import ./OwnerGeneration.bend as Generation
 import ./Io.bend as Io
 import ./UnixSocketIo.bend as UnixSocket
@@ -2337,7 +2339,24 @@ def serve.closed(
         _closed : Unit <- File.close(connection)
         return (handle, snapshots, cursors)
 
+def bound.response.bounded(
+  version: U32,
+  generation: U32,
+  request_id: U32,
+  +length: U32,
+  words: Array<U32>,
+  bounded: ResponseBound.Bounded
+) -> Protocol.Response:
+  match bounded:
+    case ResponseBound.Bounded{status, True{}}:
+      Protocol.Response{version, generation, request_id, status,
+        Bytes.Bytes{length, words}}
+    case ResponseBound.Bounded{status, False{}}:
+      Protocol.Response{version, generation, request_id, status,
+        Bytes.new(0)}
+
 def bound.response.decided(
+  mutation: Bool,
   version: U32,
   generation: U32,
   request_id: U32,
@@ -2346,15 +2365,11 @@ def bound.response.decided(
   words: Array<U32>,
   fits: Bool
 ) -> Protocol.Response:
-  match fits:
-    case True{}:
-      Protocol.Response{version, generation, request_id, status,
-        Bytes.Bytes{length, words}}
-    case False{}:
-      Protocol.Response{version, generation, request_id,
-        Protocol.CommitUnknown{}, Bytes.new(0)}
+  bound.response.bounded(version, generation, request_id, length, words,
+    ResponseBound.bound(mutation, status, ResponseBound.outcome(fits)))
 
 def bound.response(
+  mutation: Bool,
   version: U32,
   generation: U32,
   request_id: U32,
@@ -2364,16 +2379,17 @@ def bound.response(
 ) -> Protocol.Response:
   match payload:
     case Bytes.Bytes{+length, words}:
-      bound.response.decided(version, generation, request_id, status,
+      bound.response.decided(mutation, version, generation, request_id, status,
         length, words, ResourceOptions.response.admitted(length, max_bytes))
 
 def bound.response.result(
+  mutation: Bool,
   response: Protocol.Response,
   max_bytes: U32
 ) -> Protocol.Response:
   match response:
     case Protocol.Response{version, generation, request_id, status, payload}:
-      bound.response(version, generation, request_id, status, payload,
+      bound.response(mutation, version, generation, request_id, status, payload,
         max_bytes)
 
 def serve.response(
@@ -2385,7 +2401,7 @@ def serve.response(
     case DispatchResult{handle, snapshots, cursors, response}:
       do IO<ByteDb.Handle & SnapshotStore.Store & CursorStore.Store>:
         bounded : Protocol.Response =
-          bound.response.result(response, max_response_bytes)
+          bound.response.result(False{}, response, max_response_bytes)
         written : File & Result<&1, &1, U32 & String, Unit> <-
           Io.write_all(connection, Protocol.encode_response(bounded))
         serve.closed(written, handle, snapshots, cursors)
@@ -2430,6 +2446,7 @@ def reactor.dispatch.deadline(
     case Fail{_}: 0n
 
 def reactor.dispatch.encode(
+  mutation: Bool,
   result: DispatchResult,
   reservation: TxPolicy.DispatchReservation
 ) -> EncodedDispatch:
@@ -2439,7 +2456,7 @@ def reactor.dispatch.encode(
         +payload_limit, peak_bytes}:
       EncodedDispatch{handle, snapshots, cursors,
         Protocol.encode_response(
-          bound.response.result(response, payload_limit)),
+          bound.response.result(mutation, response, payload_limit)),
         TxPolicy.tx.frame.transfer(TxPolicy.DispatchReservation{
           connection_id, request_bytes, payload_limit, peak_bytes})}
 
@@ -2486,6 +2503,7 @@ def reactor.dispatch.observe.encoded(result: EncodedDispatch) -> IO(EncodedDispa
         reservation, Bytes.length(bytes))
 
 def serve.reactor.dispatch.response(
+  mutation: Bool,
   result: DispatchResult,
   reservation: TxPolicy.DispatchReservation,
   id: U32,
@@ -2500,7 +2518,7 @@ def serve.reactor.dispatch.response(
 ) -> IO(ReactorContext):
   do IO<ReactorContext>:
     encoded : EncodedDispatch <- reactor.dispatch.observe.encoded(
-      reactor.dispatch.encode(result, reservation))
+      reactor.dispatch.encode(mutation, result, reservation))
     clock : Result<&1, &1, U32 & String, Nat> <- Fs.clock_monotonic()
     return reactor.dispatch.response.context(encoded, id, socket, endpoint,
       generation, options, response_connections, next_connection_id,
@@ -2533,6 +2551,7 @@ def close.poll.interests(
             close.poll.interests(rest)
 
 def serve.reactor.dispatch.completed(
+  mutation: Bool,
   server: File,
   handle: ByteDb.Handle,
   snapshots: SnapshotStore.Store,
@@ -2552,7 +2571,7 @@ def serve.reactor.dispatch.completed(
     case TxPolicy.DispatchCompleted{reservation, response}:
       do IO<ServiceState>:
         next_context : ReactorContext <-
-          serve.reactor.dispatch.response(
+          serve.reactor.dispatch.response(mutation,
             DispatchResult{handle, snapshots, cursors, response},
             reservation, id, socket, endpoint, generation, options,
             other_connections, next_connection_id, accepted_sequence, queue)
@@ -2566,6 +2585,7 @@ def serve.reactor.dispatch.completed(
           "dispatch completion without an active reservation", cursors}
 
 def serve.reactor.dispatch.finished(
+  mutation: Bool,
   server: File,
   endpoint: String,
   generation: U32,
@@ -2581,12 +2601,14 @@ def serve.reactor.dispatch.finished(
 ) -> IO(ServiceState):
   match result:
     case DispatchResult{handle, snapshots, cursors, response}:
-      serve.reactor.dispatch.completed(server, handle, snapshots, cursors,
+      serve.reactor.dispatch.completed(mutation, server, handle, snapshots,
+        cursors,
         endpoint, generation, options, other_connections, next_connection_id,
         accepted_sequence, queue, id, socket,
         TxPolicy.tx.flight.complete(flight, response))
 
 def serve.reactor.dispatch.started(
+  mutation: Bool,
   generations: U32 & U32 & U32,
   server: File,
   handle: ByteDb.Handle,
@@ -2610,7 +2632,8 @@ def serve.reactor.dispatch.started(
         dispatched : DispatchResult <-
           dispatch.request.with_options(handle, snapshots, cursors, request,
             dispatch_generation, options)
-        serve.reactor.dispatch.finished(server, endpoint, response_generation,
+        serve.reactor.dispatch.finished(mutation, server, endpoint,
+          response_generation,
           options, other_connections, next_connection_id, accepted_sequence,
           queue, id, socket, observed_flight, dispatched)
     case _ TxPolicy.DispatchAlreadyStarted{_}:
@@ -2644,10 +2667,11 @@ def serve.reactor.dispatch.pending.connection(
         case Connections.Queued{_, bound}:
           match request:
             case Protocol.Request{version, request_generation, request_id,
-              operation, payload}:
+              +operation, payload}:
               match deadline:
                 case ConnectionPolicy.Continue{}:
                   serve.reactor.dispatch.started(
+                    ClientPolicy.operation.is_mutation(operation),
                     Protocol.u32.duplicate.triple(generation), server,
                     handle, endpoint, options, snapshots, cursors,
                     other_connections, next_connection_id, accepted_sequence,
@@ -2663,7 +2687,7 @@ def serve.reactor.dispatch.pending.connection(
                       Protocol.Response{version, request_generation,
                         request_id, Protocol.Timeout{}, Bytes.new(0)}}
                     next_context : ReactorContext <-
-                      serve.reactor.dispatch.response(timed_out,
+                      serve.reactor.dispatch.response(False{}, timed_out,
                         TxPolicy.DispatchReservation{id, 0n, 0, 0n}, id, socket,
                         endpoint, generation, options, other_connections,
                         next_connection_id, accepted_sequence, queue)
@@ -2795,7 +2819,7 @@ def serve.reactor.dispatch.resource.detached(
             case Connections.Connection{+id, socket, _, _}:
               do IO<ServiceState>:
                 response_context : ReactorContext <-
-                  serve.reactor.dispatch.response(
+                  serve.reactor.dispatch.response(False{},
                     DispatchResult{handle, snapshots, cursors,
                       reactor.resource.limit.response(request)},
                     TxPolicy.DispatchReservation{id, 0n, 0, 0n},

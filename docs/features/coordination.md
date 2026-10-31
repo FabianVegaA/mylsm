@@ -42,7 +42,9 @@ escritores independientes sobre los archivos. `EINTR` y `EAGAIN`/`EWOULDBLOCK` e
 El owner rechaza headers cuyo payload supera 16 MiB antes de leerlo y asignarlo. El
 preflight rechaza con `ResourceLimit` una respuesta cuya cota individual no cabe antes
 del dispatch. Si un productor excede su cota después del dispatch, el owner responde
-`CommitUnknown` con payload vacío. Los clientes locales conservan el ceiling de
+con payload vacío: una lectura recibe `ResourceLimit` y una mutación, que ya se aplicó,
+recibe `CommitUnknown`. Las mutaciones responden con payload vacío, así que en la
+práctica ese segundo caso no ocurre. Los clientes locales conservan el ceiling de
 protocolo de 1 GiB.
 
 El cliente distingue una solicitud no despachada de una mutación cuya respuesta se
