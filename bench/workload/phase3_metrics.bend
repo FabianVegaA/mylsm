@@ -1,25 +1,49 @@
 import Base
 import ../../src/Console.bend as Console
-import ../../src/Db.bend as Db
+import ../../mylsm.bend as MyLSM
 import ../../src/Fs.bend as Fs
-import ../../src/Recover.bend as Recover
-import ../../src/MemTable.bend as MemTable
-import ../../src/Sstable.bend as Sstable
-import ../../src/Wal.bend as Wal
 import ../lib/common.bend as Common
 
 # Phase D metrics harness: write loop tracking logical bytes, first/middle/
 # last samples, timed recovery, and 101 sampled point reads.
 
 # Write many for the database metrics benchmark.
-def write_many(fuel: Nat, +index: Nat, db: Db.Db) -> IO(Db.Db):
+def written(
+  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome>
+) -> IO(MyLSM.Utf8.Handle):
+  match pair:
+    case (handle, Done{_}): IO.pure(MyLSM.Utf8.Handle, handle)
+    case (_, Fail{_}): IO.die(MyLSM.Utf8.Handle, 1, "metrics write failed")
+
+# Takes the handle back after a flush or stops the run.
+def flushed(
+  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit>
+) -> IO(MyLSM.Utf8.Handle):
+  match pair:
+    case (handle, Done{Unit{}}): IO.pure(MyLSM.Utf8.Handle, handle)
+    case (_, Fail{_}): IO.die(MyLSM.Utf8.Handle, 1, "metrics flush failed")
+
+def flush.due(due: Bool, handle: MyLSM.Utf8.Handle) -> IO(MyLSM.Utf8.Handle):
+  match due:
+    case False{}: IO.pure(MyLSM.Utf8.Handle, handle)
+    case True{}:
+      do IO<MyLSM.Utf8.Handle>:
+        pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Unit> <-
+          MyLSM.Utf8.flush(handle)
+        flushed(pair)
+
+# Writes key-N=value-N and flushes every 4096 writes.
+def write_many(fuel: Nat, +index: Nat, handle: MyLSM.Utf8.Handle) -> IO(MyLSM.Utf8.Handle):
   match fuel:
-    case 0n:
-      IO.pure(Db.Db, db)
+    case 0n: IO.pure(MyLSM.Utf8.Handle, handle)
     case 1n+rest:
-      do IO<Db.Db>:
-        next : Db.Db <- IO.try(Db.Db, Recover.write(db, Wal.Batch{Con{Wal.Put{"key-" ++ Nat.show(index), "value-" ++ Nat.show(index)}, Nil{}}}))
-        write_many(rest, Nat.add(index, 1n), next)
+      do IO<MyLSM.Utf8.Handle>:
+        pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, MyLSM.WriteOutcome> <-
+          MyLSM.Utf8.put(handle, "key-" ++ Nat.show(index), "value-" ++ Nat.show(index))
+        next : MyLSM.Utf8.Handle <- written(pair)
+        maintained : MyLSM.Utf8.Handle <- flush.due(
+          Nat.is_eq(Nat.mod(Nat.add(index, 1n), 4096n), 0n), next)
+        write_many(rest, Nat.add(index, 1n), maintained)
 
 # Handle logical go in the database metrics benchmark.
 def logical_go(fuel: Nat, +start: Nat, acc: Nat) -> Nat:
@@ -29,19 +53,30 @@ def logical_go(fuel: Nat, +start: Nat, acc: Nat) -> Nat:
     case 1n+f:
       logical_go(f, Nat.add(start, 1n), Nat.add(acc, Nat.add(String.length("key-" ++ Nat.show(start)), String.length("value-" ++ Nat.show(start)))))
 
-# Handle sample reads in the database metrics benchmark.
-def sample_reads(+samples: Nat, +db: Db.Db, +count: Nat, acc: List<&2, Nat>) -> IO(List<&2, Nat>):
+def sample.read(
+  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Maybe<&2, String>>
+) -> MyLSM.Utf8.Handle:
+  match pair:
+    case (handle, _): handle
+
+# Times 101 point reads spread over the written keys.
+def sample_reads(
+  +samples: Nat,
+  handle: MyLSM.Utf8.Handle,
+  +count: Nat,
+  acc: List<&2, Nat>
+) -> IO(MyLSM.Utf8.Handle & List<&2, Nat>):
   match samples:
-    case 0n:
-      IO.pure(List<&2, Nat>, acc)
+    case 0n: IO.pure(MyLSM.Utf8.Handle & List<&2, Nat>, (handle, acc))
     case 1n+rest:
-      do IO<List<&2, Nat>>:
+      do IO<MyLSM.Utf8.Handle & List<&2, Nat>>:
         +probe : Nat <- IO.pure(Nat, Nat.div(Nat.mul(count, Nat.sub(101n, samples)), 101n))
         +start : Nat <- IO.now()
-        _got : Maybe<&2, String> <- IO.pure(Maybe<&2, String>, Db.db_get(db, "key-" ++ Nat.show(probe)))
+        pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Maybe<&2, String>> <-
+          MyLSM.Utf8.get(handle, "key-" ++ Nat.show(probe))
         +stop : Nat <- IO.now()
-        _pd : Unit <- IO.print("sample_ms=" ++ Nat.show(Nat.sub(stop, start)))
-        sample_reads(rest, db, count, Con{Nat.sub(stop, start), acc})
+        _printed : Unit <- IO.print("sample_ms=" ++ Nat.show(Nat.sub(stop, start)))
+        sample_reads(rest, sample.read(pair), count, Con{Nat.sub(stop, start), acc})
 
 # Handle frac pick in the database metrics benchmark.
 def frac_pick(small: Bool, +frac: Nat) -> String:
@@ -131,23 +166,13 @@ def sum_go(names: List<&1, String>, +dir: String, acc: Nat) -> IO(Nat):
     case Con{+h, t}:
       do IO<Nat>:
         size : Nat <- IO.try(Nat, Fs.file_size(dir ++ "/" ++ h))
-        sum_go(t, dir, Nat.add(acc, pick_size(String.ends_with(h, ".tbl"), size)))
+        sum_go(t, dir, Nat.add(acc, pick_size(String.starts_with(h, "SST."), size)))
 
-# Return the level sized for the database metrics benchmark.
-def level_sized(present: Bool, +dir: String, +sub: String) -> IO(Nat):
-  match present:
-    case False{}:
-      IO.pure(Nat, 0n)
-    case True{}:
-      do IO<Nat>:
-        names : List<&1, String> <- IO.try(List<&1, String>, Fs.read_dir(dir ++ "/" ++ sub))
-        sum_go(names, dir ++ "/" ++ sub, 0n)
-
-# Return the level bytes for the database metrics benchmark.
-def level_bytes(+dir: String, +sub: String) -> IO(Nat):
+# Sums the sizes of every SST file in the database directory.
+def table_bytes(+dir: String) -> IO(Nat):
   do IO<Nat>:
-    present : Bool <- IO.try(Bool, Fs.exists(dir ++ "/" ++ sub))
-    level_sized(present, dir, sub)
+    names : List<&1, String> <- IO.try(List<&1, String>, Fs.read_dir(dir))
+    sum_go(names, dir, 0n)
 
 # Return the size of if in the database metrics benchmark.
 def size_if(present: Bool, +dir: String, +file: String) -> IO(Nat):
@@ -165,39 +190,64 @@ def file_bytes(+dir: String, +file: String) -> IO(Nat):
     present : Bool <- IO.try(Bool, Fs.exists(dir ++ "/" ++ file))
     size_if(present, dir, file)
 
+# Takes the opened handle or stops the run.
+def opened(result: Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle>) -> IO(MyLSM.Utf8.Handle):
+  match result:
+    case Done{handle}: IO.pure(MyLSM.Utf8.Handle, handle)
+    case Fail{_}: IO.die(MyLSM.Utf8.Handle, 1, "metrics database open failed")
+
+# Closes the handle and keeps the read samples.
+def closed(pair: MyLSM.Utf8.Handle & List<&2, Nat>) -> IO(List<&2, Nat>):
+  match pair:
+    case (handle, samples):
+      do IO<List<&2, Nat>>:
+        _closed : Result<&1, &1, MyLSM.Utf8.Error, Unit> <- MyLSM.Utf8.close(handle)
+        return samples
+
+# Prints the sample verdict for one phase.
+def verdict(phase: String, pair: MyLSM.Utf8.Handle & Bool) -> IO(MyLSM.Utf8.Handle):
+  match pair:
+    case (handle, ok):
+      do IO<MyLSM.Utf8.Handle>:
+        _printed : Unit <- IO.print("phase=" ++ phase ++ " samples=" ++ Common.bool_text(ok))
+        return handle
+
 def main() -> IO(Unit):
   do IO<Unit>:
     count_env : String <- IO.try(String, Console.get_env("MYLSM_BENCH_WRITES"))
     dir_env : String <- IO.try(String, Console.get_env("MYLSM_BENCH_DIR"))
     +count : Nat <- IO.pure(Nat, Common.nat_default(Nat.read(count_env), 20485n))
     +dir : String <- IO.pure(String, Common.env_default(dir_env, ".mylsm-phase3-metrics-data"))
-    db : Db.Db <- IO.try(Db.Db, Recover.open_db(dir))
+    created : Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle> <- MyLSM.Utf8.create(dir)
+    handle : MyLSM.Utf8.Handle <- opened(created)
     +t0 : Nat <- IO.now()
-    +completed : Db.Db <- write_many(count, 0n, db)
+    completed : MyLSM.Utf8.Handle <- write_many(count, 0n, handle)
     +t1 : Nat <- IO.now()
     +logical : Nat <- IO.pure(Nat, logical_go(count, 0n, 0n))
     _u0 : Unit <- IO.print("metric_writes_completed=" ++ Nat.show(count))
     _u1 : Unit <- IO.print("metric_elapsed_ms=" ++ Nat.show(Nat.sub(t1, t0)))
     _u2 : Unit <- IO.print("metric_logical_bytes=" ++ Nat.show(logical))
-    _u3 : Unit <- IO.print("phase=pre_recovery samples=" ++ Common.bool_text(Common.samples_ok(completed, count)))
+    before : MyLSM.Utf8.Handle & Bool <- Common.samples(completed, count)
+    checked : MyLSM.Utf8.Handle <- verdict("pre_recovery", before)
+    _closed : Result<&1, &1, MyLSM.Utf8.Error, Unit> <- MyLSM.Utf8.close(checked)
     +r0 : Nat <- IO.now()
-    +reopened : Db.Db <- IO.try(Db.Db, Recover.open_db(dir))
+    existing : Result<&1, &1, MyLSM.Utf8.Error, MyLSM.Utf8.Handle> <- MyLSM.Utf8.open_existing(dir)
+    reopened : MyLSM.Utf8.Handle <- opened(existing)
     +r1 : Nat <- IO.now()
     _u4 : Unit <- IO.print("metric_recovery_ms=" ++ Nat.show(Nat.sub(r1, r0)))
-    _u5 : Unit <- IO.print("phase=post_recovery samples=" ++ Common.bool_text(Common.samples_ok(reopened, count)))
-    +samples : List<&2, Nat> <- sample_reads(101n, reopened, count, Nil{})
+    after : MyLSM.Utf8.Handle & Bool <- Common.samples(reopened, count)
+    rechecked : MyLSM.Utf8.Handle <- verdict("post_recovery", after)
+    read : MyLSM.Utf8.Handle & List<&2, Nat> <- sample_reads(101n, rechecked, count, Nil{})
+    +samples : List<&2, Nat> <- closed(read)
     +ordered : List<&2, Nat> <- IO.pure(List<&2, Nat>, concat_all(fill_buckets(samples, empty_buckets(64n, Nil{}))))
     +olen : Nat <- IO.pure(Nat, List.length(&2, Nat, ordered))
     _u6 : Unit <- IO.print("metric_p50_read_ms=" ++ Nat.show(nth_sorted(olen, 50n, ordered)))
     _u7 : Unit <- IO.print("metric_p95_read_ms=" ++ Nat.show(nth_sorted(olen, 95n, ordered)))
     _u8 : Unit <- IO.print("metric_p99_read_ms=" ++ Nat.show(nth_sorted(olen, 99n, ordered)))
     _u9 : Unit <- IO.print("metric_read_samples=" ++ Nat.show(olen))
-    +wal : Nat <- file_bytes(dir, "wal.log")
+    +wal : Nat <- file_bytes(dir, "WAL")
     +mfst : Nat <- file_bytes(dir, "MANIFEST")
-    +l0 : Nat <- level_bytes(dir, "l0")
-    +l1 : Nat <- level_bytes(dir, "l1")
-    +l2 : Nat <- level_bytes(dir, "l2")
-    +tables : Nat <- IO.pure(Nat, Nat.add(l0, Nat.add(l1, l2)))
+    +tables : Nat <- table_bytes(dir)
     _u10 : Unit <- IO.print("metric_wal_bytes=" ++ Nat.show(wal))
     _u11 : Unit <- IO.print("metric_manifest_bytes=" ++ Nat.show(mfst))
     _u12 : Unit <- IO.print("metric_table_bytes=" ++ Nat.show(tables))

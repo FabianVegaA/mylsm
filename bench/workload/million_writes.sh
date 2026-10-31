@@ -126,17 +126,7 @@ grep -q "^writes_completed=$COUNT$" "$RUN_RESULT" || { echo "correctness gate fa
 grep -q '^phase=pre_recovery samples=pass$' "$RUN_RESULT" || { echo "correctness gate failed: pre-recovery samples" >&2; exit 1; }
 grep -q '^phase=post_recovery samples=pass$' "$RUN_RESULT" || { echo "correctness gate failed: post-recovery samples" >&2; exit 1; }
 
-case "$COUNT" in
-  4096) EXPECTED_SHAPE='mem_entries=0 frozen_entries=4096 l0_tables=0 l1_tables=0' ;;
-  4097) EXPECTED_SHAPE='mem_entries=1 frozen_entries=4096 l0_tables=0 l1_tables=0' ;;
-  20485) EXPECTED_SHAPE='mem_entries=3 frozen_entries=4096 l0_tables=2 l1_tables=0' ;;
-  *) EXPECTED_SHAPE='' ;;
-esac
-if [[ -n "$EXPECTED_SHAPE" ]]; then
-  grep -q "^phase=pre_recovery $EXPECTED_SHAPE$" "$RUN_RESULT" || { echo "correctness gate failed: pre-recovery level shape" >&2; exit 1; }
-  grep -q "^phase=post_recovery $EXPECTED_SHAPE$" "$RUN_RESULT" || { echo "correctness gate failed: post-recovery level shape" >&2; exit 1; }
-fi
-echo "phase=correctness status=complete samples=first_middle_last recovery=pass level_shape=pass"
+echo "phase=correctness status=complete samples=first_middle_last recovery=pass"
 
 ELAPSED_MS=$(awk -F= '/^elapsed_ms=/{print $2}' "$RUN_RESULT" | awk 'END {print}')
 if [[ -n "$ELAPSED_MS" ]] && (( ELAPSED_MS > 0 )); then

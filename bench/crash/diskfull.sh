@@ -128,12 +128,12 @@ perm_case() {
   echo "perm_case=$name restore=healthy"
 }
 
-TABLE=$(ls "$WORK"/l0/*.tbl 2>/dev/null | head -1 || true)
-perm_case "wal-readonly" "$WORK/wal.log" 400 100
+TABLE=$(ls "$WORK"/SST.* 2>/dev/null | sort | tail -n 1 || true)
+perm_case "wal-readonly" "$WORK/WAL" 400 100
 if [[ -n "$TABLE" ]]; then
   perm_case "table-unreadable" "$TABLE" 000 100
 else
-  echo "perm case table-unreadable: SKIP (no l0 table present)"
+  echo "perm case table-unreadable: SKIP (no SST present)"
 fi
 if [[ -f "$WORK/MANIFEST" ]]; then
   perm_case "manifest-unreadable" "$WORK/MANIFEST" 000 100

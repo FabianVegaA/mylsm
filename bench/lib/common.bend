@@ -1,10 +1,6 @@
 import Base
 import ../../src/Console.bend as Console
-import ../../src/Db.bend as Db
-import ../../src/Recover.bend as Recover
-import ../../src/MemTable.bend as MemTable
-import ../../src/Sstable.bend as Sstable
-import ../../src/Wal.bend as Wal
+import ../../mylsm.bend as MyLSM
 
 # Shared bench helpers, deduplicated from million_writes.bend,
 # phase3_metrics.bend, compaction_bench.bend, crash_worker.bend and app/.
@@ -47,49 +43,53 @@ def samples_and(first: Bool, second: Bool, third: Bool) -> Bool:
         case True{}:
           third
 
-# Check benchmark samples for ok for the benchmark fixture helpers.
-def samples_ok(+db: Db.Db, +count: Nat) -> Bool:
-  +middle = Nat.div(count, 2n)
-  +last = Nat.sub(count, 1n)
-  samples_and(
-    maybe_value_eq(Db.db_get(db, "key-0"), "value-0"),
-    maybe_value_eq(Db.db_get(db, "key-" ++ Nat.show(middle)), "value-" ++ Nat.show(middle)),
-    maybe_value_eq(Db.db_get(db, "key-" ++ Nat.show(last)), "value-" ++ Nat.show(last)))
+def sample.read(
+  pair: MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Maybe<&2, String>>,
+  +expected: String
+) -> MyLSM.Utf8.Handle & Bool:
+  match pair:
+    case (handle, Done{value}): (handle, maybe_value_eq(value, expected))
+    case (handle, Fail{_}): (handle, False{})
 
-# Return the memory count for the benchmark fixture helpers.
-def mem_count(db: Db.Db) -> Nat:
-  match db:
-    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
-      MemTable.count(mem)
+# Reads key-N and checks it holds value-N.
+def sample(handle: MyLSM.Utf8.Handle, +index: Nat) -> IO(MyLSM.Utf8.Handle & Bool):
+  do IO<MyLSM.Utf8.Handle & Bool>:
+    pair : MyLSM.Utf8.Handle & Result<&1, &1, MyLSM.Utf8.Error, Maybe<&2, String>> <-
+      MyLSM.Utf8.get(handle, "key-" ++ Nat.show(index))
+    return sample.read(pair, "value-" ++ Nat.show(index))
 
-# Handle frozen count in the benchmark fixture helpers.
-def frozen_count(db: Db.Db) -> Nat:
-  match db:
-    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
-      MemTable.count(frozen)
+def samples.last(
+  first: Bool,
+  second: Bool,
+  pair: MyLSM.Utf8.Handle & Bool
+) -> MyLSM.Utf8.Handle & Bool:
+  match pair:
+    case (handle, third): (handle, samples_and(first, second, third))
 
-# Return the first level in the benchmark fixture helpers.
-def first_level(levels: List<&2, List<&2, Sstable.Table>>) -> List<&2, Sstable.Table>:
-  match levels:
-    case Nil{}: Nil{}
-    case Con{level, rest}: level
+def samples.middle(
+  first: Bool,
+  pair: MyLSM.Utf8.Handle & Bool,
+  +last: Nat
+) -> IO(MyLSM.Utf8.Handle & Bool):
+  match pair:
+    case (handle, second):
+      do IO<MyLSM.Utf8.Handle & Bool>:
+        third : MyLSM.Utf8.Handle & Bool <- sample(handle, last)
+        return samples.last(first, second, third)
 
-# Handle rest levels in the benchmark fixture helpers.
-def rest_levels(levels: List<&2, List<&2, Sstable.Table>>) -> List<&2, List<&2, Sstable.Table>>:
-  match levels:
-    case Nil{}: Nil{}
-    case Con{level, rest}: rest
+def samples.first(
+  pair: MyLSM.Utf8.Handle & Bool,
+  +middle: Nat,
+  +last: Nat
+) -> IO(MyLSM.Utf8.Handle & Bool):
+  match pair:
+    case (handle, first):
+      do IO<MyLSM.Utf8.Handle & Bool>:
+        second : MyLSM.Utf8.Handle & Bool <- sample(handle, middle)
+        samples.middle(first, second, last)
 
-# Return the level count for the benchmark fixture helpers.
-def level_count(db: Db.Db, level: Nat) -> Nat:
-  match db:
-    case Db.Db{dir, mem, frozen, batch_cap, bcache, levels, flushed, manifest_token, mem_count, frozen_count}:
-      match level:
-        case 0n:
-          List.length(&2, Sstable.Table, first_level(levels))
-        case 1n+n:
-          List.length(&2, Sstable.Table, first_level(rest_levels(levels)))
-
-# Print shape for the benchmark fixture helpers.
-def print_shape(+phase: String, +db: Db.Db) -> IO(Unit):
-  IO.print("phase=" ++ phase ++ " mem_entries=" ++ Nat.show(mem_count(db)) ++ " frozen_entries=" ++ Nat.show(frozen_count(db)) ++ " l0_tables=" ++ Nat.show(level_count(db, 0n)) ++ " l1_tables=" ++ Nat.show(level_count(db, 1n)))
+# Checks the first, middle and last of count written keys.
+def samples(handle: MyLSM.Utf8.Handle, +count: Nat) -> IO(MyLSM.Utf8.Handle & Bool):
+  do IO<MyLSM.Utf8.Handle & Bool>:
+    first : MyLSM.Utf8.Handle & Bool <- sample(handle, 0n)
+    samples.first(first, Nat.div(count, 2n), Nat.sub(count, 1n))

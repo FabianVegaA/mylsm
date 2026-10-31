@@ -34,14 +34,13 @@ measure() {
   throughput="$(sed -n 's/^throughput_ops_s=//p' "$log")"
   disk="$(du -sk "$dir" | cut -f1)"
   local recovery_mode
-  if [[ "$mode" == public ]]; then recovery_mode=public_recover; else recovery_mode=internal_recover; fi
+  recovery_mode=public_recover
   MYLSM_PERF_MODE="$recovery_mode" MYLSM_PERF_PATH="$dir" MYLSM_PERF_WRITES=0 "$binary" > "$work/$mode-$run-recovery.log"
   recovery="$(sed -n 's/^recovery_ms=//p' "$work/$mode-$run-recovery.log")"
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$mode" "$run" "$writes" "$elapsed" "$latency" "$throughput" "$(cat "$rss")" "$disk" "$recovery" >> "$samples"
 }
 
 for ((run = 1; run <= repeats; run++)); do
-  measure internal "$run"
   measure public "$run"
 done
 

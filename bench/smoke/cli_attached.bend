@@ -1,6 +1,6 @@
 import Base
 import ../../app/cli/Attached.bend as Attached
-import ../../src/Flush.bend as Flush
+import ../../src/Fs.bend as Fs
 
 # Fails the smoke test when a child exits with a nonzero status.
 def expect_zero_status(ok: Bool) -> IO(Unit):
@@ -59,7 +59,7 @@ def main() -> IO(Unit):
     logged : Result<&1, &1, U32 & String, U32> <- Attached.run(
       "/bin/echo", Con{"a b", Nil{}}, Nil{}, Some{".mylsm-cli-attached.log"})
     _logged : Unit <- expect_zero(logged)
-    output : String <- IO.try(String, Flush.read_file(".mylsm-cli-attached.log"))
+    output : String <- IO.try(String, Fs.read_text(".mylsm-cli-attached.log"))
     _output : Unit <- expect_log(String.eq(output, "a b\n"))
     missing : Result<&1, &1, U32 & String, U32> <- Attached.run(
       "/no/such/mylsm-cli-program", Nil{}, Nil{}, None{})
