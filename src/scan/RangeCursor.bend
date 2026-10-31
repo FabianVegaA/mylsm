@@ -158,11 +158,6 @@ def matches.key(pair: Bytes.Bytes & Bytes.Bytes, bounds: Bounds) -> Bool:
           Bool.and(ByteRange.in_range(range_key, lower, upper),
             matches.prefix(prefix_key, prefix))
 
-def matches.bounds(pair: Bounds & Bounds, keys: Bytes.Bytes & Bytes.Bytes) -> Bool:
-  match pair:
-    case (checked, _):
-      matches.key(keys, checked)
-
 def filtered.result(
   valid: Bool,
   key: Bytes.Bytes,

@@ -127,52 +127,6 @@ def result.response(
 ) -> Result<&1, &1, Error, Protocol.Response>:
   Done{response}
 
-def response.checked.decision(
-  retained_status: Protocol.ResponseStatus,
-  response: Protocol.Response,
-  accepted: Bool
-) -> Result<&1, &1, Error, Protocol.Response>:
-  match accepted:
-    case True{}: result.response(response)
-    case False{}: result.failure(OwnerRejected{retained_status})
-
-def response.checked.status(
-  pair: Protocol.ResponseStatus & Protocol.ResponseStatus,
-  response: Protocol.Response
-) -> Result<&1, &1, Error, Protocol.Response>:
-  match pair:
-    case (checked_status, retained_status):
-      response.checked.decision(retained_status, response,
-        Policy.response.accepted(checked_status))
-
-def response.confirmed.result(
-  pair: Protocol.Response & Protocol.Response
-) -> Result<&1, &1, Error, Protocol.Response>:
-  match pair:
-    case (retained, checked):
-      match checked:
-        case Protocol.Response{_, _, _, status, _}:
-          response.checked.status(status.clone.pair(status), retained)
-
-def response.require.success(
-  response: Protocol.Response
-) -> Result<&1, &1, Error, Protocol.Response>:
-  response.confirmed.result(response.clone.pair(response))
-
-def session.checked.result(
-  pair: Session & Result<&1, &1, Error, Protocol.Response>
-) -> Session & Result<&1, &1, Error, Protocol.Response>:
-  match pair:
-    case (session, result):
-      match result:
-        case Fail{error}: (session, Fail{error})
-        case Done{response}: (session, response.require.success(response))
-
-def session.checked(
-  pair: Session & Result<&1, &1, Error, Protocol.Response>
-) -> Session & Result<&1, &1, Error, Protocol.Response>:
-  session.checked.result(pair)
-
 def disconnect.error(mutation: Bool, error: Io.Error) -> Error:
   match mutation:
     case True{}: CommitUnknown{error}
@@ -477,21 +431,6 @@ def session.call(
     case Session{endpoint, generation, requests}:
       session.call.decision(endpoint, generation, operation, payload,
         Policy.request_id.take(requests))
-
-def session.call.confirmed.result(
-  pair: Session & Result<&1, &1, Error, Protocol.Response>
-) -> Session & Result<&1, &1, Error, Protocol.Response>:
-  session.checked(pair)
-
-def session.call.confirmed(
-  session: Session,
-  operation: U32,
-  payload: Bytes.Bytes
-) -> IO(Session & Result<&1, &1, Error, Protocol.Response>):
-  do IO<Session & Result<&1, &1, Error, Protocol.Response>>:
-    pair : Session & Result<&1, &1, Error, Protocol.Response> <-
-      session.call(session, operation, payload)
-    return session.call.confirmed.result(pair)
 
 # Sends a byte get and retains the next request sequence.
 def session.get(

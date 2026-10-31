@@ -1,16 +1,15 @@
 import Base
 import ../../mylsm.bend as MyLSM
 import ../../src/Console.bend as Console
-import ../../src/Decimal.bend as Decimal
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
 
-def parsed.count(parsed: Decimal.Parse) -> Nat:
+def parsed.count(parsed: Maybe<&2, Nat>) -> Nat:
   match parsed:
-    case Decimal.Accepted{parsed}: Decimal.parsed_value(parsed)
-    case _: 0n
+    case Some{count}: count
+    case None{}: 0n
 
 def count.from.env(text: String) -> Nat:
-  parsed.count(Decimal.parse_complete(text, 4294967295n))
+  parsed.count(Nat.read(text))
 
 # Encodes an ordered integer as a fixed-width byte key.
 def key(index: Nat) -> Bytes.Bytes:

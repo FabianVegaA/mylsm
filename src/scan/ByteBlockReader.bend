@@ -55,10 +55,6 @@ type EntryStep is Type:
 type BodyContext is Type:
   BodyContext{state: State, block_header: Bytes.Bytes, payload_length: U32}
 
-# Retains the file and bounded hash/index progress during traversal.
-type IndexState is Type:
-  IndexState{file: File, reader: State, hash: SHA.Stream, first: Nat}
-
 # Retains one bounded serialized-index page and its incremental validators.
 type IndexPageState is Type:
   IndexPageNeed{file: File, reader: IndexMeta, offset: Nat, remaining: Nat,
@@ -566,14 +562,6 @@ def seek.block.read(
     case (file, Done{bytes}):
       seek.block.decoded(state, index, file, seek.block.words(bytes))
 
-def seek.block.indices.triple.result(pair: Nat & Nat & Nat) -> U32 & U32 & U32:
-  match pair:
-    case (first, second, third):
-      (U32.from_nat(first), U32.from_nat(second), U32.from_nat(third))
-
-def seek.block.indices.triple(value: U32) -> U32 & U32 & U32:
-  seek.block.indices.triple.result(Fs.read_at.nat.clone.triple(U32.to_nat(value)))
-
 def seek.block.indices.quad.first(
   firsts: Nat & Nat,
   second: Nat,
@@ -746,9 +734,6 @@ def route.close.failed(
   do IO<Result<&1, &1, U32 & String, Reader>>:
     _closed : Unit <- File.close(file)
     return Fail{error}
-
-def route.index.error(file: File) -> IO(Result<&1, &1, U32 & String, Reader>):
-  route.close.failed(file, corruption("invalid byte SST separator metadata"))
 
 def route.record.bounds(
   file: File,
@@ -1500,20 +1485,6 @@ def next.trailer.finish.root.digest(
     Bytes.concat([ByteSstFile.footer.magic(), ByteSstFile.u32.bytes(total),
       ByteSstFile.u32.bytes(index_length), digest]))
 
-
-def next.trailer.finish.root(
-  file: File,
-  +total: U32,
-  +index_length: U32,
-  footer: Bytes.Bytes,
-  result: Result<&1, &1, SHA.StreamError, SHA.Stream>
-) -> IO(Result<&1, &1, U32 & String, Step>):
-  match result:
-    case Fail{_}:
-      close.failed(file, resource_limit("SST root hash exceeds the SHA-256 input limit"))
-    case Done{root_hash}:
-      next.trailer.finish.root.digest(file, total, index_length, footer,
-        SHA.stream.finish(root_hash))
 
 def index.page.footer.finish(
   file: File,

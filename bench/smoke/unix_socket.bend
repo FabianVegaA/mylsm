@@ -42,6 +42,8 @@ def socket.failure(action: String, error: UnixSocket.Error) -> IO(Unit):
   match error:
     case UnixSocket.UnsupportedPlatform{}:
       fail(action ++ " is unsupported on this platform")
+    case UnixSocket.Transient{code}:
+      fail(action ++ " was interrupted with host code " ++ Nat.show(U32.to_nat(code)))
     case UnixSocket.Host{code, _}:
       fail(action ++ " failed with host code " ++ Nat.show(U32.to_nat(code)))
 

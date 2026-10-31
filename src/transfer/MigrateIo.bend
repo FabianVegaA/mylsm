@@ -520,36 +520,6 @@ def host.without_lock(error: U32 & String) -> IO(Result<&1, &1, Error, Nat>):
     case (code, message):
       IO.pure(Result<&1, &1, Error, Nat>, Fail{HostError{code, message}})
 
-# Releases the lock after classifying pure legacy WAL verification.
-def wal.checked.result(
-  lock: DbLock.Lock,
-  result: LegacyWal.VerifyResult,
-  path: String
-) -> IO(Result<&1, &1, Error, Nat>):
-  match result:
-    case LegacyWal.WalValid{frames}:
-      release(lock, Done{frames}, path)
-    case LegacyWal.WalInvalid{}:
-      release(lock, Fail{InvalidLegacyWal{}}, path)
-
-# Revalidates complete WAL bytes without repairing or truncating the source.
-def wal.checked(
-  lock: DbLock.Lock,
-  bytes: Bytes.Bytes,
-  path: String
-) -> IO(Result<&1, &1, Error, Nat>):
-  wal.checked.result(lock, LegacyWal.verify(bytes), path)
-
-# Classifies bounded WAL bytes after the data descriptor has closed.
-def wal.read.closed.result(
-  result: Result<&1, &1, U32 & String, Bytes.Bytes>,
-  lock: DbLock.Lock,
-  path: String
-) -> IO(Result<&1, &1, Error, Nat>):
-  match result:
-    case Fail{error}: host.failed(lock, error, path)
-    case Done{bytes}: wal.checked(lock, bytes, path)
-
 def wal.read.failure(
   error: U32 & String,
   released: Result<&1, &1, DurableError.Error, Unit>

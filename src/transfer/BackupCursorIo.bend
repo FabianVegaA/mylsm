@@ -172,17 +172,6 @@ def initial.failed(
     _closed : Unit <- close.initial(initial)
     return Fail{error}
 
-def close.file.result(
-  +destination: String,
-  +temporary: String,
-  file: File,
-  result: Result<&1, &1, U32 & String, Unit>
-) -> IO(Result<&1, &1, BackupIo.Error, Unit>):
-  match result:
-    case Fail{error}: BackupIo.close.failed(file, temporary, error)
-    case Done{Unit{}}:
-      BackupIo.publish.closed(destination, temporary, file, Done{Unit{}})
-
 def close.file(
   +destination: String,
   +temporary: String,

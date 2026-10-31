@@ -80,18 +80,6 @@ def word_count(tree: BitTree) -> Nat:
     case BT{root, words, capacity, height}:
       words
 
-# Handle capacity words in the packed bit-tree operations.
-def capacity_words(tree: BitTree) -> Nat:
-  match tree:
-    case BT{root, words, capacity, height}:
-      capacity
-
-# Handle tree height in the packed bit-tree operations.
-def tree_height(tree: BitTree) -> Nat:
-  match tree:
-    case BT{root, words, capacity, height}:
-      height
-
 # Handle bit count in the packed bit-tree operations.
 def bit_count(tree: BitTree) -> Nat:
   Nat.mul(word_count(tree), 32n)
@@ -99,14 +87,6 @@ def bit_count(tree: BitTree) -> Nat:
 # Check whether bit holds for the packed bit-tree operations.
 def valid_bit(tree: BitTree, bit: Nat) -> Bool:
   Nat.is_lt(bit, bit_count(tree))
-
-# Handle same metadata in the packed bit-tree operations.
-def same_metadata(+ta: BitTree, +tb: BitTree) -> Bool:
-  Bool.and(
-    Nat.is_eq(word_count(ta), word_count(tb)),
-    Bool.and(
-      Nat.is_eq(capacity_words(ta), capacity_words(tb)),
-      Nat.is_eq(tree_height(ta), tree_height(tb))))
 
 # Build the root-to-leaf path by consuming low bits while prepending them.
 def path_bit(rem: Nat) -> Bool:

@@ -584,14 +584,6 @@ def wal_open(+dir: String) -> IO(Result<&1, &1, U32 & String, Db.RotRes>):
 
 # --- Tmp sweep (best-effort) ---
 
-# Handle tmp pick in the database recovery effects.
-def tmp_pick(keep: Bool, +name: String, +acc: List<&2, String>) -> List<&2, String>:
-  match keep:
-    case True{}:
-      Con{name, acc}
-    case False{}:
-      acc
-
 # Handle tmp some in the database recovery effects.
 def tmp_some(+ok: Bool, +name: String) -> Maybe<&2, String>:
   match ok:

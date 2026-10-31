@@ -60,16 +60,6 @@ def lt(+s1: String, +s2: String) -> Bool:
 def le(+s1: String, +s2: String) -> Bool:
   cmp_is_le(cmp(s1, s2))
 
-# Compare whether reverse holds for the key ordering and comparison.
-def cmp_reverse(ord: Cmp) -> Cmp:
-  match ord:
-    case LT{}:
-      GT{}
-    case EQ{}:
-      EQ{}
-    case GT{}:
-      LT{}
-
 # Handle implies in the key ordering and comparison.
 def implies(s1: Bool, s2: Bool) -> Bool:
   match s1:
@@ -134,32 +124,6 @@ def cmp_eq_bridge(+s1: String, +s2: String) -> {cmp_is_eq(cmp(s1, s2)) == eq(s1,
 # proved in bend-mathlib's bool and string modules (hash-pinned by version).
 # (Proving Base's own primitives is the one exception to the trust-root
 # rule: without open-key comparison facts, NO keyed law is provable.)
-
-# Evaluate refl for the key ordering and comparison.
-def bool_refl(+flag: Bool) -> {Bool.cmp(flag, flag) == EQ{} : Cmp}:
-  MBool.cmp_refl(flag)
-
-# Handle word refl in the key ordering and comparison.
-def word_refl(width: Nat, +word: Word(width)) -> {Word.cmp(width, word, word) == EQ{} : Cmp}:
-  match width word:
-    case 0n WNil{}:
-      {==}
-    case 1n+p WCon{ab, at}:
-      match ab:
-        case False{}:
-          %Equal.sym(Cmp, Word.cmp(p, at, at), EQ{}, word_refl(p, at)) : {Word.cmp.fin(False{}, False{}, _) == EQ{} : Cmp}
-          {==}
-        case True{}:
-          %Equal.sym(Cmp, Word.cmp(p, at, at), EQ{}, word_refl(p, at)) : {Word.cmp.fin(True{}, True{}, _) == EQ{} : Cmp}
-          {==}
-
-# Encode or decode a 32-bit word for refl for the key ordering and comparison.
-def u32_refl(+val: U32) -> {U32.cmp(val, val) == EQ{} : Cmp}:
-  MString.u32_cmp_refl(val)
-
-# Handle char refl in the key ordering and comparison.
-def char_refl(+ch: Char) -> {Char.cmp(ch, ch) == ((ch, ch), EQ{}) : (Char & Char) & Cmp}:
-  MString.char_cmp_refl(ch)
 
 # Handle s cmp pair refl in the key ordering and comparison.
 def s_cmp_pair_refl(+str: String) -> {String.cmp(str, str) == ((str, str), EQ{}) : (String & String) & Cmp}:

@@ -42,9 +42,6 @@ def decode.error(error: Restore.Error) -> Error:
     case Restore.ChecksumMismatch{}: ChecksumMismatch{}
     case Restore.CountMismatch{}: CountMismatch{}
 
-def entries.count(entries: List<&1, ByteMemTable.Entry>) -> Nat:
-  List.length(&1, ByteMemTable.Entry, entries)
-
 def write.finish(pair: Db.Handle & Result<&1, &1, Db.Error, Unit>) -> WriteState:
   WriteResult{pair, Nil{}}
 
@@ -153,15 +150,6 @@ def cleanup.handle(
   do IO<Result<&1, &1, Error, Unit>>:
     _closed : Result<&1, &1, Db.Error, Unit> <- Db.close(handle)
     cleanup.result(path, Fail{error})
-
-def create.failed(path: String, error: Db.Error) -> IO(Result<&1, &1, Error, Unit>):
-  match error:
-    case Db.AlreadyExists{}:
-      IO.pure(Result<&1, &1, Error, Unit>, Fail{Storage{error}})
-    case _:
-      do IO<Result<&1, &1, Error, Unit>>:
-        cleanup.directory(path)
-        return Fail{Storage{error}}
 
 def flush.closed(
   path: String,

@@ -201,29 +201,6 @@ def pairwise_disjoint(runs: List<&2, List<&2, MemTable.Entry>>) -> Bool:
     case Con{+h, +t}:
       bool_and(disjoint_with(h, t), pairwise_disjoint(t))
 
-# Return the level disjoint for the sorted-run operations.
-def level_disjoint(+runs: List<&2, List<&2, MemTable.Entry>>) -> Bool:
-  bool_and(runs_well_formed(runs), pairwise_disjoint(runs))
-
-# Return the level s well formed for the sorted-run operations.
-def levels_well_formed(levels: List<&2, List<&2, List<&2, MemTable.Entry>>>) -> Bool:
-  match levels:
-    case Nil{}:
-      True{}
-    case Con{+level, rest}:
-      bool_and(level_disjoint(level), levels_well_formed(rest))
-
-# Expressible prerequisite for lower-shadow reasoning: every supplied level
-# strictly below target is itself well formed and pairwise range-disjoint.
-def lower_levels_well_formed(levels: List<&2, List<&2, List<&2, MemTable.Entry>>>, target: Nat) -> Bool:
-  match levels target:
-    case Nil{} _:
-      True{}
-    case Con{level, below} 0n:
-      levels_well_formed(below)
-    case Con{level, rest} 1n+n:
-      lower_levels_well_formed(rest, n)
-
 # --- Fuel-bounded stable two-run linear merge ---
 
 # Merge step for the sorted-run operations.
@@ -339,19 +316,6 @@ def singleton_runs(entries: List<&2, MemTable.Entry>) -> List<&2, List<&2, MemTa
 # Sort newest for the sorted-run operations.
 def sort_newest(entries: List<&2, MemTable.Entry>) -> List<&2, MemTable.Entry>:
   merge_many_newest(singleton_runs(entries))
-
-# Merge disjoint dec for the sorted-run operations.
-def merge_disjoint_dec(ok: Bool, runs: List<&2, List<&2, MemTable.Entry>>) -> Maybe<&2, List<&2, MemTable.Entry>>:
-  match ok:
-    case False{}:
-      None{}
-    case True{}:
-      Some{merge_many_newest(runs)}
-
-# L1 has no age tie-breaker. Reject malformed overlapping/duplicate ranges;
-# for accepted disjoint runs, balanced merge order is observationally irrelevant.
-def merge_many_disjoint(+runs: List<&2, List<&2, MemTable.Entry>>) -> Maybe<&2, List<&2, MemTable.Entry>>:
-  merge_disjoint_dec(level_disjoint(runs), runs)
 
 # --- Pure bounded output partitioning ---
 

@@ -200,10 +200,6 @@ def read_at.pack.finish(offset: U32, result: StorageBytes.Bytes) -> StorageBytes
     case StorageBytes.Bytes{_, buf}:
       StorageBytes.Bytes{offset, buf}
 
-def read_at.nat.clone.step(pair: Nat & Nat) -> Nat & Nat:
-  match pair:
-    case (left, right): (Nat.add(1n, left), Nat.add(1n, right))
-
 def read_at.nat.clone(+value: Nat) -> Nat & Nat:
   (Nat.mul(1n, value), Nat.mul(1n, value))
 

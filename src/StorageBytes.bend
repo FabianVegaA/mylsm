@@ -129,12 +129,6 @@ def from_string.size.begin(+text: String) -> Maybe<&2, U32>:
       from_string.size(text, 0,
         U32.is_le(0, (MAX_RECORD_BYTES() - utf8.width(scalar) : U32)))
 
-# Reject text fields outside the configured storage record cap.
-def from_string.checked(+len: U32, buf: Array<U32>) -> Result<&1, &1, U32 & String, Bytes.Bytes>:
-  Bool.pick(Result<&1, &1, U32 & String, Bytes.Bytes>,
-    record_bytes_allowed(len),
-    Done{Bytes.Bytes{len, buf}}, Fail{(2, "record too large")})
-
 def utf8.put.result(pair: Bytes.Cursor & Bool) -> Bytes.Cursor:
   match pair:
     case (cursor, _):

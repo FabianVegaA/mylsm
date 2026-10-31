@@ -427,22 +427,6 @@ def append.unknown(
     case (code, message):
       (Handle{path, lock, table, Poisoned{}, VisibleStats.Stats{0n, 0n}}, Fail{CommitUnknown{code, message}})
 
-# Applies a successfully synced frame to the current table.
-def append.applied.result(
-  +path: String,
-  lock: DbLock.Lock,
-  table: ByteMemTable.Table,
-  result: Result<&1, &1, Error, ByteMemTable.Table>
-) -> Handle & Result<&1, &1, Error, Unit>:
-  match result:
-    case Fail{Corruption{message}}:
-      (Handle{path, lock, table, Poisoned{}, VisibleStats.Stats{0n, 0n}},
-        Fail{CommitUnknown{0, message}})
-    case Fail{error}:
-      (Handle{path, lock, table, Poisoned{}, VisibleStats.Stats{0n, 0n}}, Fail{CommitUnknown{0, "invalid durable frame"}})
-    case Done{next_table}:
-      (Handle{path, lock, next_table, Open{}, VisibleStats.Stats{0n, 0n}}, Done{Unit{}})
-
 # Appends the encoded frame and preserves a copy for post-sync replay.
 def append.applied.decoded(
   +path: String,
@@ -579,14 +563,6 @@ def write.counted(
         case ByteWal.Batch{mutations}:
           write.count.measured(path, lock, table,
             BatchPolicy.byte_batch.measure(mutations))
-
-def write.retained(
-  base_stats: VisibleStats.Stats,
-  pair: Handle & Result<&1, &1, Error, Unit>
-) -> Handle & Result<&1, &1, Error, Unit>:
-  match pair:
-    case (Handle{path, lock, table, state, _}, result):
-      (Handle{path, lock, table, state, base_stats}, result)
 
 # Keeps the original state when SST or WAL checkpoint publication fails.
 # Counts the visible entries and payload bytes in the newly published SST.
@@ -2392,15 +2368,6 @@ def snapshot.manifest.result.paths(
               ByteSstIo.read(ByteManifest.sst.generation.path(read_path, file_id))
             snapshot.limited.saved.result(
               Handle{retained_path, lock, table, state, base_stats}, base)
-
-def snapshot.manifest.result(
-  handle: Handle,
-  result: Result<&1, &1, ByteManifestIo.Error, ByteManifest.ManifestValue>
-) -> IO(Handle & Result<&1, &1, Error, List<&1, ByteMemTable.Entry>>):
-  match handle:
-    case Handle{path, lock, table, state, base_stats}:
-      snapshot.manifest.result.paths(path.clone.pair(path), lock, table,
-        state, base_stats, result)
 
 def snapshot.limited.admitted.paths(
   paths: String & String & String,

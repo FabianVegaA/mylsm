@@ -538,10 +538,6 @@ def metrics(store: Store) -> Metrics:
           metrics.reservations(allocator, reservations, snapshots, cursors,
             ids, roots)
 
-def root.count(store: Store) -> Nat:
-  match store:
-    case Store{_, _, roots}: roots.count(roots)
-
 def has.counts(
   store: Store,
   expected_snapshots: Nat,
@@ -557,15 +553,6 @@ def has.counts(
               Nat.is_eq(count, expected_snapshots) &&
                 Nat.is_eq(retained, expected_bytes) &&
                 Nat.is_eq(roots.count(roots), expected_roots)
-
-def empty.snapshot.count() -> Nat:
-  snapshot.count(empty())
-
-def empty.retained.bytes() -> Nat:
-  retained.bytes(empty())
-
-def empty.root.count() -> Nat:
-  root.count(empty())
 
 def empty.valid() -> Bool:
   has.counts(empty(), 0n, 0n, 0n)

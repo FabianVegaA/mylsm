@@ -327,18 +327,6 @@ def file(
 ) -> Result<&1, &1, Error, Bytes.Bytes>:
   file.measured(Bytes.length(frame), level, total)
 
-# Converts a byte WAL frame result into a bounded SST file.
-def encode.frame.result(
-  result: Result<&1, &1, Wal.Error, Bytes.Bytes>,
-  +level: U32,
-  +total: U32
-) -> Result<&1, &1, Error, Bytes.Bytes>:
-  match result:
-    case Fail{_}:
-      Fail{TooLarge{}}
-    case Done{frame}:
-      file(frame, level, total)
-
 # Measures one put record without allocating its serialized bytes.
 def record.size.put(+key_len: U32, value: Bytes.Bytes & U32) -> Nat:
   match value:
@@ -491,13 +479,6 @@ def page.build.limit(
   Result<&1, &1, Error, PagePlan>:
   page.build.measured(ByteMemTable.count.keep(entries), max_bytes)
 
-# Splits strict table entries into ordered pages under the maximum block size.
-def page.build(
-  entries: List<&1, ByteMemTable.Entry>
-) ->
-  Result<&1, &1, Error, PagePlan>:
-  page.build.limit(entries, U32.to_nat(StorageBytes.MAX_BLOCK_BYTES()))
-
 def pages.count(result: Result<&1, &1, Error, PagePlan>) -> Nat:
   match result:
     case Fail{_}: 0n
@@ -513,66 +494,6 @@ def block.payload.decision(decision: ByteBlockBuilder.Decision) -> Bool:
 def block.payload.allowed(record_bytes: Nat) -> Bool:
   block.payload.decision(ByteBlockBuilder.decide(0n,
     Nat.add(40n, record_bytes), U32.to_nat(StorageBytes.MAX_BLOCK_BYTES())))
-
-# Encodes only after the raw record sizes fit the resident block limit.
-def encode.file.ready(
-  entries: List<&1, ByteMemTable.Entry>,
-  +total: Nat,
-  +level: U32,
-  valid_level: Bool,
-  ordered: Bool,
-  allowed: Bool
-) -> Result<&1, &1, Error, Bytes.Bytes>:
-  match valid_level ordered allowed:
-    case False{} _ _:
-      Fail{InvalidLevel{}}
-    case True{} False{} _:
-      Fail{InvalidOrder{}}
-    case True{} True{} False{}:
-      Fail{TooLarge{}}
-    case True{} True{} True{}:
-      encode.frame.result(ByteWal.encode(ByteWal.Batch{mutations(entries)}),
-        level, U32.from_nat(total))
-
-# Measures one copy before passing another copy to the WAL encoder.
-def encode.file.measured(
-  pair: List<&1, ByteMemTable.Entry> & List<&1, ByteMemTable.Entry>,
-  +total: Nat,
-  +level: U32,
-  ordered: Bool
-) -> Result<&1, &1, Error, Bytes.Bytes>:
-  match pair:
-    case (measured, encoded):
-      encode.file.ready(encoded, total, level, U32.is_le(level, 255), ordered,
-        block.payload.allowed(records.size(measured, total)))
-
-# Validates distinct list copies while encoding the remaining mutation list.
-def encode.file.validated(
-  validation: List<&1, ByteMemTable.Entry> & List<&1, ByteMemTable.Entry>,
-  encoded: List<&1, ByteMemTable.Entry>,
-  +level: U32
-) -> Result<&1, &1, Error, Bytes.Bytes>:
-  match validation:
-    case (ordered, counted):
-      encode.file.measured(entries.clone(encoded),
-        List.length(&1, ByteMemTable.Entry, counted), level,
-        ByteMemTable.ordered.strict(ordered))
-
-# Splits validation from encoding so both passes retain affine ownership.
-def encode.file.entries(
-  entries: List<&1, ByteMemTable.Entry> & List<&1, ByteMemTable.Entry>,
-  +level: U32
-) -> Result<&1, &1, Error, Bytes.Bytes>:
-  match entries:
-    case (validated, encoded):
-      encode.file.validated(entries.clone(validated), encoded, level)
-
-# Encodes one strictly ordered table into the legacy one-block envelope.
-def encode_file.single(
-  entries: List<&1, ByteMemTable.Entry>,
-  +level: U32
-) -> Result<&1, &1, Error, Bytes.Bytes>:
-  encode.file.entries(entries.clone(entries), level)
 
 def file.block.raw.parts(
   headers: Bytes.Bytes & Bytes.Bytes,

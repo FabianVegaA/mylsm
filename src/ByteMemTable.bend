@@ -144,10 +144,6 @@ def entry.key.copy(entry: Entry) -> Entry & Bytes.Bytes:
     case Entry{key, value}:
       entry.key.copy.pair(bytes.clone(key), value)
 
-def entry.key.copy.matches(pair: Entry & Bytes.Bytes) -> Bool:
-  match pair:
-    case (Entry{key, _}, probe): Keys.Bytes.eq(key, probe)
-
 def entry.live.keep(entry: Entry) -> Entry & Bool:
   match entry:
     case Entry{key, value}:
@@ -477,12 +473,6 @@ def retained_bytes(table: Table) -> Nat:
   match table:
     case Table{entries}:
       retained.go(entries, 0n)
-
-def retained.value(value: Maybe<&1, Bytes.Bytes>) -> Maybe<&1, Bytes.Bytes> & Nat:
-  match value:
-    case None{}: (None{}, 0n)
-    case Some{Bytes.Bytes{+len, buffer}}:
-      (Some{Bytes.Bytes{len, buffer}}, U32.to_nat(len))
 
 def retained_bytes.keep.go(
   entries: List<&1, Entry>,

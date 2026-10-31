@@ -977,12 +977,6 @@ def Bytes.snapshot.scan_prefix(
           OwnerByteClient.snapshot.cursor.open.prefix(session, snapshot_id, prefix)
         return Bytes.snapshot.cursor.remote(snapshot_id, pair)
 
-def Bytes.snapshot.get.result(
-  pair: ByteMemTable.Table & Maybe<&1, PackedBytes.Bytes>
-) -> Bytes.Snapshot & Maybe<&1, PackedBytes.Bytes>:
-  match pair:
-    case (ByteMemTable.Table{entries}, value): (ByteSnapshot{entries}, value)
-
 def Bytes.snapshot.get.local.result(
   pair: ByteMemTable.Table & Maybe<&1, PackedBytes.Bytes>
 ) -> Bytes.Snapshot & Result<&1, &1, Bytes.Error, Maybe<&1, PackedBytes.Bytes>>:
@@ -1102,22 +1096,6 @@ def Bytes.backup_to.result(
   match result:
     case Fail{error}: (handle, Fail{Bytes.backup_to.error(error)})
     case Done{Unit{}}: (handle, Done{Unit{}})
-
-def Bytes.backup_to.snapshot(
-  path: String,
-  pair: Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Snapshot>
-) -> IO(Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>):
-  match pair:
-    case (handle, Fail{error}):
-      IO.pure(Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>,
-        (handle, Fail{error}))
-    case (handle, Done{ByteSnapshot{entries}}):
-      do IO<Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>>:
-        result : Result<&1, &1, BackupIo.Error, Unit> <- BackupIo.export(path, entries)
-        return Bytes.backup_to.result(handle, result)
-    case (handle, Done{RemoteByteSnapshot{_, _}}):
-      IO.pure(Bytes.Handle & Result<&1, &1, Bytes.Error, Unit>,
-        (handle, Fail{UnsupportedOperation{}}))
 
 def Bytes.backup_to.opened(
   path: String,
@@ -1402,12 +1380,6 @@ def Bytes.snapshot.live_scan_range(
   upper: Maybe<&1, PackedBytes.Bytes>
 ) -> Bytes.Handle & Bytes.Cursor:
   Bytes.snapshot.live_scan(handle, ScanBounds{lower, upper, None{}})
-
-def Bytes.snapshot.live_scan_prefix(
-  handle: Bytes.Handle,
-  prefix: PackedBytes.Bytes
-) -> Bytes.Handle & Bytes.Cursor:
-  Bytes.snapshot.live_scan(handle, ScanBounds{None{}, None{}, Some{prefix}})
 
 def Bytes.scan_open.result(
   pair: RawByteDb.Handle & Result<&1, &1, RawByteDb.Error, VisibleByteCursor.Cursor>
@@ -2343,17 +2315,6 @@ def Utf8.delete_mutation_result(
     case Done{key_bytes} None{}:
       Done{BytesDelete{key_bytes}}
 
-def Utf8.mutation.result(
-  mutation: Utf8.Mutation,
-  key: Result<&1, &1, Utf8.Error, PackedBytes.Bytes>,
-  value: Maybe<&1, Result<&1, &1, Utf8.Error, PackedBytes.Bytes>>
-) -> Result<&1, &1, Utf8.Error, Bytes.Mutation>:
-  match mutation:
-    case Utf8SetValue{_, _}:
-      Utf8.set_mutation_result(key, value)
-    case Utf8DeleteKey{_}:
-      Utf8.delete_mutation_result(key, value)
-
 def Utf8.set_mutations_result(
   head: Result<&1, &1, Utf8.Error, Bytes.Mutation>,
   tail: Result<&1, &1, Utf8.Error, List<&1, Bytes.Mutation>>
@@ -2620,11 +2581,6 @@ def Utf8.scan_seek(
       IO.pure(Utf8.Cursor & Result<&1, &1, Utf8.Error, Unit>,
         (Utf8Cursor{inner, state}, Done{Unit{}}))
 
-def Utf8.scan.opened(pair: Bytes.Handle & Bytes.Cursor) -> Utf8.Handle & Utf8.Cursor:
-  match pair:
-    case (handle, cursor):
-      (Utf8Handle{handle}, Utf8Cursor{cursor, Utf8CursorActive{}})
-
 def Utf8.scan.range.opened(
   pair: Bytes.Handle & Result<&1, &1, Bytes.Error, Bytes.Cursor>
 ) -> Utf8.Handle & Result<&1, &1, Utf8.Error, Utf8.Cursor>:
@@ -2720,11 +2676,6 @@ def Utf8.scan.byte.step(step: Bytes.StreamStep) -> Utf8.ScanStep:
       Utf8ScanEnd{Utf8Cursor{cursor, Utf8CursorEnded{}}}
     case StreamFailure{error, cursor}:
       Utf8.scan.item.failed(cursor, Utf8Failure{error}, Utf8CursorPolicy.ReaderFailure{})
-
-def Utf8.scan_next.result(pair: Utf8.Cursor & Bytes.StreamStep) -> Utf8.ScanStep:
-  match pair:
-    case (Utf8Cursor{_, Utf8CursorActive{}}, step): Utf8.scan.byte.step(step)
-    case (cursor, _): Utf8ScanEnd{cursor}
 
 def Utf8.scan_next.failed.ready(
   inner: Bytes.Cursor,

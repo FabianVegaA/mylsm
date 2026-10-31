@@ -893,11 +893,6 @@ def parse.hash.wrap(pair: Bytes.Cursor & Maybe<&2, U32>) -> HashRead:
     case (cursor, value):
       HashInput{cursor, value}
 
-def parse.hash.result(
-  pair: Bytes.Cursor & Result<&1, &1, Error, Bytes.Bytes>
-) -> Bytes.Cursor & Result<&1, &1, Error, Bytes.Bytes>:
-  pair
-
 # Read exactly eight words into a digest without consuming a byte after it.
 def parse.hash.words.go(
   remaining: Nat,

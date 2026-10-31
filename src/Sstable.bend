@@ -238,22 +238,6 @@ def probe_count_par(+probes: List<&2, String>, +tab: Table) -> Nat:
   left right = probe_count_seq(List.take(&2, String, probes, half), tab) probe_count_seq(List.drop(&2, String, probes, half), tab)
   Nat.add(left, right)
 
-# Bang gate: GPU pays only with enough probes to fill lanes.
-def probe_count_bang_gate(+num: Nat) -> Bool:
-  Nat.is_le(16384n, num)
-
-# Pick CPU-pool or GPU execution for the same fork tree.
-def probe_count_pick(gate: Bool, +probes: List<&2, String>, +tab: Table) -> Nat:
-  match gate:
-    case False{}:
-      probe_count_par(probes, tab)
-    case True{}:
-      probe_count_par!(probes, tab)
-
-# Size-gated entry point for parallel probe counting.
-def probe_count_auto(+probes: List<&2, String>, +tab: Table) -> Nat:
-  probe_count_pick(probe_count_bang_gate(List.length(&2, String, probes)), probes, tab)
-
 # --- Canonicalization and construction ---
 def bloom_of(entries: List<&2, MemTable.Entry>, +blm: Bloom) -> Bloom:
   match entries:
@@ -302,23 +286,6 @@ def bloom_of_chunks(+entries: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
   a b = bloom_of_chunk(List.take(&2, MemTable.Entry, entries, q), nb) bloom_of_chunk(chunk_third(entries, q, q), nb)
   c d = bloom_of_chunk(chunk_third(entries, Nat.mul(q, 2n), q), nb) bloom_of_chunk(List.drop(&2, MemTable.Entry, entries, Nat.mul(q, 3n)), nb)
   bloom_union(bloom_union(a, b), bloom_union(c, d))
-
-# Bang gate: GPU pays only with enough entries to feed lanes.
-def bloom_bang_gate(+num: Nat) -> Bool:
-  Nat.is_le(8192n, num)
-
-# Pick CPU-pool or GPU execution for the same chunk tree.
-def bloom_of_pick(gate: Bool, +entries: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
-  match gate:
-    case False{}:
-      bloom_of_chunks(entries, nb)
-    case True{}:
-      bloom_of_chunks!(entries, nb)
-
-# Size-gated `!` entry point: the bang fires only at >= 8192 entries, where
-# every flush in the durable write path lands (frozen merge of 4096 + 4096).
-def bloom_of_bang(+entries: List<&2, MemTable.Entry>, +nb: Nat) -> Bloom:
-  bloom_of_pick(bloom_bang_gate(List.length(&2, MemTable.Entry, entries)), entries, nb)
 
 # --- Hybrid bloom (spike): parallel index collection, sequential assembly ---
 # Phase 1 emits a flat index list (two per key); joins concatenate, so no
@@ -493,26 +460,6 @@ def table_bits_build(
 # Check key ranges for disjoint for the SSTable indexes, filters, and lookup.
 def ranges_disjoint(+ta: Table, +tb: Table) -> Bool:
   SortedRun.range_disjoint_bounds(table_smallest(ta), table_largest(ta), table_smallest(tb), table_largest(tb))
-
-# Return the size of of in the SSTable indexes, filters, and lookup.
-def size_of(bloom: Bloom) -> Nat:
-  match bloom:
-    case Blm{bits, size}:
-      size
-
-# Bloom insertions only set tree bits and preserve the exact logical size.
-def bloom_size_stable(
-  entries: List<&2, MemTable.Entry>,
-  bits: BitTree.BitTree,
-  +size: Nat
-) -> {size_of(bloom_of(entries, Blm{bits, size})) == size : Nat}:
-  match entries:
-    case Nil{}:
-      {==}
-    case Con{e, t}:
-      match e:
-        case MemTable.Entry{+key, val}:
-          bloom_size_stable(t, bit_set(bhash_n(key, 17, size), bit_set(bhash_n(key, 257, size), bits)), size)
 
 # Block-scoped lookup. Checker constraints (proven by scratch experiments):
 # multi-scrutinee matches follow declaration order, and only Nat answers flow

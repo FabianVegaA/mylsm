@@ -86,19 +86,6 @@ def recover.prefix.cloned(
       recover.prefix.next(file, size, offset, table,
         prefix, frame.length(inspected))
 
-def recover.length.next(
-  pair: File & Result<&1, &1, U32 & String, Bytes.Bytes>,
-  +size: Nat,
-  +offset: Nat,
-  table: ByteMemTable.Table
-) -> RecoveryState:
-  match pair:
-    case (file, Fail{failure}):
-      Failed{file, failure}
-    case (file, Done{prefix}):
-      recover.prefix.cloned(file, Wal.bytes.clone.split(prefix),
-        size, offset, table)
-
 def recover.counted(
   file: File,
   +size: Nat,
@@ -129,38 +116,6 @@ def recover.count.cloned(
     case (count_bytes, inspected):
       recover.counted(file, size, offset, table, prefix,
         count_bytes, frame_length, frame.count(inspected))
-
-def recover.count.next(
-  pair: File & Result<&1, &1, U32 & String, Bytes.Bytes>,
-  +size: Nat,
-  +offset: Nat,
-  table: ByteMemTable.Table,
-  prefix: Bytes.Bytes,
-  +frame_length: U32
-) -> RecoveryState:
-  match pair:
-    case (file, Fail{failure}):
-      Failed{file, failure}
-    case (file, Done{count_bytes}):
-      recover.count.cloned(file, Wal.bytes.clone.split(count_bytes),
-        size, offset, table, prefix, frame_length)
-
-def recover.body.next(
-  pair: File & Result<&1, &1, U32 & String, Bytes.Bytes>,
-  +size: Nat,
-  +offset: Nat,
-  table: ByteMemTable.Table,
-  prefix: Bytes.Bytes,
-  count_bytes: Bytes.Bytes,
-  +frame_length: U32
-) -> RecoveryState:
-  match pair:
-    case (file, Fail{failure}):
-      Failed{file, failure}
-    case (file, Done{tail}):
-      Decoded{file, size,
-        Nat.add(offset, Nat.add(4n, U32.to_nat(frame_length))), table,
-        ByteWal.decode(Bytes.concat([prefix, count_bytes, tail]))}
 
 def apply.batch.loop(
   fuel: Nat,

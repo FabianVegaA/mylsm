@@ -30,19 +30,6 @@ def gen_valid_read(parsed: Maybe<&2, Nat>) -> Bool:
 def gen_valid(+middle: String) -> Bool:
   gen_valid_read(Nat.read(middle))
 
-# Handle ov ok in the pure recovery decisions.
-def ov_ok(+big: Bool, +name: String, +ln: Nat) -> Bool:
-  match big:
-    case True{}:
-      shape_mid(String.starts_with(name, "l"), String.ends_with(name, ".tbl"), gen_valid(String.take(String.drop(name, 3n), Nat.sub(ln, 7n))))
-    case False{}:
-      False{}
-
-# Handle name shape in the pure recovery decisions.
-def name_shape(+name: String) -> Bool:
-  +ln = String.length(name)
-  ov_ok(Nat.is_le(7n, ln), name, ln)
-
 # Return the level name ok for the pure recovery decisions.
 def level_name_ok(+big: Bool, +name: String, +ln: Nat, +prefix: String, +prefix_len: Nat) -> Bool:
   match big:
@@ -74,14 +61,6 @@ def gen_value(+middle: String) -> Nat:
 def name_gen(+name: String) -> Nat:
   +ln = String.length(name)
   gen_value(String.take(String.drop(name, 3n), Nat.sub(ln, 7n)))
-
-# Handle names ok in the pure recovery decisions.
-def names_ok(xs: List<&2, String>) -> Bool:
-  match xs:
-    case Nil{}:
-      True{}
-    case Con{h, t}:
-      mid_and(name_shape(h), names_ok(t))
 
 # Return the level names ok for the pure recovery decisions.
 def level_names_ok(+level: Nat, xs: List<&2, String>) -> Bool:

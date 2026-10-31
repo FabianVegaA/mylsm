@@ -60,14 +60,6 @@ type ResolveState is Type:
     delta_tail: List<&1, ByteMemTable.Entry>, bounds: RangeCursor.Bounds,
     order: Cmp}
 
-def bytes.second(copies: Bytes.Bytes & Bytes.Bytes) -> Bytes.Bytes:
-  match copies:
-    case (_, second): second
-
-def bytes.first(copies: Bytes.Bytes & Bytes.Bytes) -> Bytes.Bytes:
-  match copies:
-    case (first, _): first
-
 # Opens the merge state over an already bounded SST cursor and captured delta.
 def open(
   base: Maybe<&1, SstCursor.Cursor>,

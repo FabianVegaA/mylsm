@@ -22,6 +22,10 @@ Modules added since revision `b7ae44d`: `CleanupPolicy`,
 (`bench/smoke/owner_gate.sh`, 20 smokes plus the transport oracle unit test)
 also passes on `d64feb0`. This does not change the open items below.
 
+The unused owner auto-spawn path (`OwnerSpawn`, `SpawnPolicy`, `src/effs/owner_spawn.*`
+and the `owner_spawn*` fixtures) was removed afterwards. The `owner_spawn` rows in
+the tables below describe code that no longer exists.
+
 ## Bend 2.0.39 compatibility rerun
 
 Darwin arm64, Bend 2.0.39, and `bend-mathlib@0.7.5.0` pinned to
