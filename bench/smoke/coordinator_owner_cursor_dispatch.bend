@@ -5,6 +5,8 @@ import ../../src/Console.bend as Console
 import ../../src/coordinator/CursorCodec.bend as CursorCodec
 import ../../src/coordinator/CursorOpenCodec.bend as CursorOpenCodec
 import ../../src/coordinator/Owner.bend as Owner
+import ../../src/coordinator/owner/Reply.bend as OwnerReply
+import ../../src/coordinator/owner/Dispatch.bend as OwnerDispatch
 import ../../src/coordinator/OwnerCursorStore.bend as CursorStore
 import ../../src/coordinator/OwnerSnapshotStore.bend as SnapshotStore
 import ../../src/coordinator/Protocol.bend as Protocol
@@ -44,11 +46,11 @@ def fail.close(handle: ByteDb.Handle, message: String) -> IO(Unit):
     IO.die(Unit, 1, message)
 
 # Closes the parent snapshot after its cursor reaches End.
-def snapshot.close.result(result: Owner.DispatchResult) -> IO(Unit):
+def snapshot.close.result(result: OwnerReply.DispatchResult) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, _, _, Protocol.Response{_, _, _,
+    case OwnerReply.DispatchResult{handle, _, _, Protocol.Response{_, _, _,
         Protocol.Success{}, _}}: close.database(handle)
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       fail.close(handle, "owner rejected snapshot close after cursor End")
 
 # Releases one childless snapshot through stateful owner dispatch.
@@ -59,21 +61,21 @@ def snapshot.close(
   snapshot_id: U32
 ) -> IO(Unit):
   do IO<Unit>:
-    result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
+    result : OwnerReply.DispatchResult <- OwnerDispatch.dispatch.request.state(handle,
       snapshots, cursors, Protocol.Request{1, 1, 6, 11,
         Protocol.snapshot.id.bytes(snapshot_id)}, 1)
     snapshot.close.result(result)
 
 # Closes an owner cursor without reading it to End.
 def cursor.close.response(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   snapshot_id: U32
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, _}}:
       snapshot.close(handle, snapshots, cursors, snapshot_id)
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       fail.close(handle, "owner rejected explicit cursor close")
 
 # Sends operation 14 and preserves the snapshot token for its final close.
@@ -87,7 +89,7 @@ def cursor.close.request.ids(
   match ids:
     case (_, (snapshot_id, _)):
       do IO<Unit>:
-        result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
+        result : OwnerReply.DispatchResult <- OwnerDispatch.dispatch.request.state(handle,
           snapshots, cursors, Protocol.Request{1, 1, 7, 14,
             Protocol.snapshot.id.bytes(cursor_id)}, 1)
         cursor.close.response(result, snapshot_id)
@@ -119,17 +121,17 @@ def cursor.close.read.checked(
 
 # Checks the first item returned by the prefix cursor.
 def cursor.close.read.result(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   snapshot_id: U32,
   cursor_id: U32
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, payload}}:
       cursor.close.read.checked(handle, snapshots, cursors, snapshot_id,
         cursor_id, bytes.equal(Bytes.eq(payload, CursorCodec.encode(
           CursorCodec.CursorItem{bytes("00fd"), bytes("aa")}))))
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       fail.close(handle, "prefix cursor read failed")
 
 # Reads one prefix item while retaining the cursor token for early close.
@@ -141,7 +143,7 @@ def cursor.close.read(
   +cursor_id: U32
 ) -> IO(Unit):
   do IO<Unit>:
-    result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
+    result : OwnerReply.DispatchResult <- OwnerDispatch.dispatch.request.state(handle,
       snapshots, cursors, Protocol.Request{1, 1, 8, 13,
         Protocol.snapshot.id.bytes(cursor_id)}, 1)
     cursor.close.read.result(result, snapshot_id, cursor_id)
@@ -161,15 +163,15 @@ def cursor.close.token(
 
 # Continues after a second block-backed cursor has been opened.
 def cursor.close.opened(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   snapshot_id: U32
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, payload}}:
       cursor.close.token(handle, snapshots, cursors, snapshot_id,
         Protocol.snapshot.id.read(payload))
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       fail.close(handle, "owner rejected second cursor open")
 
 # Opens a prefix cursor so the smoke covers explicit early closure.
@@ -182,7 +184,7 @@ def cursor.close.open.ids(
   match ids:
     case (wire_id, (snapshot_id, _)):
       do IO<Unit>:
-        result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
+        result : OwnerReply.DispatchResult <- OwnerDispatch.dispatch.request.state(handle,
           snapshots, cursors, Protocol.Request{1, 1, 6, 12,
             CursorOpenCodec.encode.prefix(wire_id, bytes("00"))}, 1)
         cursor.close.opened(result, snapshot_id)
@@ -210,21 +212,21 @@ def cursor.end.checked(
     case False{}: fail.close(handle, "owner cursor End frame differed")
 
 def cursor.next.end.result(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   snapshot_id: U32
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, payload}}:
       cursor.end.checked(handle, snapshots, cursors, snapshot_id,
         bytes.equal(Bytes.eq(payload,
           CursorCodec.encode(CursorCodec.CursorEnd{}))))
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       fail.close(handle, "owner cursor next failed before End")
 
 # Requests the second cursor step and validates that End is distinct from Item.
 def cursor.next.end(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   snapshot_id: U32
 ) -> IO(Unit):
   cursor.next.end.result(result, snapshot_id)
@@ -240,7 +242,7 @@ def cursor.next.second(
   match cursor_ids:
     case (wire_id, (retained_id, _)):
       do IO<Unit>:
-        result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
+        result : OwnerReply.DispatchResult <- OwnerDispatch.dispatch.request.state(handle,
           snapshots, cursors, Protocol.Request{1, 1, 5, 13,
             Protocol.snapshot.id.bytes(wire_id)}, 1)
         cursor.next.end(result, snapshot_id)
@@ -261,22 +263,22 @@ def cursor.item.checked(
     case False{}: fail.close(handle, "owner cursor item bytes differed")
 
 def cursor.next.item.result(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   snapshot_id: U32,
   cursor_id: U32
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, payload}}:
       cursor.item.checked(handle, snapshots, cursors, snapshot_id, cursor_id,
         bytes.equal(Bytes.eq(payload, CursorCodec.encode(
           CursorCodec.CursorItem{bytes("00ff"), bytes("80ff00")}))))
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       fail.close(handle, "owner cursor item read failed")
 
 # Confirms the cursor codec preserves arbitrary key and value bytes.
 def cursor.next.item(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   snapshot_id: U32,
   cursor_id: U32
 ) -> IO(Unit):
@@ -293,7 +295,7 @@ def cursor.next.first(
   match ids:
     case (wire_id, (cursor_id, _)):
       do IO<Unit>:
-        result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
+        result : OwnerReply.DispatchResult <- OwnerDispatch.dispatch.request.state(handle,
           snapshots, cursors, Protocol.Request{1, 1, 4, 13,
             Protocol.snapshot.id.bytes(wire_id)}, 1)
         cursor.next.item(result, snapshot_id, cursor_id)
@@ -314,15 +316,15 @@ def cursor.open.token(
 
 # Routes cursor-open success and parses its fixed-width identifier.
 def cursor.open.result(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   snapshot_id: U32
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, payload}}:
       cursor.open.token(handle, snapshots, cursors, snapshot_id,
         Protocol.snapshot.id.read(payload))
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       fail.close(handle, "owner snapshot cursor open failed")
 
 # Opens a lower-bounded range cursor over the retained owner snapshot.
@@ -335,7 +337,7 @@ def cursor.open.ids(
   match ids:
     case (wire_id, (snapshot_id, _)):
       do IO<Unit>:
-        result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
+        result : OwnerReply.DispatchResult <- OwnerDispatch.dispatch.request.state(handle,
           snapshots, cursors, Protocol.Request{1, 1, 3, 12,
             CursorOpenCodec.encode.range(wire_id,
               Some{bytes("00fe")}, Some{bytes("01")})}, 1)
@@ -354,19 +356,19 @@ def snapshot.open.token(
     case None{}: fail.close(handle, "owner snapshot token was malformed")
 
 # Creates an owner snapshot and then requests its remote block-backed cursor.
-def snapshot.open.result(result: Owner.DispatchResult) -> IO(Unit):
+def snapshot.open.result(result: OwnerReply.DispatchResult) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, payload}}:
       snapshot.open.token(handle, snapshots, cursors,
         Protocol.snapshot.id.read(payload))
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       fail.close(handle, "owner snapshot open failed")
 
 # Registers one immutable owner snapshot before opening its remote cursor.
 def snapshot.open(handle: ByteDb.Handle) -> IO(Unit):
   do IO<Unit>:
-    result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
+    result : OwnerReply.DispatchResult <- OwnerDispatch.dispatch.request.state(handle,
       SnapshotStore.empty(), CursorStore.empty(),
       Protocol.Request{1, 1, 2, 9, Bytes.new(0)}, 1)
     snapshot.open.result(result)

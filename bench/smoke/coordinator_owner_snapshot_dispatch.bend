@@ -2,6 +2,8 @@ import Base
 import ../../src/ByteDurableDb.bend as ByteDb
 import ../../src/Console.bend as Console
 import ../../src/coordinator/Owner.bend as Owner
+import ../../src/coordinator/owner/Reply.bend as OwnerReply
+import ../../src/coordinator/owner/Dispatch.bend as OwnerDispatch
 import ../../src/coordinator/OwnerCursorStore.bend as CursorStore
 import ../../src/coordinator/OwnerSnapshotStore.bend as SnapshotStore
 import ../../src/coordinator/Protocol.bend as Protocol
@@ -38,11 +40,11 @@ def closed(handle: ByteDb.Handle) -> IO(Unit):
     result : Result<&1, &1, ByteDb.Error, Unit> <- ByteDb.close(handle)
     finished(result)
 
-def close.response(result: Owner.DispatchResult) -> IO(Unit):
+def close.response(result: OwnerReply.DispatchResult) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, _, _, Protocol.Response{_, _, _,
+    case OwnerReply.DispatchResult{handle, _, _, Protocol.Response{_, _, _,
         Protocol.Success{}, _}}: closed(handle)
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       fail.close(handle, "owner rejected snapshot close")
 
 def close.snapshot(
@@ -51,7 +53,7 @@ def close.snapshot(
   snapshot_id: U32
 ) -> IO(Unit):
   do IO<Unit>:
-    result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
+    result : OwnerReply.DispatchResult <- OwnerDispatch.dispatch.request.state(handle,
       snapshots, CursorStore.empty(), Protocol.Request{1, 1, 4, 11,
         Protocol.snapshot.id.bytes(snapshot_id)}, 1)
     close.response(result)
@@ -87,15 +89,15 @@ def generation.exists.path(
         generation.exists.result(retained_handle, snapshots, snapshot_id, exists)
 
 def close.first.response(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   snapshot_id: U32
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, _,
+    case OwnerReply.DispatchResult{handle, snapshots, _,
         Protocol.Response{_, _, _, Protocol.Success{}, _}}:
       generation.exists.path(snapshots, snapshot_id,
         ByteDb.handle.path.copy(handle))
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       fail.close(handle, "owner rejected first snapshot close")
 
 def close.first(
@@ -105,7 +107,7 @@ def close.first(
   final_id: U32
 ) -> IO(Unit):
   do IO<Unit>:
-    result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
+    result : OwnerReply.DispatchResult <- OwnerDispatch.dispatch.request.state(handle,
       snapshots, CursorStore.empty(), Protocol.Request{1, 1, 4, 11,
         Protocol.snapshot.id.bytes(close_id)}, 1)
     close.first.response(result, final_id)
@@ -124,15 +126,15 @@ def get.value.checked(
     case False{}: fail.close(handle, "owner snapshot value changed")
 
 def get.response(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   snapshot_ids: U32 & U32
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, _,
+    case OwnerReply.DispatchResult{handle, snapshots, _,
         Protocol.Response{_, _, _, Protocol.Success{}, payload}}:
       get.value.checked(handle, snapshots,
         bytes.equal(Bytes.eq(payload, bytes("80ff00"))), snapshot_ids)
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       fail.close(handle, "owner snapshot get failed")
 
 def get.snapshot.copies(
@@ -143,7 +145,7 @@ def get.snapshot.copies(
   match ids:
     case (wire_id, (snapshot_id, final_id)):
       do IO<Unit>:
-        result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
+        result : OwnerReply.DispatchResult <- OwnerDispatch.dispatch.request.state(handle,
           snapshots, CursorStore.empty(), Protocol.Request{1, 1, 3, 10,
             Bytes.concat([Protocol.snapshot.id.bytes(wire_id), bytes("00ff")])},
           1)
@@ -170,15 +172,15 @@ def get.snapshot(
     Protocol.u32.duplicate.triple(snapshot_id))
 
 def compact.response(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   snapshot_id: U32,
   final_id: U32
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, _,
+    case OwnerReply.DispatchResult{handle, snapshots, _,
         Protocol.Response{_, _, _, Protocol.Success{}, _}}:
       get.snapshot(handle, snapshots, snapshot_id, final_id)
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       fail.close(handle, "owner snapshot compaction failed")
 
 def compact.snapshot(
@@ -188,7 +190,7 @@ def compact.snapshot(
   final_id: U32
 ) -> IO(Unit):
   do IO<Unit>:
-    result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
+    result : OwnerReply.DispatchResult <- OwnerDispatch.dispatch.request.state(handle,
       snapshots, CursorStore.empty(), Protocol.Request{1, 1, 10, 5,
         Bytes.new(0)}, 1)
     compact.response(result, snapshot_id, final_id)
@@ -205,15 +207,15 @@ def open.second.result(
     case None{}: fail.close(handle, "second owner snapshot token was malformed")
 
 def open.second.response(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   snapshot_id: U32
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, _,
+    case OwnerReply.DispatchResult{handle, snapshots, _,
         Protocol.Response{_, _, _, Protocol.Success{}, payload}}:
       open.second.result(handle, snapshots, snapshot_id,
         Protocol.snapshot.id.read(payload))
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       fail.close(handle, "second owner snapshot open failed")
 
 def open.second(
@@ -222,7 +224,7 @@ def open.second(
   snapshot_id: U32
 ) -> IO(Unit):
   do IO<Unit>:
-    result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
+    result : OwnerReply.DispatchResult <- OwnerDispatch.dispatch.request.state(handle,
       snapshots, CursorStore.empty(), Protocol.Request{1, 1, 2, 9, Bytes.new(0)},
       1)
     open.second.response(result, snapshot_id)
@@ -236,17 +238,17 @@ def open.token(
     case Some{snapshot_id}: open.second(handle, snapshots, snapshot_id)
     case None{}: fail.close(handle, "owner snapshot token was malformed")
 
-def open.result(result: Owner.DispatchResult) -> IO(Unit):
+def open.result(result: OwnerReply.DispatchResult) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, _,
+    case OwnerReply.DispatchResult{handle, snapshots, _,
         Protocol.Response{_, _, _, Protocol.Success{}, payload}}:
       open.token(handle, snapshots, Protocol.snapshot.id.read(payload))
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       fail.close(handle, "owner snapshot open failed")
 
 def open.snapshot(handle: ByteDb.Handle) -> IO(Unit):
   do IO<Unit>:
-    result : Owner.DispatchResult <- Owner.dispatch.request.state(handle,
+    result : OwnerReply.DispatchResult <- OwnerDispatch.dispatch.request.state(handle,
       SnapshotStore.empty(), CursorStore.empty(),
       Protocol.Request{1, 1, 2, 9, Bytes.new(0)}, 1)
     open.result(result)

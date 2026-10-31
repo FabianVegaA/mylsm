@@ -3,6 +3,8 @@ import ../../src/ByteDurableDb.bend as ByteDb
 import ../../src/Console.bend as Console
 import ../../src/coordinator/Operation.bend as Operation
 import ../../src/coordinator/Owner.bend as Owner
+import ../../src/coordinator/owner/Reply.bend as OwnerReply
+import ../../src/coordinator/owner/Dispatch.bend as OwnerDispatch
 import ../../src/coordinator/OwnerCursorStore.bend as CursorStore
 import ../../src/coordinator/OwnerSnapshotStore.bend as SnapshotStore
 import ../../src/coordinator/Protocol.bend as Protocol
@@ -62,8 +64,8 @@ def request(
   request_id: U32,
   operation: U32,
   payload: Bytes.Bytes
-) -> IO(Owner.DispatchResult):
-  Owner.dispatch.request.with_options(handle, snapshots, cursors,
+) -> IO(OwnerReply.DispatchResult):
+  OwnerDispatch.dispatch.request.with_options(handle, snapshots, cursors,
     Protocol.Request{1, 1, request_id, operation, payload}, 1, options)
 
 def compacted.final.closed(
@@ -73,84 +75,84 @@ def compacted.final.closed(
     case Done{Unit{}}: IO.print("OWNER_RETIRED_SST_PASSED")
     case Fail{_}: fail("owner database close failed")
 
-def compacted.final(result: Owner.DispatchResult) -> IO(Unit):
+def compacted.final(result: OwnerReply.DispatchResult) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, _, _,
+    case OwnerReply.DispatchResult{handle, _, _,
         Protocol.Response{_, _, _, Protocol.Success{}, _}}:
       do IO<Unit>:
         closed : Result<&1, &1, ByteDb.Error, Unit> <- ByteDb.close(handle)
         compacted.final.closed(closed)
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       do IO<Unit>:
         _closed : Result<&1, &1, ByteDb.Error, Unit> <- ByteDb.close(handle)
         fail("compaction did not resume after all snapshots closed")
 
 def snapshots.close.third(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   +options: ResourceOptions.Options
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, _}}:
       do IO<Unit>:
-        compacted : Owner.DispatchResult <- request(handle, snapshots,
+        compacted : OwnerReply.DispatchResult <- request(handle, snapshots,
           cursors, options, 16, 5, Bytes.new(0))
         compacted.final(compacted)
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       do IO<Unit>:
         _closed : Result<&1, &1, ByteDb.Error, Unit> <- ByteDb.close(handle)
         fail("third snapshot close failed")
 
 def snapshots.close.second(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   +ids: SnapshotIds,
   +options: ResourceOptions.Options
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, _}}:
       do IO<Unit>:
-        closed : Owner.DispatchResult <- request(handle, snapshots, cursors,
+        closed : OwnerReply.DispatchResult <- request(handle, snapshots, cursors,
           options, 15, 11,
           Protocol.snapshot.id.bytes(snapshot.ids.third(ids)))
         snapshots.close.third(closed, options)
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       do IO<Unit>:
         _closed : Result<&1, &1, ByteDb.Error, Unit> <- ByteDb.close(handle)
         fail("second snapshot close failed")
 
 def snapshots.close.duplicate(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   +ids: SnapshotIds,
   +options: ResourceOptions.Options
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, _}}:
       do IO<Unit>:
-        closed : Owner.DispatchResult <- request(handle, snapshots, cursors,
+        closed : OwnerReply.DispatchResult <- request(handle, snapshots, cursors,
           options, 14, 11,
           Protocol.snapshot.id.bytes(snapshot.ids.second(ids)))
         snapshots.close.second(closed, ids, options)
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       do IO<Unit>:
         _closed : Result<&1, &1, ByteDb.Error, Unit> <- ByteDb.close(handle)
         fail("duplicate snapshot close failed")
 
 def snapshots.close.first(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   +ids: SnapshotIds,
   +options: ResourceOptions.Options
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, _}}:
       do IO<Unit>:
-        closed : Owner.DispatchResult <- request(handle, snapshots, cursors,
+        closed : OwnerReply.DispatchResult <- request(handle, snapshots, cursors,
           options, 13, 11,
           Protocol.snapshot.id.bytes(snapshot.ids.duplicate(ids)))
         snapshots.close.duplicate(closed, ids, options)
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       do IO<Unit>:
         _closed : Result<&1, &1, ByteDb.Error, Unit> <- ByteDb.close(handle)
         fail("first snapshot close failed")
@@ -166,7 +168,7 @@ def snapshots.first.value.equal(
   match matches:
     case True{}:
       do IO<Unit>:
-        closed : Owner.DispatchResult <- request(handle, snapshots, cursors,
+        closed : OwnerReply.DispatchResult <- request(handle, snapshots, cursors,
           options, 12, 11,
           Protocol.snapshot.id.bytes(snapshot.ids.first(ids)))
         snapshots.close.first(closed, ids, options)
@@ -176,35 +178,35 @@ def snapshots.first.value.equal(
         fail("first retained SST value changed after rejected compaction")
 
 def snapshots.first.value(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   +ids: SnapshotIds,
   +options: ResourceOptions.Options
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, payload}}:
       snapshots.first.value.equal(handle, snapshots, cursors, ids, options,
         bytes.equal(Bytes.eq(payload, bytes.from_hex("31"))))
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       do IO<Unit>:
         _closed : Result<&1, &1, ByteDb.Error, Unit> <- ByteDb.close(handle)
         fail("first retained snapshot could not be read")
 
 def second.compacted(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   +ids: SnapshotIds,
   +options: ResourceOptions.Options
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.ResponseResourceLimit{}, _}}:
       do IO<Unit>:
-        first_value : Owner.DispatchResult <- request(handle, snapshots,
+        first_value : OwnerReply.DispatchResult <- request(handle, snapshots,
           cursors, options, 11, 10,
           Bytes.concat([Protocol.snapshot.id.bytes(snapshot.ids.first(ids)),
             bytes.from_hex("61")]))
         snapshots.first.value(first_value, ids, options)
-    case Owner.DispatchResult{handle, _, _, _}:
+    case OwnerReply.DispatchResult{handle, _, _, _}:
       do IO<Unit>:
         _closed : Result<&1, &1, ByteDb.Error, Unit> <- ByteDb.close(handle)
         fail("compaction exceeded the retired SST budget")
@@ -220,7 +222,7 @@ def third.snapshot.id(
       match result:
         case Some{snapshot_id}:
           do IO<Unit>:
-            compacted : Owner.DispatchResult <- request(handle, snapshots,
+            compacted : OwnerReply.DispatchResult <- request(handle, snapshots,
               cursors, options, 10, 5, Bytes.new(0))
             second.compacted(compacted,
               SnapshotIds{snapshot.ids.first(ids),
@@ -230,31 +232,31 @@ def third.snapshot.id(
         case None{}: fail("third snapshot returned an invalid ID")
 
 def third.snapshot(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   +ids: SnapshotIds,
   +options: ResourceOptions.Options
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, payload}}:
       third.snapshot.id(handle, snapshots, cursors, ids, options,
         Protocol.snapshot.id.read(payload))
-    case Owner.DispatchResult{_, _, _, _}:
+    case OwnerReply.DispatchResult{_, _, _, _}:
       fail("third snapshot open was rejected")
 
 def first.compacted(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   +ids: SnapshotIds,
   +options: ResourceOptions.Options
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, _}}:
       do IO<Unit>:
-        opened : Owner.DispatchResult <- request(handle, snapshots, cursors,
+        opened : OwnerReply.DispatchResult <- request(handle, snapshots, cursors,
           options, 9, 9, Bytes.new(0))
         third.snapshot(opened, ids, options)
-    case Owner.DispatchResult{_, _, _, _}:
+    case OwnerReply.DispatchResult{_, _, _, _}:
       fail("two distinct retired generations were incorrectly rejected")
 
 def second.snapshot.id(
@@ -268,7 +270,7 @@ def second.snapshot.id(
       match result:
         case Some{snapshot_id}:
           do IO<Unit>:
-            compacted : Owner.DispatchResult <- request(handle, snapshots,
+            compacted : OwnerReply.DispatchResult <- request(handle, snapshots,
               cursors, options, 8, 5, Bytes.new(0))
             first.compacted(compacted, SnapshotIds{
               snapshot.ids.first(ids), snapshot.ids.duplicate(ids),
@@ -276,46 +278,46 @@ def second.snapshot.id(
         case None{}: fail("second snapshot returned an invalid ID")
 
 def second.snapshot(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   +ids: SnapshotIds,
   +options: ResourceOptions.Options
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, payload}}:
       second.snapshot.id(handle, snapshots, cursors, ids, options,
         Protocol.snapshot.id.read(payload))
-    case Owner.DispatchResult{_, _, _, _}:
+    case OwnerReply.DispatchResult{_, _, _, _}:
       fail("second snapshot open was rejected")
 
 def second.flush(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   +ids: SnapshotIds,
   +options: ResourceOptions.Options
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, _}}:
       do IO<Unit>:
-        opened : Owner.DispatchResult <- request(handle, snapshots, cursors,
+        opened : OwnerReply.DispatchResult <- request(handle, snapshots, cursors,
           options, 7, 9, Bytes.new(0))
         second.snapshot(opened, ids, options)
-    case Owner.DispatchResult{_, _, _, _}:
+    case OwnerReply.DispatchResult{_, _, _, _}:
       fail("second SST flush was rejected")
 
 def second.put(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   +ids: SnapshotIds,
   +options: ResourceOptions.Options
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, _}}:
       do IO<Unit>:
-        flushed : Owner.DispatchResult <- request(handle, snapshots, cursors,
+        flushed : OwnerReply.DispatchResult <- request(handle, snapshots, cursors,
           options, 6, 4, Bytes.new(0))
         second.flush(flushed, ids, options)
-    case Owner.DispatchResult{_, _, _, _}:
+    case OwnerReply.DispatchResult{_, _, _, _}:
       fail("second SST put was rejected")
 
 def first.duplicate.id(
@@ -329,7 +331,7 @@ def first.duplicate.id(
       match result:
         case Some{duplicate_id}:
           do IO<Unit>:
-            written : Owner.DispatchResult <- request(handle, snapshots,
+            written : OwnerReply.DispatchResult <- request(handle, snapshots,
               cursors, options, 5, 2,
               Operation.encode.put(bytes.from_hex("62"),
                 bytes.from_hex("32")))
@@ -338,16 +340,16 @@ def first.duplicate.id(
         case None{}: fail("duplicate snapshot returned an invalid ID")
 
 def first.duplicate(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   first_id: U32,
   +options: ResourceOptions.Options
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, payload}}:
       first.duplicate.id(handle, snapshots, cursors, first_id,
         options, Protocol.snapshot.id.read(payload))
-    case Owner.DispatchResult{_, _, _, _}:
+    case OwnerReply.DispatchResult{_, _, _, _}:
       fail("duplicate snapshot open was rejected")
 
 def first.snapshot.id(
@@ -360,50 +362,50 @@ def first.snapshot.id(
       match result:
         case Some{snapshot_id}:
           do IO<Unit>:
-            opened : Owner.DispatchResult <- request(handle, snapshots,
+            opened : OwnerReply.DispatchResult <- request(handle, snapshots,
               cursors, options, 4, 9, Bytes.new(0))
             first.duplicate(opened, snapshot_id, options)
         case None{}: fail("first snapshot returned an invalid ID")
 
 def first.snapshot(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   +options: ResourceOptions.Options
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, payload}}:
       first.snapshot.id(handle, snapshots, cursors, options,
         Protocol.snapshot.id.read(payload))
-    case Owner.DispatchResult{_, _, _, _}:
+    case OwnerReply.DispatchResult{_, _, _, _}:
       fail("first snapshot open was rejected")
 
 def first.flush(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   +options: ResourceOptions.Options
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, _}}:
       do IO<Unit>:
-        opened : Owner.DispatchResult <- request(handle, snapshots, cursors,
+        opened : OwnerReply.DispatchResult <- request(handle, snapshots, cursors,
           options, 3, 9, Bytes.new(0))
         first.snapshot(opened, options)
-    case Owner.DispatchResult{_, _, _, _}:
+    case OwnerReply.DispatchResult{_, _, _, _}:
       fail("first SST flush was rejected")
 
 # Handles completed.
 def completed(
-  result: Owner.DispatchResult,
+  result: OwnerReply.DispatchResult,
   +options: ResourceOptions.Options
 ) -> IO(Unit):
   match result:
-    case Owner.DispatchResult{handle, snapshots, cursors,
+    case OwnerReply.DispatchResult{handle, snapshots, cursors,
         Protocol.Response{_, _, _, Protocol.Success{}, _}}:
       do IO<Unit>:
-        flushed : Owner.DispatchResult <- request(handle, snapshots, cursors,
+        flushed : OwnerReply.DispatchResult <- request(handle, snapshots, cursors,
           options, 2, 4, Bytes.new(0))
         first.flush(flushed, options)
-    case Owner.DispatchResult{_, _, _, _}:
+    case OwnerReply.DispatchResult{_, _, _, _}:
       fail("initial SST put was rejected")
 
 # Handles opened.
@@ -414,7 +416,7 @@ def opened(
   match result:
     case Done{handle}:
       do IO<Unit>:
-        written : Owner.DispatchResult <- request(handle, SnapshotStore.empty(),
+        written : OwnerReply.DispatchResult <- request(handle, SnapshotStore.empty(),
           CursorStore.empty(), options, 1, 2,
           Operation.encode.put(bytes.from_hex("61"), bytes.from_hex("31")))
         completed(written, options)

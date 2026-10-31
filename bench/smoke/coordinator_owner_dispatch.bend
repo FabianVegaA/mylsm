@@ -3,6 +3,8 @@ import ../../src/ByteDurableDb.bend as ByteDb
 import ../../src/Console.bend as Console
 import ../../src/coordinator/Operation.bend as Operation
 import ../../src/coordinator/Owner.bend as Owner
+import ../../src/coordinator/owner/Reply.bend as OwnerReply
+import ../../src/coordinator/owner/Dispatch.bend as OwnerDispatch
 import ../../src/coordinator/Protocol.bend as Protocol
 import ../../src/ResourceOptions.bend as ResourceOptions
 import bend-kit-bytes@0.3.2.0/bytes.bend as Bytes
@@ -71,7 +73,7 @@ def deleted(pair: ByteDb.Handle & Protocol.Response) -> IO(Unit):
   match pair:
     case (handle, Protocol.Response{_, _, _, Protocol.Success{}, _}):
       do IO<Unit>:
-        result : ByteDb.Handle & Protocol.Response <- Owner.dispatch.request(
+        result : ByteDb.Handle & Protocol.Response <- OwnerDispatch.dispatch.request(
           handle, Protocol.Request{1, 1, 5, 1, bytes("00ff")}, 1)
         response.missing(result)
     case (handle, _):
@@ -81,7 +83,7 @@ def stats.matches(handle: ByteDb.Handle, matches: Bool) -> IO(Unit):
   match matches:
     case True{}:
       do IO<Unit>:
-        result : ByteDb.Handle & Protocol.Response <- Owner.dispatch.request(
+        result : ByteDb.Handle & Protocol.Response <- OwnerDispatch.dispatch.request(
           handle, Protocol.Request{1, 1, 4, 3, bytes("00ff")}, 1)
         deleted(result)
     case False{}:
@@ -101,8 +103,8 @@ def stats.checked(pair: ByteDb.Handle & ByteDb.Stats) -> IO(Unit):
       do IO<Unit>:
         result : ByteDb.Handle & Protocol.Response <- IO.pure(
           ByteDb.Handle & Protocol.Response,
-          Owner.stats.response(handle, stats,
-            Owner.ReplyContext{(1, 1), (1, 1), (3, 3),
+          OwnerDispatch.stats.response(handle, stats,
+            OwnerReply.ReplyContext{(1, 1), (1, 1), (3, 3),
               ResourceOptions.defaults()}))
         stats.response(result)
 
@@ -128,7 +130,7 @@ def written(pair: ByteDb.Handle & Protocol.Response) -> IO(Unit):
   match pair:
     case (handle, Protocol.Response{_, _, _, Protocol.Success{}, _}):
       do IO<Unit>:
-        result : ByteDb.Handle & Protocol.Response <- Owner.dispatch.request(
+        result : ByteDb.Handle & Protocol.Response <- OwnerDispatch.dispatch.request(
           handle, Protocol.Request{1, 1, 2, 1, bytes("00ff")}, 1)
         read.response(result)
     case (handle, _):
@@ -141,7 +143,7 @@ def created.checked(
   match pair:
     case (Done{handle}, True{}):
           do IO<Unit>:
-            response : ByteDb.Handle & Protocol.Response <- Owner.dispatch.request(
+            response : ByteDb.Handle & Protocol.Response <- OwnerDispatch.dispatch.request(
               handle, Protocol.Request{1, 1, 1, 2,
                 Operation.encode.put(bytes("00ff"), bytes("80ff00"))}, 1)
             written(response)
