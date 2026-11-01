@@ -3,8 +3,13 @@
 ## Purpose and public entry point
 
 [mylsm.bend](../../mylsm.bend) exposes `MyLSM.Bytes` and `MyLSM.Utf8` over the same
-durable byte engine. Import the facade from this checkout to use these capabilities;
-[pack.json](../../pack.json) retains an import of package `0.5.0.0`.
+durable byte engine. Import the facade from this checkout or use the published package:
+
+```bend
+import mylsm-lsm-store@0.6.0.0/mylsm.bend as MyLSM
+```
+
+[pack.json](../../pack.json) records this package import.
 
 `Bytes` accepts `bend-kit-bytes.Bytes` buffers. `Utf8` accepts `String`, encodes UTF-8,
 and returns `InvalidUtf8` when reading bytes that do not represent valid text. It neither
