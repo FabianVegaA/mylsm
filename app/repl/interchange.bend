@@ -121,3 +121,63 @@ def parse.lines(lines: List<&2, String>) -> Maybe<&2, List<&2, Record>>:
 # Reads an export, rejecting any other version or malformed record line.
 def parse(text: String) -> Maybe<&2, List<&2, Record>>:
   parse.lines(String.lines(text))
+
+# Carries the batch being filled, its size, and the closed batches in reverse order.
+type BatchState is Data:
+  BatchState{current: List<&2, Record>, count: Nat, bytes: Nat,
+    done: List<&2, List<&2, Record>>}
+
+# Estimates the encoded size of one record from its UTF-8 upper bound.
+def record.bytes(record: Record) -> Nat:
+  match record:
+    case Record{key, value}:
+      Nat.add(Nat.mul(4n, Nat.add(String.length(key), String.length(value))), 16n)
+
+def batches.close(current: List<&2, Record>, done: List<&2, List<&2, Record>>) -> List<&2, List<&2, Record>>:
+  match current:
+    case Nil{}: done
+    case Con{record, rest}: Con{List.reverse(&2, Record, Con{record, rest}), done}
+
+def batches.placed(
+  starts_new: Bool,
+  record: Record,
+  +size: Nat,
+  state: BatchState
+) -> BatchState:
+  match starts_new:
+    case True{}:
+      match state:
+        case BatchState{current, _, _, done}:
+          BatchState{[record], 1n, size, batches.close(current, done)}
+    case False{}:
+      match state:
+        case BatchState{current, count, bytes, done}:
+          BatchState{Con{record, current}, Nat.add(count, 1n), Nat.add(bytes, size), done}
+
+def batches.full(+count: Nat, +bytes: Nat, +size: Nat, +max_count: Nat, +max_bytes: Nat) -> Bool:
+  Nat.is_lt(0n, count) &&
+    (Nat.is_le(max_count, count) || Nat.is_lt(max_bytes, Nat.add(bytes, size)))
+
+def batches.add(+record: Record, state: BatchState, +max_count: Nat, +max_bytes: Nat) -> BatchState:
+  match state:
+    case BatchState{current, +count, +bytes, done}:
+      batches.placed(batches.full(count, bytes, record.bytes(record), max_count, max_bytes),
+        record, record.bytes(record), BatchState{current, count, bytes, done})
+
+def batches.go(
+  records: List<&2, Record>,
+  +max_count: Nat,
+  +max_bytes: Nat,
+  state: BatchState
+) -> List<&2, List<&2, Record>>:
+  match records:
+    case Nil{}:
+      match state:
+        case BatchState{current, _, _, done}:
+          List.reverse(&2, List<&2, Record>, batches.close(current, done))
+    case Con{record, rest}:
+      batches.go(rest, max_count, max_bytes, batches.add(record, state, max_count, max_bytes))
+
+# Splits records into batches of at most max_count records and about max_bytes encoded bytes.
+def batches(records: List<&2, Record>, +max_count: Nat, +max_bytes: Nat) -> List<&2, List<&2, Record>>:
+  batches.go(records, max_count, max_bytes, BatchState{Nil{}, 0n, 0n, Nil{}})

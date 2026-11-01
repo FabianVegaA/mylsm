@@ -4,6 +4,7 @@ import ../../src/Fs.bend as Fs
 import ../../src/Console.bend as Console
 import ../demo/demo_helpers.bend as Demo
 import ./interchange.bend as Interchange
+import ../../src/DurableBatchPolicy.bend as BatchPolicy
 import ./repl_types.bend as Repl
 import ./repl_parser.bend as Parser
 import ./repl_policy.bend as Policy
@@ -255,6 +256,8 @@ def export.write(
     case Done{data}:
       do IO<LoopState>:
         _written : Unit <- IO.try(Unit, Fs.write_text(path ++ ".tmp", data))
+        _restricted : Unit <- IO.try(Unit, Fs.chmod(path ++ ".tmp", 384))
+        _durable : Unit <- IO.try(Unit, Fs.fsync(path ++ ".tmp"))
         _renamed : Unit <- IO.try(Unit, Fs.rename(path ++ ".tmp", path))
         _synced : Unit <- IO.try(Unit, Fs.fsync(Policy.parent_path(path)))
         say("OK export", session)
@@ -278,6 +281,18 @@ def import.mutations(records: List<&2, Interchange.Record>) -> List<&1, MyLSM.Ut
     case Con{Interchange.Record{key, value}, rest}:
       Con{MyLSM.Utf8SetValue{key, value}, import.mutations(rest)}
 
+# Commits each import batch in order.
+def import.commit(
+  batches: List<&2, List<&2, Interchange.Record>>,
+  handle: MyLSM.Utf8.Handle
+) -> IO(MyLSM.Utf8.Handle):
+  match batches:
+    case Nil{}: IO.pure(MyLSM.Utf8.Handle, handle)
+    case Con{batch, rest}:
+      do IO<MyLSM.Utf8.Handle>:
+        committed : MyLSM.Utf8.Handle <- commit(handle, import.mutations(batch))
+        import.commit(rest, committed)
+
 def import.decoded(
   decoded: Maybe<&2, List<&2, Interchange.Record>>,
   session: Session
@@ -288,7 +303,9 @@ def import.decoded(
       match session:
         case Session{handle, settings, staged}:
           do IO<LoopState>:
-            committed : MyLSM.Utf8.Handle <- commit(handle, import.mutations(records))
+            committed : MyLSM.Utf8.Handle <- import.commit(
+              Interchange.batches(records, BatchPolicy.max_batch_count(),
+                Nat.sub(BatchPolicy.max_batch_bytes(), 4096n)), handle)
             say("OK import", Session{committed, settings, staged})
 
 def threads.write(valid: Bool, +count: Nat, +dir: String, session: Session) -> IO(LoopState):

@@ -75,3 +75,15 @@ def Laws.repl_export_parent():
 
 def Laws.repl_export_current_parent():
   {==}
+
+def Laws.interchange_batches_empty():
+  {==}
+
+def Laws.interchange_batches_split_by_count():
+  {==}
+
+def Laws.interchange_batches_split_by_bytes():
+  {==}
+
+def Laws.interchange_batches_keep_an_oversized_record():
+  {==}

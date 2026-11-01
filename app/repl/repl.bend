@@ -42,7 +42,7 @@ def repl_loop(commands: Nat, state: Exec.LoopState) -> IO(Unit):
         case Exec.Stopped{}: IO.print("session command limit reached")
         case Exec.Running{session}:
           do IO<Unit>:
-            _stopped : Exec.LoopState <- Exec.exit(session)
+            _stopped : Exec.LoopState <- Exec.execute(Repl.ExitCommand{}, session)
             IO.print("session command limit reached")
     case 1n+rest:
       match state:

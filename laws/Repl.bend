@@ -122,3 +122,27 @@ law repl_export_parent:
 # State the repl export current parent property for the interactive shell laws.
 law repl_export_current_parent:
   {ReplExec.parent_path("export.db") == "." : String}
+
+# Verifies an empty import produces no batches.
+law interchange_batches_empty:
+  {Interchange.batches([], 256n, 1048576n) ==
+    [] : List<&2, List<&2, Interchange.Record>>}
+
+# Verifies batches close when they reach the record count limit.
+law interchange_batches_split_by_count:
+  {Interchange.batches([Interchange.Record{"a", "1"}, Interchange.Record{"b", "2"},
+    Interchange.Record{"c", "3"}], 2n, 1048576n) ==
+    [[Interchange.Record{"a", "1"}, Interchange.Record{"b", "2"}],
+      [Interchange.Record{"c", "3"}]] : List<&2, List<&2, Interchange.Record>>}
+
+# Verifies batches close before their estimated size exceeds the byte limit.
+law interchange_batches_split_by_bytes:
+  {Interchange.batches([Interchange.Record{"a", "xxxx"}, Interchange.Record{"b", "yyyy"}],
+    256n, 40n) ==
+    [[Interchange.Record{"a", "xxxx"}], [Interchange.Record{"b", "yyyy"}]] :
+    List<&2, List<&2, Interchange.Record>>}
+
+# Verifies a record larger than the byte limit still forms its own batch.
+law interchange_batches_keep_an_oversized_record:
+  {Interchange.batches([Interchange.Record{"a", "xxxxxxxx"}], 256n, 8n) ==
+    [[Interchange.Record{"a", "xxxxxxxx"}]] : List<&2, List<&2, Interchange.Record>>}
