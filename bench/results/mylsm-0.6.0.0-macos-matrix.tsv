@@ -1,0 +1,11 @@
+workload	sample	elapsed_ms	throughput_ops_per_sec	recovery_ms	read_p50_ms	read_p95_ms	read_p99_ms	max_rss_bytes	table_bytes	correctness
+million_writes	1	20105	1018.90							pass
+million_writes	2	20137	1017.28							pass
+million_writes	3	20771	986.23							pass
+million_writes	4	20480	1000.24							pass
+million_writes	5	19831	1032.98							pass
+phase3_metrics	1	20207	1013.75	67	1	1	1	19791872	586503	pass
+phase3_metrics	2	20400	1004.16	51	1	1	1	19824640	586503	pass
+phase3_metrics	3	20543	997.17	52	1	1	1	19808256	586503	pass
+phase3_metrics	4	22917	893.87	51	1	1	1	18563072	586503	pass
+phase3_metrics	5	19721	1038.74	49	1	1	1	19873792	586503	pass

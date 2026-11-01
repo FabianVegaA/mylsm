@@ -1,7 +1,7 @@
 # MyLSM CLI Reference
 
 MyLSM provides an installed CLI named `mylsm` and a developer launcher at
-`scripts/mylsm.sh`. The database is an alpha; see the
+`scripts/mylsm.sh`. See the
 [acceptance evidence](../../bench/results/mylsm-0.6.0.0-acceptance.md) for current limits.
 
 ## Installed CLI

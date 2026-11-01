@@ -1,6 +1,6 @@
 # MyLSM
 
-MyLSM is an LSM key-value database written in [Bend](https://github.com/bendlang/bend), aiming to compete with leading storage engines in performance and data safety. It stores writes durably in a log, keeps sorted tables on disk, and recovers after a restart. This checkout implements **0.6.0.0 alpha** for evaluation and development. The package import in `pack.json` still points to `0.5.0.0`; this checkout does not establish a published 0.6 release.
+MyLSM is an LSM key-value database written in [Bend](https://github.com/bendlang/bend), aiming to compete with leading storage engines in performance and data safety. It stores writes durably in a log, keeps sorted tables on disk, and recovers after a restart. This checkout implements **0.6.0.0**. The package import in `pack.json` still points to `0.5.0.0` until 0.6.0.0 is published to the Bend Hub.
 
 ## Install with Nix
 
@@ -144,8 +144,10 @@ git diff --check
 | Launcher, demo and REPL | [CLI](docs/features/cli.md) |
 | Runtime checks and measurements | [Bench map](bench/README.md) and [0.6 acceptance evidence](bench/results/mylsm-0.6.0.0-acceptance.md) |
 
-The alpha has no production stability or compatibility guarantee. Release acceptance is
-incomplete, including the Linux cursor memory ceiling and the repeated workload matrix.
+0.6.0.0 is accepted on Apple Silicon macOS. Linux x86-64 is partially verified: the
+proofs and engine smokes pass, while owner coordination and the workload matrix remain
+open for 0.6.0.1. Writes are about ten times slower than the 0.5 engine; see the
+acceptance evidence for the known limitations.
 Each feature document records its current limits and links to the relevant evidence.
 Formal laws cover pure decisions; they do not prove the filesystem or host effects.
 

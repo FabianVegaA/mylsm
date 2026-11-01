@@ -1,11 +1,86 @@
 # MyLSM 0.6.0.0 acceptance evidence
 
-Status: implementation evidence is partial. Formal laws, current-host and
-Linux runtime gates, Bun FFI effects, and snapshot-generation reclamation pass.
-Release acceptance is not complete: the repeated workload matrix and Linux
-cursor memory ceiling remain open.
+Status: accepted for release on macOS arm64. Linux x86_64 is partially
+verified; its open items are listed under "Known limitations" and move to
+0.6.0.1.
 
-## Full proof gate after the reactor and response-limit changes
+## Release evidence on macOS arm64
+
+Darwin 25.6.0 arm64, 12 logical CPUs, Bend 2.0.39, run inside `nix develop`.
+The checks below ran on revision `429ffc4`, the first revision that closes SST
+blocks at the 4 KiB target.
+
+| Check | Result |
+| --- | --- |
+| `./proofs/run.sh` | `SUMMARY PASS=84 FAIL=0 TIMEOUT=0 TOTAL=84` |
+| `bench/smoke/owner_gate.sh` | `OWNER GATE PASS`: 20 owner smokes plus the transport oracle unit test |
+| `bench/smoke/cli.sh` | Pass |
+| Engine, crash, backup, migration and cursor smokes | 25 of 25 pass: `backup_publish`, `backup_restore`, `byte_block_reader`, `byte_index_budget`, `byte_retired_sst_reclaim`, `crash_point_smoke`, `durable_commit`, `durable_compaction_errors`, `durable_open_wait`, `durable_poisoned_close`, `legacy_migration_unknown`, `legacy_sst_io`, `legacy_wal_io`, `legacy_wal_replay`, `migration_publish`, `public_backup_stream`, `public_bytes_sst`, `public_bytes_sst_cursor`, `public_bytes_cursor`, `public_cursor_memory`, `public_restore_io`, `resource_limits`, `restore_publish`, `shared_utf8_bytes`, `utf8_facade` |
+| `bench/smoke/byte_sst_file.bend` | Pass, including a 400-record table that spans several blocks and round-trips |
+| Public examples | `utf8_basic`, `bytes_basic` and `snapshot_scan` pass |
+
+### Workload matrix
+
+`bench/workload/acceptance_matrix.sh` with 20,485 writes and five samples.
+The free disk was 12%, below the harness's 15% comparison threshold, so it ran
+with `MYLSM_BENCH_ALLOW_LOW_DISK=1`. Samples 2 to 5 report `git_dirty=true`
+because a documentation file was edited during the run; no source file changed.
+Raw rows are in `mylsm-0.6.0.0-macos-matrix.tsv`.
+
+| Workload | Median elapsed | Median throughput | Recovery median | Read p50/p95/p99 | Median max RSS | Correctness |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `million_writes.sh 20485` (flush every 4,096) | 20,137 ms | 1,017 ops/s | — | — | — | 5 of 5 pass |
+| `phase3_metrics.sh 20485` | 20,400 ms | 1,004 ops/s | 51 ms | 1/1/1 ms | 19,808,256 B | 5 of 5 pass |
+
+`durable_api_perf.sh` was skipped because the macOS `/usr/bin/time` has no
+`-f` option.
+
+### Block size regression found during acceptance
+
+The first matrix run, on `0fe642a`, measured 532–556 s per 20,485-write sample
+and 71 ms point reads. The SST encoder only rolled blocks over at the 1 MiB
+cap, so a 20,480-record table was one 571 KB block, and every point read and
+every put of a new key read, verified and decoded the whole block. `429ffc4`
+closes blocks at 4 KiB and pins the decision with laws in
+`laws/ByteBlockBuilder.bend`.
+
+| Same Mac, `phase3_metrics.sh 20485` | Elapsed | Read p50/p99 | Max RSS |
+| --- | ---: | ---: | ---: |
+| `99fa120`, last revision with the String engine, one run | 1,882 ms | 0/1 ms | 22,904,832 B |
+| `0fe642a`, byte engine before the fix, one run | 556,487 ms | 71/73 ms | 30,523,392 B |
+| `429ffc4`, byte engine after the fix, median of five | 20,400 ms | 1/1 ms | 19,808,256 B |
+
+### Cursor memory
+
+`public_cursor_memory.sh` with one runtime thread. The gate requires a 64-item
+scan to add less than 4 MiB over the open RSS of the same dataset.
+
+| Records | Open max RSS | 64-item scan max RSS | SST bytes |
+| ---: | ---: | ---: | ---: |
+| 16,000 | 2,998,272 B | 3,260,416 B | 475,472 B |
+| 32,000 | 3,014,656 B | 3,276,800 B | 950,772 B |
+| 64,000 | 3,178,496 B | 3,424,256 B | 1,901,472 B |
+
+Before the block fix the open RSS grew with the data (32,227,328 B at 64,000
+records). With 4 KiB blocks it stays near 3 MiB for these sizes.
+
+## Linux x86_64 status
+
+NixOS x86_64, 8 CPUs, 6.8 GB RAM, Bend 2.0.39, candidate `0fe642a`, which
+predates the block fix.
+
+| Check | Result |
+| --- | --- |
+| `./proofs/run.sh` | 84 of 84 pass |
+| Engine, crash, backup and migration smokes | 19 of 19 pass |
+| Owner smokes, run one by one | 13 of 16 pass on the first run. `owner_stale_endpoint` then passed after moving its workspace to `/tmp`. The `owner_generation_tokens` fix in `d506261` is not yet verified on Linux. `coordinator_owner_socket` failed once and passed once; the cause is unknown. |
+| Workload matrix | Not run; the host is shared and has little free memory |
+
+## Historical evidence
+
+The sections below predate the single-engine change. Rows about the public String API, `owner_spawn`, `CleanupPolicy` or `ResourceAccounting` describe code that no longer exists.
+
+### Full proof gate after the reactor and response-limit changes
 
 Darwin 25.6.0 arm64, Bend 2.0.39, revision `d64feb0` plus the uncommitted
 `UnusedDefs` law/witness pair, run inside `nix develop`.
@@ -26,7 +101,7 @@ The unused owner auto-spawn path (`OwnerSpawn`, `SpawnPolicy`, `src/effs/owner_s
 and the `owner_spawn*` fixtures) was removed afterwards. The `owner_spawn` rows in
 the tables below describe code that no longer exists.
 
-## Bend 2.0.39 compatibility rerun
+### Bend 2.0.39 compatibility rerun
 
 Darwin arm64, Bend 2.0.39, and `bend-mathlib@0.7.5.0` pinned to
 `0xcd4682caa53da19986acd472c2181473` in `tools/hub-dependencies.json`.
@@ -48,7 +123,7 @@ updated dependency and toolchain. It does not rerun the native CLI SDK checks,
 Linux platform matrix or performance workloads recorded below. Their existing
 limitations and outstanding release evidence remain applicable.
 
-## Host and toolchain of the earlier runs
+### Host and toolchain of the earlier runs
 
 | Attribute | Observed value |
 | --- | --- |
@@ -58,7 +133,7 @@ limitations and outstanding release evidence remain applicable.
 | Linux filesystem | Container overlay for lock and permission tests; bind mount for compilation and socket/client integration |
 | Bun | 1.4.3 on Darwin arm64 and Linux arm64 |
 
-## Same-container durable API comparison
+### Same-container durable API comparison
 
 The same `durable_api_perf.sh` harness ran five times against baseline commit
 `6d3300e` and five times against candidate commit `93ac5ed`. Both ran in the
@@ -92,7 +167,7 @@ are in `mylsm-0.5.0.0-phase3-linux-samples.tsv`; candidate rows are in
 `mylsm-0.6.0.0-phase3-linux-samples.tsv`. These comparable workloads pass the
 5% median regression gate, but the other release workloads remain unmeasured.
 
-## Executed gates
+### Executed gates
 
 | Gate | Command | Result |
 | --- | --- | --- |
@@ -129,7 +204,7 @@ are in `mylsm-0.5.0.0-phase3-linux-samples.tsv`; candidate rows are in
 | Linux arm64 acceptance rerun | `proofs/run.sh`, legacy/backup/owner/lock/crash/ENOSPC harnesses, and Bun 1.4.3 FFI fixtures | Ubuntu 24.04 arm64 as an unprivileged user; proofs pass 82/82, migration/backup/owner/lock and publication/crash matrices pass, all six owner response-loss boundaries recover as expected, true tmpfs ENOSPC cleanup passes for migration and backup, and Bun lock/rename plus child descriptor checks pass. Cursor RSS is excluded from this rerun. |
 | Public consumer examples | `examples/utf8_basic.bend`, `examples/bytes_basic.bend`, `examples/snapshot_scan.bend` | Historical Linux run: all pass on Ubuntu 24.04 arm64 with Bend 2.0.36; they import the public facade, with the byte example also importing the bytes buffer package. |
 
-## Cursor memory observation
+### Cursor memory observation
 
 Single run on the Darwin/arm64 host with one runtime thread. The harness creates
 each database, then measures process maximum RSS while opening or reading 64
@@ -145,25 +220,21 @@ Both cases remain below the harness's 32 MiB process ceiling, and opening a
 small relative to process RSS, so these samples establish the harness bounds,
 not asymptotic memory behavior by themselves.
 
-## Outstanding release evidence
+## Known limitations
 
-- Final Linux rerun on Ubuntu 24.04 arm64 with Bend 2.0.36: all 82 formal
-  proof modules pass; `legacy_sst_io.sh` passes the historical empty-value and
-  duplicate-key migration fixtures; `coordinator_commit_unknown.sh` passes all
-  six crash checkpoints and verifies recovery state.
-- Linux evidence currently covers Ubuntu 24.04 arm64 in Docker; other Linux
-  architectures/distributions and JavaScript owner-process lifecycle remain
-  unverified.
-- At least five samples for binary and UTF-8 point reads/writes, batches,
-  recovery, cold/warm scans, snapshots under compaction, backup/restore, and
-  coordinated clients, including percentiles, throughput, RSS, disk usage, and
-  configured buffer/queue peaks.
-- The Linux cursor memory fixture exceeds its existing 32 MiB process ceiling
-  at 64,000 records, even with two runtime threads. Scanning adds less than
-  4 MiB over its open RSS, but the absolute process budget still fails.
+- Writes are about ten times slower than the 0.5 String engine on the same
+  machine (20.4 s against 1.9 s for 20,485 writes). Each put scans the
+  list-based memtable and, for a key the memtable does not hold, looks it up in
+  the SST to keep the visible statistics exact. Moving that bookkeeping out of
+  the write path is planned for 0.6.1.0.
+- There is no automatic flush and no levelled compaction. Without explicit
+  flushes, write cost grows with the memtable size.
+- Linux x86_64: `coordinator_owner_socket` failed once in two runs, the
+  `owner_generation_tokens` fix is unverified, and the workload matrix and
+  cursor memory gate have not run on the block-size fix. These move to 0.6.0.1.
 - Linux-specific ENOSPC harnesses use a Docker-provided tmpfs and confirm the
   filesystem is full before running the operation. The API surfaces a typed
-  operation failure; it does not currently expose the underlying `ENOSPC`
-  errno in the fixture output.
-
-No 0.6.0.0 performance baseline or release acceptance is claimed by this file.
+  operation failure; it does not expose the underlying `ENOSPC` errno in the
+  fixture output.
+- Timing results are single-host observations. The macOS matrix ran below the
+  harness's free-disk threshold.
