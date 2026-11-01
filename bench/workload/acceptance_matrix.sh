@@ -20,6 +20,8 @@ for ((sample = 1; sample <= SAMPLES; sample++)); do
   bash "$ROOT/bench/workload/million_writes.sh" "$COUNT" "$OUT/million-data" > "$OUT/million-$sample.log" 2>&1
   cp "$ROOT/.mylsm/build/million-writes-result.log" "$OUT/million-$sample.result"
   bash "$ROOT/bench/workload/phase3_metrics.sh" "$COUNT" "$OUT/phase3-data" > "$OUT/phase3-$sample.log" 2>&1
+  cp "$ROOT/.mylsm/build/phase3-metrics-result.log" "$OUT/phase3-$sample.result"
+  cp "$ROOT/.mylsm/build/phase3-metrics-timing.log" "$OUT/phase3-$sample.timing"
 done
 rm -rf -- "$OUT/million-data" "$OUT/phase3-data"
 
