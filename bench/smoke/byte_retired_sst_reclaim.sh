@@ -18,4 +18,13 @@ test ! -e "$DB/SST.00000003.tmp"
 test -s "$DB/SST.00000002"
 test -e "$DB/notes.txt"
 test -d "$DB/SST.00000009"
+DAMAGED="$DB-damaged"
+trap 'rm -rf -- "$DB" "$DAMAGED"' EXIT
+MYLSM_DB_PATH="$DAMAGED" MYLSM_BYTES_MODE=create bend "$ROOT/bench/smoke/public_bytes_api.bend" >/dev/null
+printf 'damaged' > "$DAMAGED/SST.00000002"
+if MYLSM_DB_PATH="$DAMAGED" MYLSM_BYTES_MODE=open bend "$ROOT/bench/smoke/public_bytes_api.bend" >/dev/null 2>&1; then
+  printf '%s\n' 'opening a damaged database unexpectedly succeeded' >&2
+  exit 1
+fi
+test -s "$DAMAGED/SST.00000001"
 printf '%s\n' 'BYTE RETIRED SST RECLAIM PASS'

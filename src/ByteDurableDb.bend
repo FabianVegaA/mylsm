@@ -355,6 +355,19 @@ def reclaim(+path: String, value: ByteManifest.ManifestValue) -> IO(Unit):
     listed : Result<&1, &1, U32 & String, List<&1, String>> <- Fs.read_dir(path)
     reclaim.listed(path, value, listed)
 
+# Reclaims retired SST files only after the database opened successfully.
+def open.reclaim.opened(
+  +path: String,
+  value: ByteManifest.ManifestValue,
+  opened: Result<&1, &1, Error, Handle>
+) -> IO(Result<&1, &1, Error, Handle>):
+  match opened:
+    case Fail{error}: IO.pure(Result<&1, &1, Error, Handle>, Fail{error})
+    case Done{handle}:
+      do IO<Result<&1, &1, Error, Handle>>:
+        _reclaimed : Unit <- reclaim(path, value)
+        return Done{handle}
+
 def open.manifest.reclaimed(
   +path: String,
   lock: DbLock.Lock,
@@ -364,8 +377,8 @@ def open.manifest.reclaimed(
     case Fail{error}: open.manifest.result(path, lock, Fail{error})
     case Done{+value}:
       do IO<Result<&1, &1, Error, Handle>>:
-        _reclaimed : Unit <- reclaim(path, value)
-        open.manifest.result(path, lock, Done{value})
+        opened : Result<&1, &1, Error, Handle> <- open.manifest.result(path, lock, Done{value})
+        open.reclaim.opened(path, value, opened)
 
 # Checks for a published byte SST while retaining database ownership.
 def open.locked(

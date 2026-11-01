@@ -57,3 +57,9 @@ def Laws.retired_without_publication_takes_every_sst():
 
 def Laws.retired_keeps_the_generation_four_sst():
   {==}
+
+def Laws.retired_never_takes_the_published_name():
+  {==}
+
+def Laws.generation_path_uses_the_shared_name():
+  {==}

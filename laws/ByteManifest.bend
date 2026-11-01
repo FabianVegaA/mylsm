@@ -96,3 +96,18 @@ law retired_without_publication_takes_every_sst:
 law retired_keeps_the_generation_four_sst:
   {Manifest.retired(Manifest.HasSst{}, ["SST", "WAL"]) ==
     [] : List<&2, String>}
+
+# Verifies the published generation file, named by the shared function, is never retired.
+law retired_never_takes_the_published_name:
+  {[Manifest.retired(Manifest.GenerationSst{1}, [Manifest.sst.generation.name(1)]),
+    Manifest.retired(Manifest.GenerationSst{10}, [Manifest.sst.generation.name(10)]),
+    Manifest.retired(Manifest.GenerationSst{255}, [Manifest.sst.generation.name(255)]),
+    Manifest.retired(Manifest.GenerationSst{65536}, [Manifest.sst.generation.name(65536)]),
+    Manifest.retired(Manifest.GenerationSst{4294967295},
+      [Manifest.sst.generation.name(4294967295)])] ==
+    [[], [], [], [], []] : List<&2, List<&2, String>>}
+
+# Verifies the generation path is the directory joined with the shared file name.
+law generation_path_uses_the_shared_name:
+  {Manifest.sst.generation.path("db", 10) ==
+    "db/" ++ Manifest.sst.generation.name(10) : String}

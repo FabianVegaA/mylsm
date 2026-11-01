@@ -39,8 +39,12 @@ def u32.bytes(value: U32) -> Bytes.Bytes:
 def sst.name() -> Bytes.Bytes:
   literal(Bytes.from_hex("535354"))
 
+# Names the SST file of one generation.
+def sst.generation.name(file_id: U32) -> String:
+  "SST." ++ Bytes.to_hex(u32.bytes(file_id))
+
 def sst.generation.path(directory: String, file_id: U32) -> String:
-  directory ++ "/SST." ++ Bytes.to_hex(u32.bytes(file_id))
+  directory ++ "/" ++ sst.generation.name(file_id)
 
 # Creates two owned copies for hashing and output.
 def clone.pair(+len: U32, copies: Array<U32> & Array<U32>) -> Bytes.Bytes & Bytes.Bytes:
@@ -431,7 +435,7 @@ def decode(input: Bytes.Bytes) -> Result<&1, &1, Error, ManifestValue>:
 
 def retired.current(value: ManifestValue) -> Maybe<&2, String>:
   match value:
-    case GenerationSst{file_id}: Some{"SST." ++ Bytes.to_hex(u32.bytes(file_id))}
+    case GenerationSst{file_id}: Some{sst.generation.name(file_id)}
     case _: None{}
 
 def retired.published(current: Maybe<&2, String>, +name: String) -> Bool:
