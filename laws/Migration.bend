@@ -21,7 +21,7 @@ law manifest_alone_never_admits_migration:
 # Rejects current storage as a migration source.
 law non_legacy_storage_is_rejected:
   {Migrate.plan(FormatInspect.Inspection{
-      FormatInspect.Identity{"0.7.0.0", "0.6.0.0", 4}, FormatInspect.Valid{}},
+      FormatInspect.Identity{"0.6.0.0", "0.6.0.0", 4}, FormatInspect.Valid{}},
     Migrate.LegacyFilesVerified{4n, 64n}, True{}, 4n, 64n) ==
     Migrate.MigrateRejected{Migrate.UnsupportedSource{}} : Migrate.Decision}
 

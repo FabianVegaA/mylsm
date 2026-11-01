@@ -13,7 +13,7 @@
 
 clangStdenv.mkDerivation {
   pname = "mylsm";
-  version = "0.7.0.0-alpha";
+  version = "0.6.0.0-alpha";
   src = lib.fileset.toSource {
     root = ../.;
     fileset = lib.fileset.unions [

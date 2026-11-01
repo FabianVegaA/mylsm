@@ -21,7 +21,7 @@ def legacy.matches(identity: FormatInspect.Identity) -> Bool:
 def current.matches(identity: FormatInspect.Identity) -> Bool:
   match identity:
     case FormatInspect.Identity{package_version, storage_version, generation}:
-      String.eq(package_version, "0.7.0.0") &&
+      String.eq(package_version, "0.6.0.0") &&
         String.eq(storage_version, "0.6.0.0") && U32.is_eq(generation, 4)
 
 # Checks that unsupported signatures carry no recognized generation.

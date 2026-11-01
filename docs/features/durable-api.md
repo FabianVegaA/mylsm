@@ -93,7 +93,7 @@ de las ejecuciones registradas.
 
 ## Motor único
 
-Desde 0.7.0.0 la fachada expone solo `Bytes` y `Utf8`, ambas sobre el motor byte. La
+En 0.6.0.0 la fachada expone solo `Bytes` y `Utf8`, ambas sobre el motor byte. La
 API de texto 0.5 (`create`, `open_existing`, `put`, `get`, `Session`, `run_session`,
 `create_database`, `open_database`, `InMemory.Session` y `open_recovering`) y su motor
 de niveles se retiraron. `Utf8.put`, `Utf8.delete` y `Utf8.write_batch` devuelven `Unit`.
