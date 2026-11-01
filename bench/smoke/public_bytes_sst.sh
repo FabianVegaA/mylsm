@@ -14,6 +14,11 @@ trap 'rm -rf "$DB" "$NEW_EMPTY"' EXIT
 rmdir "$DB"
 rmdir "$NEW_EMPTY"
 
+copy_db() {
+  mkdir -p -- "$2"
+  find "$1" -maxdepth 1 -type f -exec cp -p {} "$2/" \;
+}
+
 bash "$ROOT/bench/smoke/public_scan_reference.sh"
 bash "$ROOT/bench/smoke/public_scan_read_error.sh"
 bash "$ROOT/bench/smoke/public_cursor_edges.sh"
@@ -22,9 +27,9 @@ MYLSM_DB_PATH="$NEW_EMPTY" bend "$ROOT/bench/smoke/byte_manifest_new_empty.bend"
 MYLSM_DB_PATH="$DB" MYLSM_BYTES_MODE=create bend "$ROOT/bench/smoke/public_bytes_api.bend"
 test -s "$DB/SST.00000002"
 MYLSM_DB_PATH="$FLUSH_DELTA" bend "$ROOT/bench/smoke/byte_flush_clears_delta.bend"
-cp -R "$DB" "$DB/batch-stats"
+copy_db "$DB" "$DB/batch-stats"
 MYLSM_DB_PATH="$DB/batch-stats" bend "$ROOT/bench/smoke/byte_sst_batch_stats.bend"
-cp -R "$DB" "$SST_ONLY"
+copy_db "$DB" "$SST_ONLY"
 truncate -s 8 "$SST_ONLY/WAL"
 MYLSM_DB_PATH="$SST_ONLY" bend "$ROOT/bench/smoke/public_bytes_sst_only.bend"
 MYLSM_DB_PATH="$SST_ONLY" bend "$ROOT/bench/smoke/byte_recovery_delta.bend"
@@ -33,7 +38,7 @@ MYLSM_DB_PATH="$SST_ONLY" bend "$ROOT/bench/smoke/byte_sst_delta_compact.bend"
 MYLSM_DB_PATH="$SST_ONLY" bend "$ROOT/bench/smoke/byte_recovery_delta.bend"
 MYLSM_DB_PATH="$SST_ONLY" bend "$ROOT/bench/smoke/public_bytes_sst_only.bend"
 MYLSM_DB_PATH="$DB" MYLSM_BYTES_MODE=open bend "$ROOT/bench/smoke/public_bytes_api.bend"
-cp -R "$DB" "$LEGACY"
+copy_db "$DB" "$LEGACY"
 cp "$LEGACY/SST.00000002" "$LEGACY/SST"
 truncate -s 8 "$LEGACY/WAL"
 MYLSM_DB_PATH="$LEGACY" bend "$ROOT/bench/smoke/byte_manifest_legacy_open.bend" >/dev/null
@@ -47,15 +52,15 @@ BEFORE=$(cksum "$DB/LOCK" "$DB/MANIFEST" "$DB/WAL" "$DB/SST.00000002")
 MYLSM_DB_PATH="$DB" bend "$ROOT/bench/smoke/format_inspect_public.bend"
 AFTER=$(cksum "$DB/LOCK" "$DB/MANIFEST" "$DB/WAL" "$DB/SST.00000002")
 test "$BEFORE" = "$AFTER"
-cp -R "$DB" "$NO_LOCK"
+copy_db "$DB" "$NO_LOCK"
 rm "$NO_LOCK/LOCK"
 MYLSM_DB_PATH="$NO_LOCK" bend "$ROOT/bench/smoke/format_inspect_missing_lock.bend"
 test ! -e "$NO_LOCK/LOCK"
-cp -R "$DB" "$CORRUPT"
+copy_db "$DB" "$CORRUPT"
 printf '\001' | dd of="$CORRUPT/MANIFEST" bs=1 seek=55 conv=notrunc 2>/dev/null
 MYLSM_DB_PATH="$CORRUPT" bend "$ROOT/bench/smoke/byte_manifest_reject.bend"
 MYLSM_DB_PATH="$CORRUPT" bend "$ROOT/bench/smoke/format_inspect_corrupt.bend"
-cp -R "$SST_ONLY" "$MISSING"
+copy_db "$SST_ONLY" "$MISSING"
 rm "$MISSING/MANIFEST"
 MYLSM_DB_PATH="$MISSING" bend "$ROOT/bench/smoke/byte_manifest_io.bend"
 cp "$SST_ONLY/MANIFEST" "$MISSING/MANIFEST"

@@ -105,7 +105,7 @@ def main() -> IO(Unit):
   do IO<Unit>:
     +path : String <- IO.try(String, Console.get_env("MYLSM_DB_PATH"))
     result : Result<&1, &1, U32 & String, SstCursor.Cursor> <-
-      SstCursor.open.trusted(path ++ "/SST",
+      SstCursor.open.trusted(path ++ "/SST.00000001",
         SstCursor.Bounds{None{}, None{}, None{}})
     opened([
       ByteMemTable.Entry{bytes("00"), Some{bytes("39")}},

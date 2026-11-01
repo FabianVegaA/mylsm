@@ -89,5 +89,5 @@ def main() -> IO(Unit):
   do IO<Unit>:
     +directory : String <- IO.try(String, Console.get_env("MYLSM_DB_PATH"))
     result : Result<&1, &1, U32 & String, File> <-
-      File.open(directory ++ "/SST", "r")
+      File.open(directory ++ "/SST.00000001", "r")
     opened(result)

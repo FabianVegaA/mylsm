@@ -89,11 +89,11 @@ def main() -> IO(Unit):
   do IO<Unit>:
     +path : String <- IO.try(String, Console.get_env("MYLSM_DB_PATH"))
     result : Result<&1, &1, U32 & String, SstCursor.Cursor> <-
-      SstCursor.open(path ++ "/SST",
+      SstCursor.open(path ++ "/SST.00000001",
         SstCursor.Bounds{Some{Bytes.new(1)}, Some{Bytes.new(2)},
           Some{Bytes.new(1)}})
     _opened : Unit <- opened(result)
     routed : Result<&1, &1, U32 & String, SstCursor.Cursor> <-
-      SstCursor.open(path ++ "/SST",
+      SstCursor.open(path ++ "/SST.00000001",
         SstCursor.Bounds{Some{Bytes.new(2)}, None{}, None{}})
     route.opened(routed)

@@ -189,8 +189,8 @@ def database.closed(
       do IO<Unit>:
         _closed : Result<&1, &1, MyLSM.Bytes.Error, Unit> <- MyLSM.Bytes.close(handle)
         reader : Result<&1, &1, U32 & String, ByteBlockReader.Reader> <-
-          ByteBlockReader.open(path ++ "/SST")
-        check.opened(reader, path ++ "/SST")
+          ByteBlockReader.open(path ++ "/SST.00000001")
+        check.opened(reader, path ++ "/SST.00000001")
 
 def database.flushed(
   pair: MyLSM.Bytes.Handle & Result<&1, &1, MyLSM.Bytes.Error, Unit>,

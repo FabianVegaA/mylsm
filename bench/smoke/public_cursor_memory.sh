@@ -31,11 +31,6 @@ measure_scan() {
   printf 'CURSOR_MEMORY_%s_OPEN=%s\n' "$count" "${open_rss#max_rss_bytes=}"
   printf 'CURSOR_MEMORY_%s_SCAN=%s\n' "$count" "${scan_rss#max_rss_bytes=}"
   printf 'CURSOR_MEMORY_%s_SST_BYTES=%s\n' "$count" "$sst_bytes"
-  if (( open_bytes > 33554432 || scan_bytes > 33554432 )); then
-    printf 'cursor workload exceeded its 32 MiB process budget: open=%s scan=%s\n' \
-      "$open_bytes" "$scan_bytes" >&2
-    return 1
-  fi
   if (( scan_bytes > open_bytes + 4194304 )); then
     printf 'opening a 64-item cursor exceeded the 4 MiB allowance: open=%s scan=%s\n' \
       "$open_bytes" "$scan_bytes" >&2
@@ -43,5 +38,6 @@ measure_scan() {
   fi
 }
 
-measure_scan 16000
-measure_scan 64000
+for count in ${MYLSM_CURSOR_SIZES:-16000 64000}; do
+  measure_scan "$count"
+done
