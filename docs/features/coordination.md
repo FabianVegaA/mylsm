@@ -1,129 +1,127 @@
-# Propietario y clientes coordinados
+# Owner and coordinated clients
 
-## Propósito
+## Purpose
 
-Un solo proceso posee el lock del filesystem y ejecuta las operaciones durables de una
-base. Otros procesos locales pueden enviarle solicitudes por un socket Unix. La fachada
-[Bytes/Utf8](durable-api.md) representa ambas rutas mediante handles locales o remotos.
+A single process holds the filesystem lock and performs a database's durable operations.
+Other local processes can send requests over a Unix socket. The
+[Bytes/Utf8](durable-api.md) facade represents both paths through local or remote handles.
 
-## Propiedad y descubrimiento
+## Ownership and discovery
 
-La exclusión usa `flock` sobre un descriptor abierto de `LOCK`. El archivo permanece
-en disco al cerrar; su existencia no demuestra que la base esté ocupada. El lock se
-libera al cerrar el descriptor o terminar el proceso.
+Exclusion uses `flock` on an open `LOCK` descriptor. The file remains on disk after
+closing; its existence does not demonstrate that the database is busy. The lock is
+released when the descriptor closes or the process terminates.
 
-La apertura canónica y el descubrimiento del endpoint determinan si usar un propietario
-existente. El proceso de servicio tiene su entrada en
-[app/owner/mylsm_owner.bend](../../app/owner/mylsm_owner.bend). El protocolo incluye
-versión, generación del propietario, identificador y código de operación.
+Canonical opening and endpoint discovery determine whether to use an existing owner.
+The service process entry point is
+[app/owner/mylsm_owner.bend](../../app/owner/mylsm_owner.bend). The protocol includes
+version, owner generation, identifier, and operation code.
 
-`open_existing_wait` espera únicamente la adquisición del lock después de comprobar
-el manifest. Distingue el resultado inmediato `Busy` del vencimiento `Timeout`;
-no convierte una espera exitosa en permiso para reinterpretar formatos incompatibles.
+`open_existing_wait` waits only to acquire the lock after checking the manifest.
+It distinguishes the immediate `Busy` result from expiration with `Timeout`;
+a successful wait does not grant permission to reinterpret incompatible formats.
 
-Cada apertura remota consulta `DescribeOwner` (operación 16) y valida el codec de
-opciones efectivo antes de devolver el handle. `OptionsCodec` usa `MLO6`, versión
-u32be 1 y 17 campos u32be en 76 bytes. Las variantes
-`Bytes.create_with_options`, `Bytes.open_existing_with_options` y sus equivalentes
-Utf8 rechazan opciones inválidas antes de abrir. Si existe un owner, comparan los
-17 campos y devuelven `InvalidArgument` ante un mismatch; no inician un proceso
-owner ni modifican la configuración del existente. El owner actual publica defaults.
-La ruta local acepta defaults y rechaza opciones no soportadas, porque todavía no
-recibe límites configurables.
+Each remote open queries `DescribeOwner` (operation 16) and validates the effective
+options codec before returning the handle. `OptionsCodec` uses `MLO6`, u32be version 1,
+and 17 u32be fields in 76 bytes. The `Bytes.create_with_options` and
+`Bytes.open_existing_with_options` variants and their Utf8 counterparts reject invalid
+options before opening. If an owner exists, they compare all 17 fields and return
+`InvalidArgument` on a mismatch; they neither start an owner process nor modify the
+existing owner's configuration. The current owner publishes defaults. The local path
+accepts defaults and rejects unsupported options because it does not yet receive
+configurable limits.
 
-## Despacho y resultados inciertos
+## Dispatch and uncertain outcomes
 
-El reactor del owner mantiene varias conexiones nonblocking y avanza headers, payloads
-y respuestas parciales por readiness. Cada conexión admite un request pendiente, sin
-pipelining. Las mutaciones se serializan bajo el único handle durable; no hay varios
-escritores independientes sobre los archivos. `EINTR` y `EAGAIN`/`EWOULDBLOCK` en
-`poll` o `accept` se tratan como transitorios y devuelven el loop a la espera.
+The owner reactor maintains multiple nonblocking connections and advances partial
+headers, payloads, and responses according to readiness. Each connection allows one
+pending request, without pipelining. Mutations are serialized under the single durable
+handle; there are no independent concurrent writers to the files. `EINTR` and
+`EAGAIN`/`EWOULDBLOCK` from `poll` or `accept` are treated as transient and return the
+loop to waiting.
 
-El owner rechaza headers cuyo payload supera 16 MiB antes de leerlo y asignarlo. El
-preflight rechaza con `ResourceLimit` una respuesta cuya cota individual no cabe antes
-del dispatch. Si un productor excede su cota después del dispatch, el owner responde
-con payload vacío: una lectura recibe `ResourceLimit` y una mutación, que ya se aplicó,
-recibe `CommitUnknown`. Las mutaciones responden con payload vacío, así que en la
-práctica ese segundo caso no ocurre. Los clientes locales conservan el ceiling de
-protocolo de 1 GiB.
+The owner rejects headers whose payload exceeds 16 MiB before reading or allocating
+it. Preflight returns `ResourceLimit` before dispatch when an individual response bound
+will not fit. If a producer exceeds its bound after dispatch, the owner responds with
+an empty payload: a read receives `ResourceLimit`, and a mutation, which has already
+been applied, receives `CommitUnknown`. Mutations respond with empty payloads, so the
+second case does not occur in practice. Local clients retain the 1 GiB protocol cap.
 
-El cliente distingue una solicitud no despachada de una mutación cuya respuesta se
-perdió después del despacho. En el segundo caso, `CommitUnknown` impide suponer que
-el cambio no ocurrió. Reabrir y consultar antes de decidir un reintento; no repetir
-automáticamente la mutación.
+The client distinguishes an undispatched request from a mutation whose response was
+lost after dispatch. In the latter case, `CommitUnknown` prevents assuming that the
+change did not occur. Reopen and query before deciding whether to retry; do not
+automatically repeat the mutation.
 
-## Generaciones y recursos remotos
+## Generations and remote resources
 
-Las solicitudes y los recursos están asociados a una generación del propietario. Un
-handle anterior recibe `StaleOwner` al dirigirse a otra generación. Abrir un handle
-nuevo para descubrir el propietario vigente; no reproducir tokens de cursores o
-snapshots viejos contra el nuevo.
+Requests and resources are associated with an owner generation. An old handle receives
+`StaleOwner` when addressing another generation. Open a new handle to discover the
+current owner; do not replay old cursor or snapshot tokens against the new one.
 
-Los registros de snapshots y cursores viven en el propietario. Sus límites, cierre y
-retención de SST se describen en [scans-and-snapshots.md](scans-and-snapshots.md).
-El propietario limita snapshots a 64, cursores a 4.096 en total y 64 cursores por
-snapshot. La validación integral de tokens viejos después de reinicios sigue pendiente.
+Snapshot and cursor registries live in the owner. Their limits, closure, and SST
+retention are described in [scans-and-snapshots.md](scans-and-snapshots.md).
+The owner limits snapshots to 64, cursors to 4,096 in total, and cursors per snapshot
+to 64. Comprehensive validation of old tokens after restarts remains pending.
 
-## Restricciones actuales
+## Current constraints
 
-El owner tiene una cola FIFO runtime limitada por solicitudes y bytes. Los frames
-completos se admiten en orden ascendente de ID estable y se despacha como máximo una
-petición por tick. Una cabeza que espera crédito TX conserva su posición; el poll
-espera readiness o deadline mientras no haya trabajo elegible. Una request que excede
-el presupuesto de cola recibe `ResourceLimit`; la saturación recibe `Busy`. El smoke
-`owner_queue.sh` pausa el owner antes del dispatch, admite dos frames de 64 bytes con
-presupuesto de 128, rechaza el tercero, cancela el segundo al detectar el half-close y
-admite una petición de reemplazo. Dos mutaciones sobrescriben la misma clave; el valor
-final y la ausencia de las mutaciones cancelada/rechazada se comprueban antes y después
-de reiniciar. El presupuesto de cola puede ser menor que el techo de frame, de modo que
-la admisión individual puede rechazar un frame válido de transporte.
+The owner has a runtime FIFO queue bounded by requests and bytes. Complete frames are
+admitted in ascending stable-ID order, and at most one request is dispatched per tick.
+A head waiting for TX credit retains its position; poll waits for readiness or a deadline
+while no work is eligible. A request exceeding the queue budget receives `ResourceLimit`;
+saturation receives `Busy`. The `owner_queue.sh` smoke test pauses the owner before
+dispatch, admits two 64-byte frames with a budget of 128, rejects the third, cancels the
+second upon detecting half-close, and admits a replacement request. Two mutations
+overwrite the same key; the final value and absence of the canceled/rejected mutations
+are checked before and after restart. The queue budget can be smaller than the frame
+cap, so individual admission may reject a transport-valid frame.
 
-El reactor drena bytes legibles aunque `poll()` también señale hangup. Cuando una
-conexión ya admitida o en cola se cierra, elimina sus peticiones pendientes y cierra el
-socket antes del siguiente dispatch. La petición retirada de la cola conserva su
-reserva en un estado InFlight hasta producir el frame; no vuelve a la cola ni se cancela
-después del dispatch.
+The reactor drains readable bytes even when `poll()` also signals hangup. When an
+already admitted or queued connection closes, it removes pending requests and closes
+the socket before the next dispatch. A dequeued request retains its reservation in an
+InFlight state until it produces the frame; it is neither requeued nor canceled after
+dispatch.
 
-Después de validar el header de 24 bytes, el owner reserva el pico RX completo antes
-de leer payload: `48 + 3 × payload_bytes`, que cubre header/chunks, el frame ensamblado
-y el payload decodificado mientras coexisten. Los headers usan slots fijos limitados por
-`max_connections`; cada conexión también dispone de un frame de control de 28 bytes
-fuera del presupuesto TX de payload. Si el pico individual excede `receive_bytes`, responde
-`ResourceLimit` y cierra; si cabe en el límite total pero no queda crédito, responde
-`Busy` y cierra sin conservar payload parcial. Al completar el frame, la reserva pasa a
-la admisión de la cola. Una lectura adicional sobre una conexión en espera o en cola
-cierra esa conexión, y POLLIN permanece activo para detectar half-close; así no se
-drena pipelining ni se pierde la señal de cierre.
+After validating the 24-byte header, the owner reserves the full RX peak before reading
+the payload: `48 + 3 × payload_bytes`, covering header/chunks, the assembled frame,
+and the decoded payload while they coexist. Headers use fixed slots bounded by
+`max_connections`; each connection also has a 28-byte control frame outside the payload
+TX budget. If the individual peak exceeds `receive_bytes`, it responds `ResourceLimit`
+and closes; if it fits the total limit but no credit remains, it responds `Busy` and
+closes without retaining partial payload. Once the frame is complete, the reservation
+passes to queue admission. An additional read on a waiting or queued connection closes
+that connection, and POLLIN remains active to detect half-close; this avoids draining
+pipelined requests or losing the closure signal.
 
-Los deadlines monotónicos cierran frames parciales y limitan la espera de cola y la
-escritura de respuesta. Los smokes cubren peer silencioso, fragmentación byte a byte,
-EOF parcial, cliente que no lee y progreso concurrente. Las fixtures
-`owner_tx_budget.sh` y `owner_rx_budget.sh` cubren presión TX/FIFO, cota RX, Busy,
-ResourceLimit y reintento tras liberación. Siguen pendientes oráculos numéricos de
-reservas y picos, ledger/stats integrado, observación de poll spin, inyección
-EINTR/EAGAIN dentro del Owner, métricas de profundidad y la matriz Linux del reactor.
+Monotonic deadlines close partial frames and bound queue waiting and response writing.
+Smoke tests cover a silent peer, byte-by-byte fragmentation, partial EOF, a client that
+does not read, and concurrent progress. The `owner_tx_budget.sh` and
+`owner_rx_budget.sh` fixtures cover TX/FIFO pressure, RX bounds, Busy, ResourceLimit,
+and retry after release. Numerical oracles for reservations and peaks, an integrated
+ledger/stats view, poll-spin observation, EINTR/EAGAIN injection inside the Owner,
+depth metrics, and the Linux reactor matrix remain pending.
 
-La ruta de sockets Unix es nativa. Los efectos JavaScript devuelven una capacidad no
-soportada; Bun FFI para locking no implica soporte del servidor Unix en JavaScript.
-Consultar la [frontera de efectos](../standards/host-effects.md).
+The Unix socket path is native. JavaScript effects return an unsupported capability;
+Bun FFI locking does not imply support for the Unix server in JavaScript.
+See the [effects boundary](../standards/host-effects.md).
 
-## Implementación y comprobaciones
+## Implementation and checks
 
-- Servicio y clientes: [Owner.bend](../../src/coordinator/Owner.bend),
-  [ByteClient.bend](../../src/coordinator/ByteClient.bend) y
+- Service and clients: [Owner.bend](../../src/coordinator/Owner.bend),
+  [ByteClient.bend](../../src/coordinator/ByteClient.bend), and
   [Client.bend](../../src/coordinator/Client.bend).
-- Transporte: [Protocol.bend](../../src/coordinator/Protocol.bend),
-  [Io.bend](../../src/coordinator/Io.bend) y [UnixSocketIo.bend](../../src/coordinator/UnixSocketIo.bend).
-- Contratos: [CoordinatorPolicy.bend](../../laws/CoordinatorPolicy.bend),
-  [ClientPolicy.bend](../../laws/ClientPolicy.bend), [QueuePolicy.bend](../../laws/QueuePolicy.bend)
-  y [OwnerGeneration.bend](../../laws/OwnerGeneration.bend), con sus [testigos](../../proofs/).
-- Integración: [coordinator_owner_socket.sh](../../bench/smoke/coordinator_owner_socket.sh),
-  [coordinator_owner_cursor_dispatch.sh](../../bench/smoke/coordinator_owner_cursor_dispatch.sh)
-  [owner_frame_limit.sh](../../bench/smoke/owner_frame_limit.sh) y
+- Transport: [Protocol.bend](../../src/coordinator/Protocol.bend),
+  [Io.bend](../../src/coordinator/Io.bend), and [UnixSocketIo.bend](../../src/coordinator/UnixSocketIo.bend).
+- Contracts: [CoordinatorPolicy.bend](../../laws/CoordinatorPolicy.bend),
+  [ClientPolicy.bend](../../laws/ClientPolicy.bend), [QueuePolicy.bend](../../laws/QueuePolicy.bend),
+  and [OwnerGeneration.bend](../../laws/OwnerGeneration.bend), with their [witnesses](../../proofs/).
+- Integration: [coordinator_owner_socket.sh](../../bench/smoke/coordinator_owner_socket.sh),
+  [coordinator_owner_cursor_dispatch.sh](../../bench/smoke/coordinator_owner_cursor_dispatch.sh),
+  [owner_frame_limit.sh](../../bench/smoke/owner_frame_limit.sh),
   [owner_generation_client.bend](../../bench/smoke/owner_generation_client.bend),
   [owner_reactor_fairness.sh](../../bench/smoke/owner_reactor_fairness.sh),
-  [owner_reactor_deadline.sh](../../bench/smoke/owner_reactor_deadline.sh) y
+  [owner_reactor_deadline.sh](../../bench/smoke/owner_reactor_deadline.sh), and
   [owner_queue.sh](../../bench/smoke/owner_queue.sh).
-- Pérdida de respuesta: [coordinator_commit_unknown.sh](../../bench/crash/coordinator_commit_unknown.sh).
-  El [informe de aceptación](../../bench/results/mylsm-0.6.0.0-acceptance.md) registra
-  los seis puntos de fallo ejercitados y sus resultados de recuperación.
+- Lost responses: [coordinator_commit_unknown.sh](../../bench/crash/coordinator_commit_unknown.sh).
+  The [acceptance report](../../bench/results/mylsm-0.6.0.0-acceptance.md) records
+  the six exercised failure points and their recovery results.

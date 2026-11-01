@@ -1,45 +1,45 @@
-# Frontera de efectos de host
+# Host effects boundary
 
-## Responsabilidad
+## Responsibility
 
-Mantener Bash, C y JavaScript limitados a la operación irreducible del host. Las decisiones
-de política, interpretación del entorno, validación y transformación de datos viven en Bend,
-con leyes y testigos para las decisiones puras cuando sea práctico.
+Keep Bash, C, and JavaScript limited to the irreducible host operation. Policy decisions,
+environment interpretation, validation, and data transformation belong in Bend,
+with laws and witnesses for pure decisions when practical.
 
-Los efectos están en [src/effs](../../src/effs/); los adaptadores Bend, como
-[Fs.bend](../../src/Fs.bend), [DbLock.bend](../../src/DbLock.bend) y
-[UnixSocketIo.bend](../../src/coordinator/UnixSocketIo.bend), traducen sus resultados.
-[scripts/mylsm.sh](../../scripts/mylsm.sh) delega la CLI en Bend.
+Effects are in [src/effs](../../src/effs/); Bend adapters, such as
+[Fs.bend](../../src/Fs.bend), [DbLock.bend](../../src/DbLock.bend), and
+[UnixSocketIo.bend](../../src/coordinator/UnixSocketIo.bend), translate their results.
+[scripts/mylsm.sh](../../scripts/mylsm.sh) delegates the CLI to Bend.
 
-## Contratos que conservar
+## Contracts to preserve
 
-- Devolver errores de host para que Bend los clasifique, sin convertir una operación
-  no soportada en un éxito aparente.
-- Conservar la propiedad de archivos y recursos al devolver resultados o errores.
-- Respetar lecturas y escrituras parciales. Un error de escritura no revierte los bytes
-  que el host ya recibió.
-- Mantener el orden de append, sync, rename y sync del directorio padre que establece
-  la capa Bend. Las utilidades de archivos no sustituyen ese protocolo de durabilidad.
-- Usar exclusión real de proceso. La existencia de `LOCK` por sí sola no constituye un lock.
+- Return host errors for Bend to classify, without turning an unsupported
+  operation into apparent success.
+- Preserve ownership of files and resources when returning results or errors.
+- Respect partial reads and writes. A write error does not roll back bytes
+  the host has already received.
+- Maintain the order of append, sync, rename, and parent-directory sync established
+  by the Bend layer. File utilities do not replace that durability protocol.
+- Use real process exclusion. The existence of `LOCK` alone does not constitute a lock.
 
-El contrato de `bend-kit-files`, sus límites de IO y las versiones nominales de bytes
-están registrados en [hub-dependencies.json](../../tools/hub-dependencies.json).
+The `bend-kit-files` contract, its IO limits, and nominal byte versions
+are recorded in [hub-dependencies.json](../../tools/hub-dependencies.json).
 
-## Plataformas
+## Platforms
 
-La ruta nativa implementa los efectos de filesystem, locking y sockets Unix. El efecto
-de lock JavaScript usa `flock` mediante Bun FFI; los runtimes sin esa primitiva devuelven
-un error de capacidad. Los sockets Unix del propietario no están soportados por los
-efectos JavaScript actuales.
+The native path implements filesystem, locking, and Unix socket effects. The JavaScript
+lock effect uses `flock` through Bun FFI; runtimes without that primitive return
+a capability error. The current JavaScript effects do not support the owner's
+Unix sockets.
 
-No deducir soporte completo de una plataforma a partir de una sola primitiva aprobada.
-El [informe de aceptación](../../bench/results/mylsm-0.6.0.0-acceptance.md) delimita las
-ejecuciones registradas en Darwin arm64 y Ubuntu arm64 en Docker.
+Do not infer full platform support from a single passing primitive.
+The [acceptance report](../../bench/results/mylsm-0.6.0.0-acceptance.md) defines the scope of
+recorded runs on Darwin arm64 and Ubuntu arm64 in Docker.
 
-## Comprobar cambios
+## Checking changes
 
-Usar los fixtures dirigidos de [bench/smoke](../../bench/smoke/) y las matrices de
-[bench/crash](../../bench/crash/). Por ejemplo:
+Use the targeted fixtures in [bench/smoke](../../bench/smoke/) and the matrices in
+[bench/crash](../../bench/crash/). For example:
 
 ```sh
 bash bench/smoke/db_lock_js_unsupported.sh
@@ -48,8 +48,8 @@ bun bench/smoke/js_bun_ffi.js
 bash bench/crash/durable_commit.sh
 ```
 
-Los fixtures de plataforma deben ejecutarse donde esté disponible la primitiva ejercitada.
-Un caso `UnsupportedPlatform` comprueba rechazo explícito, no la ejecución de esa capacidad.
-Las leyes de [FsPolicy](../../laws/FsPolicy.bend), [DbLock](../../laws/DbLock.bend) y
-[UnixSocketPolicy](../../laws/UnixSocketPolicy.bend) cubren decisiones puras; no prueban
-las implementaciones del sistema operativo.
+Platform fixtures must run where the exercised primitive is available.
+An `UnsupportedPlatform` case checks explicit rejection, not execution of that capability.
+The laws in [FsPolicy](../../laws/FsPolicy.bend), [DbLock](../../laws/DbLock.bend), and
+[UnixSocketPolicy](../../laws/UnixSocketPolicy.bend) cover pure decisions; they do not prove
+the operating system implementations.

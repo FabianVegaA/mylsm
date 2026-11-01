@@ -133,6 +133,7 @@ git diff --check
 
 | Topic | Reference |
 | --- | --- |
+| Release highlights, upgrade notes and limitations | [0.6.0.0 release notes](docs/releases/0.6.0.0.md) |
 | Purpose, users and scope | [PRODUCT.md](PRODUCT.md) |
 | Agent rules | [AGENTS.md](AGENTS.md) |
 | Bend conventions and development gates | [Bend](docs/standards/bend.md), [formal verification](docs/standards/formal-verification.md), [host effects](docs/standards/host-effects.md) |

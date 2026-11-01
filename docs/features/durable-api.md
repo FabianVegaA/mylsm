@@ -1,122 +1,123 @@
-# API durable
+# Durable API
 
-## Propósito y entrada pública
+## Purpose and public entry point
 
-[mylsm.bend](../../mylsm.bend) expone `MyLSM.Bytes` y `MyLSM.Utf8` sobre el mismo motor
-durable de bytes. Importar la fachada desde este checkout para usar estas capacidades;
-[pack.json](../../pack.json) conserva un import del paquete `0.5.0.0`.
+[mylsm.bend](../../mylsm.bend) exposes `MyLSM.Bytes` and `MyLSM.Utf8` over the same
+durable byte engine. Import the facade from this checkout to use these capabilities;
+[pack.json](../../pack.json) retains an import of package `0.5.0.0`.
 
-`Bytes` acepta buffers de `bend-kit-bytes.Bytes`. `Utf8` acepta `String`, codifica UTF-8
-y devuelve `InvalidUtf8` al leer bytes que no representan texto válido. No reemplaza
-ni descarta bytes. Ambas vistas comparten el [orden binario](storage-format.md).
+`Bytes` accepts `bend-kit-bytes.Bytes` buffers. `Utf8` accepts `String`, encodes UTF-8,
+and returns `InvalidUtf8` when reading bytes that do not represent valid text. It neither
+replaces nor discards bytes. Both views share the [binary order](storage-format.md).
 
-## Operaciones
+## Operations
 
-| Operación | Contrato |
+| Operation | Contract |
 | --- | --- |
-| `create(path)` | Reservar una base nueva y adquirir su propiedad |
-| `open_existing(path)` | Recuperar una base existente; no crear una faltante |
-| `open_existing_wait(path, timeout_ms, backoff_ms)` | Esperar el lock con timeout acotado |
-| `create_with_options(path, options)` | Crear local con defaults o validar opciones contra el owner remoto |
-| `open_existing_with_options(path, options)` | Abrir sólo si las opciones válidas coinciden con el owner remoto |
-| `put(handle, key, value)` / `delete(handle, key)` | Confirmar una mutación durable |
-| `write_batch(handle, mutations)` | Confirmar un lote atómico |
-| `get(handle, key)` | Devolver el valor o ausencia |
-| `stats(handle)` | Consultar totales visibles y recursos gestionados por el propietario |
-| `flush(handle)` / `compact(handle)` | Publicar el estado o compactar la tabla byte actual |
-| `close(handle)` | Consumir el handle y liberar sus recursos de propiedad |
+| `create(path)` | Reserve a new database and acquire ownership |
+| `open_existing(path)` | Recover an existing database; do not create a missing one |
+| `open_existing_wait(path, timeout_ms, backoff_ms)` | Wait for the lock with a bounded timeout |
+| `create_with_options(path, options)` | Create locally with defaults or validate options against the remote owner |
+| `open_existing_with_options(path, options)` | Open only if valid options match the remote owner |
+| `put(handle, key, value)` / `delete(handle, key)` | Commit a durable mutation |
+| `write_batch(handle, mutations)` | Commit an atomic batch |
+| `get(handle, key)` | Return the value or absence |
+| `stats(handle)` | Query visible totals and owner-managed resources |
+| `flush(handle)` / `compact(handle)` | Publish the state or compact the current byte table |
+| `close(handle)` | Consume the handle and release its ownership resources |
 
-Cada operación que conserva el handle lo devuelve junto al resultado tipado. Pasar ese
-handle a la siguiente operación. Un handle puede ser local o representar un cliente del
-[propietario coordinado](coordination.md).
+Each operation that preserves the handle returns it alongside the typed result. Pass
+that handle to the next operation. A handle can be local or represent a client of the
+[coordinated owner](coordination.md).
 
-Las variantes con opciones existen en `Bytes` y `Utf8`. Un mismatch remoto devuelve
-`InvalidArgument` antes de operar la base; una opción local no soportada también se
-rechaza. La ruta remota obtiene la configuración efectiva mediante el handshake de
-coordinación. El owner de esta revisión publica defaults; las opciones personalizadas
-locales aún no son configurables.
+The options variants exist in both `Bytes` and `Utf8`. A remote mismatch returns
+`InvalidArgument` before operating on the database; an unsupported local option is also
+rejected. The remote path obtains the effective configuration through the coordination
+handshake. The owner in this revision publishes defaults; custom local options are not
+yet configurable.
 
-`open_existing` requiere un manifest válido. Esperar el lock no crea la base: el timeout
-máximo es 60.000 ms y el backoff válido está entre 1 y 1.000 ms. Una ruta faltante,
-una base ocupada y un plazo vencido son resultados diferentes.
+`open_existing` requires a valid manifest. Waiting for the lock does not create the
+database: the maximum timeout is 60,000 ms and valid backoff is between 1 and 1,000 ms.
+A missing path, a busy database, and an expired deadline are distinct results.
 
-Los [ejemplos ejecutables](../../examples/README.md) muestran escritura de texto, bytes
-fuera de UTF-8 y un recorrido estable de snapshot usando la fachada pública.
+The [executable examples](../../examples/README.md) demonstrate text writes, non-UTF-8
+bytes, and stable snapshot traversal using the public facade.
 
-## Escritura y recuperación
+## Writes and recovery
 
-El motor valida y codifica el lote antes de acceder al WAL. Después hace append,
-sincroniza y actualiza el estado en memoria. Una confirmación exitosa implica que la
-mutación pasó por el protocolo durable. Un fallo posterior de mantenimiento no debe
-interpretarse como reversión de una escritura ya confirmada.
+The engine validates and encodes the batch before accessing the WAL. It then appends,
+syncs, and updates in-memory state. A successful acknowledgment means the mutation
+passed through the durability protocol. A subsequent maintenance failure must not be
+interpreted as rolling back an already acknowledged write.
 
-Un rechazo anterior al append deja la escritura sin aplicar. Un error después de iniciar
-el append o un fallo de sync puede producir `CommitUnknown` y dejar el handle envenenado
-para nuevas escrituras. Cerrar, reabrir y consultar el estado antes de decidir un reintento.
-Una respuesta remota perdida después del despacho también puede dejar un resultado
-incierto: el cliente no repite automáticamente una mutación despachada.
+Rejection before append leaves the write unapplied. An error after append begins or
+a sync failure may produce `CommitUnknown` and poison the handle for further writes.
+Close, reopen, and query the state before deciding whether to retry. A remote response
+lost after dispatch can also leave the outcome uncertain: the client does not
+automatically retry a dispatched mutation.
 
-Los lotes admiten de 1 a 256 mutaciones. El lote vacío produce `InvalidArgument` y superar
-el conteo o tamaño permitido produce `ResourceLimit`. Las claves tienen un techo de
-1 GiB; los frames de una mutación están acotados a 1 GiB + 36 bytes y los frames
-multimutación a 1 MiB. Son constantes de implementación, no opciones por base.
+Batches accept 1 to 256 mutations. An empty batch produces `InvalidArgument`, and
+exceeding the allowed count or size produces `ResourceLimit`. Keys are capped at
+1 GiB; single-mutation frames are bounded to 1 GiB + 36 bytes and multi-mutation frames
+to 1 MiB. These are implementation constants, not per-database options.
 
-El motor byte recupera el manifest y la SST publicada, valida bloques y reproduce el
-WAL en el delta activo. Tras un flush exitoso libera del MemTable las entradas publicadas;
-conserva los totales de base para consultar la SST sin mantener otra copia completa.
-La compactación byte actual procesa una sola tabla y elimina tombstones; la compactación
-multinivel de ese motor sigue pendiente.
+The byte engine recovers the manifest and published SST, validates blocks, and replays
+the WAL into the active delta. After a successful flush, it releases published entries
+from the MemTable; it retains database totals to query the SST without keeping another
+complete copy. Current byte compaction processes a single table and removes tombstones;
+multilevel compaction for this engine remains pending.
 
-Cada flush o compactación publica una SST nueva y deja la anterior en disco mientras el
-handle sigue abierto. Cuando la base se abre con éxito (lock tomado, SST publicada
-validada y WAL reproducido), se borran los archivos `SST.*` que el manifest no
-referencia, incluidos temporales de una escritura interrumpida; si la apertura falla no
-se borra nada;
-los directorios y otros archivos no se tocan. La limpieza es de mejor esfuerzo: un fallo
-al borrar no impide abrir.
+Each flush or compaction publishes a new SST and leaves the previous one on disk while
+the handle remains open. When the database opens successfully (lock acquired, published
+SST validated, and WAL replayed), `SST.*` files not referenced by the manifest are deleted,
+including temporary files from an interrupted write. If opening fails, nothing is
+deleted; directories and other files are untouched. Cleanup is best effort: a deletion
+failure does not prevent opening.
 
-## Lectores y transferencia
+## Readers and transfer
 
-- [Scans y snapshots](scans-and-snapshots.md): límites `[lower, upper)`, prefijos,
-  cursores con propiedad y diferencias entre snapshots locales y del propietario.
-- [Backup y migración](backup-and-migration.md): exportación consistente, publicación
-  sin reemplazo, restore validado y migración desde almacenamiento histórico.
-- [Formato](storage-format.md): generaciones del manifest, encodings y comparación.
+- [Scans and snapshots](scans-and-snapshots.md): `[lower, upper)` bounds, prefixes,
+  owned cursors, and differences between local and owner snapshots.
+- [Backup and migration](backup-and-migration.md): consistent export, publication
+  without replacement, validated restore, and migration from historical storage.
+- [Format](storage-format.md): manifest generations, encodings, and comparison.
 
-`inspect(path)` requiere el archivo `LOCK` existente, adquiere exclusión y valida el
-manifest acotado sin crear ni reparar la base. No comprueba el contenido del WAL o SST;
-la identidad reportada tiene la limitación descrita en el documento de formato.
+`inspect(path)` requires an existing `LOCK` file, acquires exclusive access, and validates
+the bounded manifest without creating or repairing the database. It does not check WAL
+or SST contents; the reported identity has the limitation described in the format document.
 
-## Estadísticas y límites conocidos
+## Statistics and known limits
 
-`Bytes.Stats` contiene cinco totales: entradas visibles, bytes de payload visible,
-snapshots del propietario, bytes retenidos por esos snapshots y cursores del propietario.
-Los handles locales reportan cero para los tres recursos gestionados por el propietario.
-Payload no incluye overhead del runtime o allocator y no equivale a RSS.
+`Bytes.Stats` contains five totals: visible entries, visible payload bytes, owner
+snapshots, bytes retained by those snapshots, and owner cursors. Local handles report
+zero for the three owner-managed resources. Payload excludes runtime or allocator
+overhead and is not equivalent to RSS.
 
-Siguen pendientes métricas de disco, buffers, cola, conexiones, fallos de operaciones y
-generaciones persistidas para esta fachada. La aceptación 0.6 está incompleta; consultar
-el [informe de evidencia](../../bench/results/mylsm-0.6.0.0-acceptance.md) para el alcance
-de las ejecuciones registradas.
+Metrics for disk, buffers, queues, connections, operation failures, and persisted
+generations remain pending for this facade. Release 0.6.0.0 is accepted on macOS arm64;
+Linux x86_64 is partially verified. See the
+[evidence report](../../bench/results/mylsm-0.6.0.0-acceptance.md) for recorded runs
+and remaining work assigned to 0.6.0.1.
 
-## Motor único
+## Single engine
 
-En 0.6.0.0 la fachada expone solo `Bytes` y `Utf8`, ambas sobre el motor byte. La
-API de texto 0.5 (`create`, `open_existing`, `put`, `get`, `Session`, `run_session`,
-`create_database`, `open_database`, `InMemory.Session` y `open_recovering`) y su motor
-de niveles se retiraron. `Utf8.put`, `Utf8.delete` y `Utf8.write_batch` devuelven `Unit`.
-Una base con formato 0.5 se migra con `migrate_legacy`; `inspect` sigue reconociéndola.
+In 0.6.0.0, the facade exposes only `Bytes` and `Utf8`, both over the byte engine. The
+0.5 text API (`create`, `open_existing`, `put`, `get`, `Session`, `run_session`,
+`create_database`, `open_database`, `InMemory.Session`, and `open_recovering`) and its
+leveled engine have been removed. `Utf8.put`, `Utf8.delete`, and `Utf8.write_batch` return
+`Unit`. A database in the 0.5 format is migrated with `migrate_legacy`; `inspect` still
+recognizes it.
 
-## Implementación y comprobaciones
+## Implementation and checks
 
-- Motor byte: [ByteDurableDb.bend](../../src/ByteDurableDb.bend),
-  [ByteWalIo.bend](../../src/ByteWalIo.bend) y [ByteSstIo.bend](../../src/ByteSstIo.bend).
-- Contratos puros: [DurableBatchPolicy.bend](../../laws/DurableBatchPolicy.bend),
-  [ByteRecoveryPolicy.bend](../../laws/ByteRecoveryPolicy.bend) y
-  [OwnerOpenPolicy.bend](../../laws/OwnerOpenPolicy.bend), con testigos en [proofs](../../proofs/).
-- Consumidores: [shared_utf8_bytes.sh](../../bench/smoke/shared_utf8_bytes.sh),
+- Byte engine: [ByteDurableDb.bend](../../src/ByteDurableDb.bend),
+  [ByteWalIo.bend](../../src/ByteWalIo.bend), and [ByteSstIo.bend](../../src/ByteSstIo.bend).
+- Pure contracts: [DurableBatchPolicy.bend](../../laws/DurableBatchPolicy.bend),
+  [ByteRecoveryPolicy.bend](../../laws/ByteRecoveryPolicy.bend), and
+  [OwnerOpenPolicy.bend](../../laws/OwnerOpenPolicy.bend), with witnesses in [proofs](../../proofs/).
+- Consumers: [shared_utf8_bytes.sh](../../bench/smoke/shared_utf8_bytes.sh),
   [public_bytes_sst.sh](../../bench/smoke/public_bytes_sst.sh),
   [resource_limits.sh](../../bench/smoke/resource_limits.sh),
-  [durable_poisoned_close.sh](../../bench/smoke/durable_poisoned_close.sh) y
+  [durable_poisoned_close.sh](../../bench/smoke/durable_poisoned_close.sh), and
   [durable_open_wait.sh](../../bench/smoke/durable_open_wait.sh).
-- Recuperación ante fallo: [durable_commit.sh](../../bench/crash/durable_commit.sh).
+- Crash recovery: [durable_commit.sh](../../bench/crash/durable_commit.sh).

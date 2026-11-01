@@ -1,86 +1,85 @@
-# Backup, restore y migración
+# Backup, restore, and migration
 
-## Propósito
+## Purpose
 
-Exportar una vista consistente y publicar bases verificadas sin sobrescribir destinos.
-Las operaciones públicas viven en [mylsm.bend](../../mylsm.bend); el encoding y las
-generaciones están descritos en [storage-format.md](storage-format.md).
+Export a consistent view and publish verified databases without overwriting destinations.
+Public operations live in [mylsm.bend](../../mylsm.bend); encoding and generations are
+described in [storage-format.md](storage-format.md).
 
 ## Backup
 
-`Bytes.backup` materializa el snapshot local y devuelve un stream en memoria que se
-consume mediante `backup_next`. Sobre un handle remoto devuelve `UnsupportedOperation`;
-usar `backup_to` para exportar desde el propietario coordinado.
-`Bytes.backup_to(path, handle)` publica un bundle durable: un directorio en `path`
-que contiene `BACKUP`. `Utf8` ofrece las operaciones correspondientes sobre el mismo
-formato binario.
+`Bytes.backup` materializes the local snapshot and returns an in-memory stream consumed
+through `backup_next`. On a remote handle, it returns `UnsupportedOperation`;
+use `backup_to` to export from the coordinated owner.
+`Bytes.backup_to(path, handle)` publishes a durable bundle: a directory at `path`
+containing `BACKUP`. `Utf8` offers corresponding operations over the same binary format.
 
-La ruta local de `backup_to` retiene una raíz inmutable y exporta mediante un cursor
-acotado. La ruta coordinada abre un snapshot del propietario, cuenta sus entradas con
-un cursor incremental y exporta con otro cursor sobre la misma vista. Esto permite
-contar y emitir un conjunto consistente aunque continúen las escrituras.
+The local `backup_to` path retains an immutable root and exports through a bounded
+cursor. The coordinated path opens an owner snapshot, counts its entries with an
+incremental cursor, and exports with another cursor over the same view. This allows
+counting and emitting a consistent set while writes continue.
 
-El bundle se escribe en un directorio temporal hermano. Se sincronizan archivo y
-directorio, se publica con rename sin reemplazo y se sincroniza el padre. Un destino
-existente se rechaza. Un fallo en el sync final después del rename puede devolver
-`CommitUnknown`: el bundle podría estar publicado aunque no exista confirmación durable.
+The bundle is written to a sibling temporary directory. The file and directory are
+synced, publication uses rename without replacement, and the parent is synced. An
+existing destination is rejected. A final sync failure after rename may return
+`CommitUnknown`: the bundle may be published without durable confirmation.
 
-La admisión usa el presupuesto de la raíz retenida, sin un techo independiente para
-el tamaño del backup codificado. La ruta de archivo incremental evita construir el
-resultado completo en memoria; no extrapolar esa propiedad a todas las APIs de stream.
+Admission uses the retained-root budget, without an independent cap on the encoded
+backup size. The incremental file path avoids constructing the complete result in
+memory; do not extrapolate that property to every stream API.
 
 ## Restore
 
-`Bytes.restore(destination, exchange)` recibe bytes ya residentes. `restore_from(destination,
-bundle)` lee `bundle/BACKUP`, con un límite actual de 64 MiB. Ambas rutas validan versión,
-longitudes, orden estricto, ausencia de duplicados, checksums, conteo y marcador final.
+`Bytes.restore(destination, exchange)` receives bytes already in memory.
+`restore_from(destination, bundle)` reads `bundle/BACKUP`, with a current limit of
+64 MiB. Both paths validate version, lengths, strict ordering, absence of duplicates,
+checksums, count, and final marker.
 
-La implementación actual mantiene el exchange completo acotado y los registros
-decodificados en memoria durante la validación. Restore incremental sin esa materialización
-sigue pendiente.
+The current implementation keeps the entire bounded exchange and decoded records in
+memory during validation. Incremental restore without this materialization remains pending.
 
-La base se construye en un directorio temporal hermano, se sincroniza, se reabre para
-verificarla y se publica sin reemplazar un destino existente. Los tombstones y la historia
-de la base no forman parte del intercambio: se exportan entradas visibles de un snapshot.
+The database is built in a sibling temporary directory, synced, reopened for verification,
+and published without replacing an existing destination. Tombstones and database history
+are not part of the exchange: it exports visible snapshot entries.
 
-## Migración histórica
+## Historical migration
 
-`migrate_legacy(source, destination)` lee una base de la API 0.5 con almacenamiento
-0.4 / manifest generación 3. Valida sus archivos históricos y transforma sus entradas
-a la familia byte actual, publicando un manifest de generación 5. La apertura normal
-0.6 no hace esta migración implícitamente.
+`migrate_legacy(source, destination)` reads a database from API 0.5 with storage
+0.4 / manifest generation 3. It validates its historical files and transforms its entries
+into the current byte family, publishing a generation-5 manifest. Normal opening in
+0.6 does not perform this migration implicitly.
 
-La fuente se conserva. Verificar conteo, bytes de claves/valores tras la decodificación
-UTF-8 histórica y checksums antes de publicar el destino. Los formatos anteriores a
-generación 3 no están soportados. Un fallo previo a publicación no debe dejar un destino
-final; si falla la confirmación después del rename, inspeccionar antes de reintentar.
+The source is preserved. Verify the count, key/value bytes after legacy UTF-8 decoding,
+and checksums before publishing the destination. Formats older than generation 3 are
+unsupported. A failure before publication must not leave a final destination; if
+confirmation fails after rename, inspect before retrying.
 
-## Fallos y evidencia
+## Failures and evidence
 
-Los fixtures ejercitan publicación, límites de archivos y filesystem lleno. Un caso con
-`RLIMIT_FSIZE` comprueba el límite de tamaño del proceso; no demuestra comportamiento
-ante `ENOSPC`. Los fixtures Linux con tmpfs lleno ejercitan ese caso por separado.
+Fixtures exercise publication, file limits, and full filesystems. A case using
+`RLIMIT_FSIZE` checks the process file-size limit; it does not demonstrate behavior
+under `ENOSPC`. Linux fixtures with full tmpfs exercise that case separately.
 
-El [informe de aceptación](../../bench/results/mylsm-0.6.0.0-acceptance.md) registra
-entornos y resultados. La matriz final de cargas repetidas para backup/restore sigue
-incompleta. La importación/exportación del [REPL](cli.md) usa otro envelope y otra ruta;
-no intercambiar sus archivos con un bundle `BACKUP`.
+The [acceptance report](../../bench/results/mylsm-0.6.0.0-acceptance.md) records
+environments and results. The final matrix of repeated backup/restore workloads remains
+incomplete. [REPL](cli.md) import/export uses a different envelope and path;
+do not interchange its files with a `BACKUP` bundle.
 
-## Implementación y comprobaciones
+## Implementation and checks
 
 - Backup: [Backup.bend](../../src/transfer/Backup.bend),
-  [BackupIo.bend](../../src/transfer/BackupIo.bend) y
+  [BackupIo.bend](../../src/transfer/BackupIo.bend), and
   [BackupOwnerCursorIo.bend](../../src/transfer/BackupOwnerCursorIo.bend).
-- Restore y migración: [RestoreIo.bend](../../src/transfer/RestoreIo.bend),
-  [MigrateIo.bend](../../src/transfer/MigrateIo.bend) y
+- Restore and migration: [RestoreIo.bend](../../src/transfer/RestoreIo.bend),
+  [MigrateIo.bend](../../src/transfer/MigrateIo.bend), and
   [MigrateRunIo.bend](../../src/transfer/MigrateRunIo.bend).
-- Contratos: [Backup.bend](../../laws/Backup.bend),
-  [RestorePolicy.bend](../../laws/RestorePolicy.bend), [Migration.bend](../../laws/Migration.bend)
-  y [PublicationPolicy.bend](../../laws/PublicationPolicy.bend), con sus [testigos](../../proofs/).
-- Integración: [backup_restore.sh](../../bench/smoke/backup_restore.sh),
-  [public_backup_file.sh](../../bench/smoke/public_backup_file.sh) y
+- Contracts: [Backup.bend](../../laws/Backup.bend),
+  [RestorePolicy.bend](../../laws/RestorePolicy.bend), [Migration.bend](../../laws/Migration.bend),
+  and [PublicationPolicy.bend](../../laws/PublicationPolicy.bend), with their [witnesses](../../proofs/).
+- Integration: [backup_restore.sh](../../bench/smoke/backup_restore.sh),
+  [public_backup_file.sh](../../bench/smoke/public_backup_file.sh), and
   [legacy_sst_io.sh](../../bench/smoke/legacy_sst_io.sh).
-- Fallos: [backup_publish.sh](../../bench/crash/backup_publish.sh),
+- Failures: [backup_publish.sh](../../bench/crash/backup_publish.sh),
   [migration_publish.sh](../../bench/crash/migration_publish.sh),
-  [backup_enospc.sh](../../bench/crash/backup_enospc.sh) y
+  [backup_enospc.sh](../../bench/crash/backup_enospc.sh), and
   [migration_enospc.sh](../../bench/crash/migration_enospc.sh).

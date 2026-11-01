@@ -1,61 +1,61 @@
-# Desarrollo en Bend
+# Bend development
 
-## Estructura
+## Structure
 
-| Ubicación | Responsabilidad |
+| Location | Responsibility |
 | --- | --- |
-| [mylsm.bend](../../mylsm.bend) | Fachada importada por consumidores |
-| [src](../../src/) | Motor y módulos internos |
-| [laws](../../laws/) | Contratos puros agrupados por dominio |
-| [proofs](../../proofs/) | Testigos correspondientes a las leyes |
-| [app](../../app/) | CLI, demo, REPL y proceso propietario |
-| [examples](../../examples/) | Consumidores de la fachada pública |
-| [bench](../../bench/) | Integración, fallos y mediciones reproducibles |
+| [mylsm.bend](../../mylsm.bend) | Facade imported by consumers |
+| [src](../../src/) | Engine and internal modules |
+| [laws](../../laws/) | Pure contracts grouped by domain |
+| [proofs](../../proofs/) | Witnesses corresponding to the laws |
+| [app](../../app/) | CLI, demo, REPL, and owner process |
+| [examples](../../examples/) | Consumers of the public facade |
+| [bench](../../bench/) | Integration, failures, and reproducible measurements |
 
-Usar la última versión de Bend mediante la revisión fijada en
-[flake.nix](../../flake.nix) y [flake.lock](../../flake.lock), y revalidar los gates al actualizar.
-Consultar `bend guide` para sintaxis y convenciones. Las versiones de dependencias del
-Hub y sus restricciones están en [tools/hub-dependencies.json](../../tools/hub-dependencies.json).
+Use the latest Bend release through the revision pinned in
+[flake.nix](../../flake.nix) and [flake.lock](../../flake.lock), and revalidate the gates when updating.
+Consult `bend guide` for syntax and conventions. Hub dependency versions and
+constraints are in [tools/hub-dependencies.json](../../tools/hub-dependencies.json).
 
-## Diseño
+## Design
 
-Preferir funciones puras, efectos aislados y módulos con una responsabilidad clara.
-Usar nombres que expresen el dato o comportamiento; los comentarios nuevos requieren
-aprobación individual del usuario. No incluir referencias de tickets en las fuentes.
+Prefer pure functions, isolated effects, and modules with a clear responsibility.
+Use names that express the data or behavior; new comments require individual
+user approval. Do not include ticket references in source files.
 
-Elegir estructuras según el acceso: arrays contiguos para recorridos, árboles balanceados
-para acceso ordenado y estructura compartida para versiones inmutables. Evitar copias
-innecesarias y estado mutable compartido; permitir mutación local encapsulada si simplifica
-la implementación o reduce su costo.
+Choose structures based on access patterns: contiguous arrays for traversal, balanced trees
+for ordered access, and shared structure for immutable versions. Avoid unnecessary copies
+and shared mutable state; allow encapsulated local mutation when it simplifies
+the implementation or reduces its cost.
 
-Exponer trabajo independiente mediante divide y vencerás balanceado, mapas independientes
-y reducciones asociativas. Agregar paralelismo cuando la carga y el runtime justifiquen
-su costo, y comprobar la ganancia con mediciones representativas.
+Expose independent work through balanced divide and conquer, independent maps,
+and associative reductions. Add parallelism when the workload and runtime justify
+its cost, and verify the gain with representative measurements.
 
-## Lint y ancho
+## Lint and line width
 
-El hook `pre-commit` de [lefthook.yml](../../lefthook.yml) ejecuta
-[scripts/check-bend.sh](../../scripts/check-bend.sh) sobre las rutas Bend preparadas
-para el commit, incluidas las de subdirectorios. El script usa `bolt` del entorno
-Nix en `PATH`; `BOLT_BIN` permite elegir explícitamente otro ejecutable.
+The `pre-commit` hook in [lefthook.yml](../../lefthook.yml) runs
+[scripts/check-bend.sh](../../scripts/check-bend.sh) on Bend paths staged
+for commit, including those in subdirectories. The script uses `bolt` from the
+Nix environment on `PATH`; `BOLT_BIN` explicitly selects a different executable.
 
-El gate rechaza cualquier salida no exitosa de Bolt y cualquier diagnóstico no exceptuado,
-incluidas las advertencias. Conserva las excepciones de ancho del proyecto: filtra `S002`
-y los avisos `S003` cuya línea de cabecera no supere 200 caracteres. Comprueba por separado
-el máximo de 200 caracteres en cada línea de los archivos recibidos, incluidos comentarios
-y literales. Un fallo del linter no se oculta al filtrar su salida.
+The gate rejects any nonzero Bolt exit status and any diagnostic without an exemption,
+including warnings. It preserves the project's line-width exemptions: it filters `S002`
+and `S003` notices whose header line does not exceed 200 characters. It separately checks
+the 200-character maximum on every line of the supplied files, including comments
+and literals. Filtering linter output does not hide a linter failure.
 
 ```sh
 lefthook run pre-commit --all-files
 bash scripts/check-bend.sh src/Keys.bend
 ```
 
-El script devuelve cero solo si todos sus controles pasan. Corregir los hallazgos restantes.
-Una supresión exacta `# noqa: CODE` solo se permite ante un falso positivo y tras aprobar
-el usuario su comentario explicativo. No debilitar reglas en `bolt.bend` para bajar el conteo.
+The script returns zero only if all its checks pass. Fix the remaining findings.
+An exact `# noqa: CODE` suppression is allowed only for a false positive and after the user
+approves its explanatory comment. Do not weaken rules in `bolt.bend` to reduce the count.
 
-El [README](../../README.md#development) describe instalación, disparadores de los hooks
-y el alcance de los archivos parcialmente preparados.
+The [README](../../README.md#development) describes installation, hook triggers,
+and the scope of checks for partially staged files.
 
-Los gates formales se describen en [formal-verification.md](formal-verification.md);
-las restricciones de efectos, en [host-effects.md](host-effects.md).
+Formal gates are described in [formal-verification.md](formal-verification.md);
+effect constraints are described in [host-effects.md](host-effects.md).
