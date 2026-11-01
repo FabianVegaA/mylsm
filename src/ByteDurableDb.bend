@@ -12,6 +12,7 @@ import ./DurableBatchPolicy.bend as BatchPolicy
 import ./coordinator/QueuePolicy.bend as QueuePolicy
 import ./coordinator/SnapshotValueLengthPolicy.bend as SnapshotValueLengthPolicy
 import ./Fs.bend as Fs
+import ./FilesCompat.bend as Files
 import ./Keys.bend as Keys
 import ./scan/Cursor.bend as Cursor
 import ./scan/Snapshot.bend as SnapshotPolicy
@@ -315,6 +316,57 @@ def open.manifest.result(
           ByteSstIo.validate(ByteManifest.sst.generation.path(path, file_id))
         open.sst.validated(path, lock, metadata)
 
+def reclaim.file(+target: String, info: Result<&1, &1, U32 & String, Files.Info>) -> IO(Unit):
+  match info:
+    case Done{Files.Info{Files.Regular{}, _, _}}:
+      do IO<Unit>:
+        _removed : Result<&1, &1, U32 & String, Unit> <- Fs.remove(target)
+        return Unit{}
+    case _: IO.pure(Unit, Unit{})
+
+def reclaim.remove(+path: String, names: List<&2, String>) -> IO(Unit):
+  match names:
+    case Nil{}: IO.pure(Unit, Unit{})
+    case Con{name, rest}:
+      do IO<Unit>:
+        +target : String <- IO.pure(String, path ++ "/" ++ name)
+        info : Result<&1, &1, U32 & String, Files.Info> <- Files.stat(target)
+        _reclaimed : Unit <- reclaim.file(target, info)
+        reclaim.remove(path, rest)
+
+def reclaim.names(names: List<&1, String>) -> List<&2, String>:
+  match names:
+    case Nil{}: Nil{}
+    case Con{name, rest}: Con{name, reclaim.names(rest)}
+
+def reclaim.listed(
+  +path: String,
+  value: ByteManifest.ManifestValue,
+  listed: Result<&1, &1, U32 & String, List<&1, String>>
+) -> IO(Unit):
+  match listed:
+    case Fail{_}: IO.pure(Unit, Unit{})
+    case Done{names}:
+      reclaim.remove(path, ByteManifest.retired(value, reclaim.names(names)))
+
+# Removes SST files the manifest no longer references, best effort, while holding the lock.
+def reclaim(+path: String, value: ByteManifest.ManifestValue) -> IO(Unit):
+  do IO<Unit>:
+    listed : Result<&1, &1, U32 & String, List<&1, String>> <- Fs.read_dir(path)
+    reclaim.listed(path, value, listed)
+
+def open.manifest.reclaimed(
+  +path: String,
+  lock: DbLock.Lock,
+  result: Result<&1, &1, ByteManifestIo.Error, ByteManifest.ManifestValue>
+) -> IO(Result<&1, &1, Error, Handle>):
+  match result:
+    case Fail{error}: open.manifest.result(path, lock, Fail{error})
+    case Done{+value}:
+      do IO<Result<&1, &1, Error, Handle>>:
+        _reclaimed : Unit <- reclaim(path, value)
+        open.manifest.result(path, lock, Done{value})
+
 # Checks for a published byte SST while retaining database ownership.
 def open.locked(
   +path: String,
@@ -327,7 +379,7 @@ def open.locked(
       do IO<Result<&1, &1, Error, Handle>>:
         manifest : Result<&1, &1, ByteManifestIo.Error, ByteManifest.ManifestValue> <-
           ByteManifestIo.read(path ++ "/MANIFEST")
-        open.manifest.result(path, lock, manifest)
+        open.manifest.reclaimed(path, lock, manifest)
 
 # Acquires exclusive ownership before replaying the byte WAL.
 def open.canonical(

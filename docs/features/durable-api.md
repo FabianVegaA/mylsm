@@ -67,6 +67,12 @@ conserva los totales de base para consultar la SST sin mantener otra copia compl
 La compactación byte actual procesa una sola tabla y elimina tombstones; la compactación
 multinivel de ese motor sigue pendiente.
 
+Cada flush o compactación publica una SST nueva y deja la anterior en disco mientras el
+handle sigue abierto. Al abrir la base, con el lock ya tomado, se borran los archivos
+`SST.*` que el manifest no referencia, incluidos temporales de una escritura interrumpida;
+los directorios y otros archivos no se tocan. La limpieza es de mejor esfuerzo: un fallo
+al borrar no impide abrir.
+
 ## Lectores y transferencia
 
 - [Scans y snapshots](scans-and-snapshots.md): límites `[lower, upper)`, prefijos,

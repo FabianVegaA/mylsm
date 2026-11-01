@@ -68,3 +68,31 @@ law comparator_mismatch_is_rejected:
 # Changed manifest bytes fail checksum validation.
 law manifest_checksum_corruption_is_rejected:
   {Manifest.decode(Bytes.set(Manifest.encode(Manifest.Empty{}), 55, 1)) == Fail{Manifest.ChecksumMismatch{}} : Result<&1, &1, Manifest.Error, Manifest.ManifestValue>}
+
+# Verifies only SST files other than the published generation are retired.
+law retired_keeps_the_published_generation:
+  {Manifest.retired(Manifest.GenerationSst{2},
+    ["LOCK", "MANIFEST", "SST.00000001", "SST.00000002", "WAL"]) ==
+    ["SST.00000001"] : List<&2, String>}
+
+# Verifies an unfinished SST write is retired.
+law retired_includes_temporary_sst_files:
+  {Manifest.retired(Manifest.GenerationSst{1},
+    ["SST.00000001", "SST.00000002.tmp"]) ==
+    ["SST.00000002.tmp"] : List<&2, String>}
+
+# Verifies generation ids are matched in lowercase hexadecimal.
+law retired_matches_lowercase_hex_names:
+  {Manifest.retired(Manifest.GenerationSst{10},
+    ["SST.0000000a", "SST.00000009"]) ==
+    ["SST.00000009"] : List<&2, String>}
+
+# Verifies a manifest without a published SST retires every generation file.
+law retired_without_publication_takes_every_sst:
+  {Manifest.retired(Manifest.GenerationEmpty{},
+    ["SST.00000001", "WAL"]) == ["SST.00000001"] : List<&2, String>}
+
+# Verifies the generation-four SST file is never retired.
+law retired_keeps_the_generation_four_sst:
+  {Manifest.retired(Manifest.HasSst{}, ["SST", "WAL"]) ==
+    [] : List<&2, String>}

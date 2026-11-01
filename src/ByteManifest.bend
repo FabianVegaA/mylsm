@@ -428,3 +428,29 @@ def decode.sized(input: Bytes.Bytes & U32) -> Result<&1, &1, Error, ManifestValu
 # Decodes bounded generation-four and generation-five byte manifests.
 def decode(input: Bytes.Bytes) -> Result<&1, &1, Error, ManifestValue>:
   decode.sized(Bytes.length(input))
+
+def retired.current(value: ManifestValue) -> Maybe<&2, String>:
+  match value:
+    case GenerationSst{file_id}: Some{"SST." ++ Bytes.to_hex(u32.bytes(file_id))}
+    case _: None{}
+
+def retired.published(current: Maybe<&2, String>, +name: String) -> Bool:
+  match current:
+    case None{}: False{}
+    case Some{published}: String.eq(published, name)
+
+def retired.push(is_retired: Bool, name: String, rest: List<&2, String>) -> List<&2, String>:
+  match is_retired:
+    case True{}: Con{name, rest}
+    case False{}: rest
+
+def retired.go(names: List<&2, String>, +current: Maybe<&2, String>) -> List<&2, String>:
+  match names:
+    case Nil{}: Nil{}
+    case Con{+name, rest}:
+      retired.push(String.starts_with(name, "SST.") &&
+        Bool.not(retired.published(current, name)), name, retired.go(rest, current))
+
+# Lists the SST files in a directory listing that the manifest no longer references.
+def retired(value: ManifestValue, names: List<&2, String>) -> List<&2, String>:
+  retired.go(names, retired.current(value))

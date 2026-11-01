@@ -42,3 +42,18 @@ def Laws.comparator_mismatch_is_rejected():
 
 def Laws.manifest_checksum_corruption_is_rejected():
   {==}
+
+def Laws.retired_keeps_the_published_generation():
+  {==}
+
+def Laws.retired_includes_temporary_sst_files():
+  {==}
+
+def Laws.retired_matches_lowercase_hex_names():
+  {==}
+
+def Laws.retired_without_publication_takes_every_sst():
+  {==}
+
+def Laws.retired_keeps_the_generation_four_sst():
+  {==}
