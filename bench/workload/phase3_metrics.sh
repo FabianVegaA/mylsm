@@ -80,8 +80,8 @@ fi
 
 mkdir -p "$BUILD_DIR"
 exec >"$RESULT" 2>&1
-COMMIT=$(git -C "$ROOT" rev-parse HEAD)
-if [[ -n $(git -C "$ROOT" --no-optional-locks status --short) ]]; then DIRTY=true; else DIRTY=false; fi
+COMMIT=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || cat "$ROOT/REVISION" 2>/dev/null || echo unknown)
+if [[ -n $(git -C "$ROOT" --no-optional-locks status --short 2>/dev/null) ]]; then DIRTY=true; else DIRTY=false; fi
 
 echo "benchmark=phase3_metrics"
 echo "bend_version=$(bend version)"

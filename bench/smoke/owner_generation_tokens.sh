@@ -132,6 +132,7 @@ coproc OLD_CLIENT {
     "$WORK/client" 2>"$WORK/old-client.err"
 }
 OLD_PID=$OLD_CLIENT_PID
+exec {OLD_OUT}<&"${OLD_CLIENT[0]}" {OLD_IN}>&"${OLD_CLIENT[1]}"
 read_ready_pipe 4 4
 old_socket_id=$(ls -di "$DB/MYLSM.sock" | awk '{print $1}')
 stop_owner
@@ -144,15 +145,16 @@ coproc NEW_CLIENT {
     "$WORK/client" 2>"$WORK/new-client.err"
 }
 NEW_PID=$NEW_CLIENT_PID
+exec {NEW_OUT}<&"${NEW_CLIENT[0]}" {NEW_IN}>&"${NEW_CLIENT[1]}"
 read_ready_pipe 5 4
 
-printf '%s\n' continue >&"${OLD_CLIENT[1]}"
-read_until "${OLD_CLIENT[0]}" "OWNER_GENERATION_PUBLIC_TOKENS_REJECTED"
+printf '%s\n' continue >&"$OLD_IN"
+read_until "$OLD_OUT" "OWNER_GENERATION_PUBLIC_TOKENS_REJECTED"
 wait "$OLD_PID"
 OLD_PID=
 
-printf '%s\n' continue >&"${NEW_CLIENT[1]}"
-read_until "${NEW_CLIENT[0]}" "OWNER_GENERATION_NEW_PUBLIC_TOKENS_VALID"
+printf '%s\n' continue >&"$NEW_IN"
+read_until "$NEW_OUT" "OWNER_GENERATION_NEW_PUBLIC_TOKENS_VALID"
 wait "$NEW_PID"
 NEW_PID=
 stop_owner

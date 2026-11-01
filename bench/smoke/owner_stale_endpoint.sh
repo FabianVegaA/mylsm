@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-WORK=$(mktemp -d /private/tmp/mst.XXXXXX)
+WORK=$(mktemp -d /tmp/mst.XXXXXX)
 DB="$WORK/db"
 INITIAL_PID=
 OWNER_PID=
