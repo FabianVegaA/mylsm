@@ -406,14 +406,14 @@ def page.next.cloned(
   tail: List<&1, ByteMemTable.Entry>,
   current_count: Nat,
   current_bytes: Nat,
-  max_bytes: Nat,
+  +max_bytes: Nat,
   copies: ByteMemTable.Entry & ByteMemTable.Entry
 ) -> List<&1, ByteMemTable.Entry> & ByteBlockBuilder.Decision:
   match copies:
     case (for_decision, for_remaining):
-      (Con{for_remaining, tail}, ByteBlockBuilder.decide(current_bytes,
+      (Con{for_remaining, tail}, ByteBlockBuilder.decide.target(current_bytes,
         page.record.required(for_decision, Nat.is_gt(current_count, 0n)),
-        max_bytes))
+        Nat.min(U32.to_nat(StorageBytes.TARGET_BLOCK_BYTES()), max_bytes), max_bytes))
 
 def page.next.prepare(
   entries: List<&1, ByteMemTable.Entry>,

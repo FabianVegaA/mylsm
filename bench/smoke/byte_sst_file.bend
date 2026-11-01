@@ -346,6 +346,65 @@ def checked.paged.single() -> IO(Unit):
     ByteMemTable.Entry{packed(Bytes.from_hex("62")), Some{Bytes.new(0)}}, Nil{}}},
     0, 200n))
 
+def target.count() -> Nat:
+  400n
+
+def target.entries(remaining: Nat, +index: U32) -> List<&1, ByteMemTable.Entry>:
+  match remaining:
+    case 0n: Nil{}
+    case 1n+rest:
+      Con{ByteMemTable.Entry{ByteSstFile.u32.bytes(index), Some{Bytes.new(16)}},
+        target.entries(rest, U32.add(index, 1))}
+
+def checked.target.count(split: Bool) -> IO(Unit):
+  match split:
+    case True{}:
+      IO.print("byte SST v4 target block size passed")
+    case False{}:
+      IO.die(Unit, 1, "byte SST v4 packed many small records into one block")
+
+def checked.target.header(
+  result: Result<&1, &1, ByteSstFile.Error, ByteSstFile.MultiHeader>
+) -> IO(Unit):
+  match result:
+    case Done{ByteSstFile.MultiHeader{_, _, _, block_count}}:
+      checked.target.count(U32.is_le(2, block_count))
+    case _:
+      IO.die(Unit, 1, "byte SST v4 target-size header failed")
+
+def checked.target.matches(matches: Bool) -> IO(Unit):
+  match matches:
+    case True{}:
+      IO.print("byte SST v4 target-size round-trip passed")
+    case False{}:
+      IO.die(Unit, 1, "byte SST v4 target-size round-trip changed its records")
+
+def checked.target.parsed(
+  result: Result<&1, &1, ByteSstFile.Error, ByteMemTable.Table>
+) -> IO(Unit):
+  match result:
+    case Done{table}:
+      checked.target.matches(Nat.is_eq(ByteMemTable.count(table), target.count()))
+    case Fail{_}:
+      IO.die(Unit, 1, "byte SST v4 target-size round-trip failed")
+
+def checked.target.copies(copies: Bytes.Bytes & Bytes.Bytes) -> IO(Unit):
+  match copies:
+    case (header, parsed):
+      do IO<Unit>:
+        _header : Unit <- checked.target.header(ByteSstFile.parse_stream_header(header))
+        checked.target.parsed(ByteSstFile.parse_file(parsed))
+
+def checked.target.result(result: Result<&1, &1, ByteSstFile.Error, Bytes.Bytes>) -> IO(Unit):
+  match result:
+    case Fail{_}:
+      IO.die(Unit, 1, "byte SST v4 target-size encoding failed")
+    case Done{file}:
+      checked.target.copies(clone.split(file))
+
+def checked.target() -> IO(Unit):
+  checked.target.result(ByteSstFile.encode_file(target.entries(target.count(), 0), 0))
+
 def main() -> IO(Unit):
   do IO<Unit>:
     _single : Unit <- checked(ByteSstFile.encode_file(Con{
@@ -353,4 +412,5 @@ def main() -> IO(Unit):
       Some{packed(Bytes.from_hex("80ff00"))}}, Con{
     ByteMemTable.Entry{packed(Bytes.from_hex("62")), Some{Bytes.new(0)}}, Nil{}}}, 0))
     _page : Unit <- checked.paged.single()
+    _target : Unit <- checked.target()
     checked.multi()

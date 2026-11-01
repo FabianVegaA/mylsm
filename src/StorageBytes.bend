@@ -81,6 +81,10 @@ def checked_add(+left: U32, +right: U32) -> Maybe<&2, U32>:
 def MAX_BLOCK_BYTES() -> U32:
   1048576
 
+# Size at which the SST encoder closes a block and starts the next one.
+def TARGET_BLOCK_BYTES() -> U32:
+  4096
+
 # Hard cap for an individual encoded key or value.
 def MAX_RECORD_BYTES() -> U32:
   1073741824

@@ -61,3 +61,29 @@ def decide.with.max(
 # Admits, rolls over, or rejects one record using byte-exact limits.
 def decide(used_bytes: Nat, record_bytes: Nat, max_bytes: Nat) -> Decision:
   decide.with.max(used_bytes, record_bytes, nat.clone.pair(max_bytes))
+
+def decide.target.placed(+used_bytes: Nat, +record_bytes: Nat, append: Bool) -> Decision:
+  match append:
+    case True{}: Append{Nat.add(used_bytes, record_bytes)}
+    case False{}: StartNextBlock{record_bytes}
+
+# Rejects a record above the hard cap, otherwise appends or starts the next block.
+def decide.target.sized(
+  +used_bytes: Nat,
+  +record_bytes: Nat,
+  record_fits: Bool,
+  append: Bool
+) -> Decision:
+  match record_fits:
+    case False{}: RecordTooLarge{}
+    case True{}: decide.target.placed(used_bytes, record_bytes, append)
+
+# Fills blocks up to a target size while admitting any record within the hard cap.
+def decide.target(
+  +used_bytes: Nat,
+  +record_bytes: Nat,
+  target_bytes: Nat,
+  max_bytes: Nat
+) -> Decision:
+  decide.target.sized(used_bytes, record_bytes, Nat.is_le(record_bytes, max_bytes),
+    Nat.is_eq(used_bytes, 0n) || Nat.is_le(Nat.add(used_bytes, record_bytes), target_bytes))
