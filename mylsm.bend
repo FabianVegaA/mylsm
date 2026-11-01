@@ -1,3 +1,4 @@
+# Durable LSM key-value database with binary and UTF-8 APIs, atomic batches, snapshots, and backups.
 import Base
 import ./src/DurableError.bend as DurableError
 import bend-kit-bytes@0.3.2.0/bytes.bend as PackedBytes
