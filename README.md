@@ -1,6 +1,6 @@
 # MyLSM
 
-MyLSM is an LSM key-value database written in [Bend](https://github.com/bendlang/bend), aiming to compete with leading storage engines in performance and data safety. It stores writes durably in a log, keeps sorted tables on disk, and recovers after a restart. This checkout implements **0.6.0.2** with Bend **2.0.40** and ez **1.15.0**. The previously published Bend Hub package is `mylsm-lsm-store@0.6.0.0`.
+MyLSM is an LSM key-value database written in [Bend](https://github.com/bendlang/bend), aiming to compete with leading storage engines in performance and data safety. It stores writes durably in a log, keeps sorted tables on disk, and recovers after a restart. This checkout implements **0.6.0.2** with Bend **2.0.40** and ez **1.15.0**. The package is published on Bend Hub as `mylsm-lsm-store@0.6.0.2`.
 
 ## Install with Nix
 
@@ -49,7 +49,7 @@ bound each proof process and terminate its children when the deadline expires.
 Import the published package, or import `mylsm.bend` from this checkout:
 
 ```bend
-import mylsm-lsm-store@0.6.0.0/mylsm.bend as MyLSM
+import mylsm-lsm-store@0.6.0.2/mylsm.bend as MyLSM
 ```
 
 The public durable API has two views of the same database:
