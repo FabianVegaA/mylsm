@@ -2,13 +2,24 @@
 
 MyLSM is an LSM key-value database written in [Bend](https://github.com/bendlang/bend), aiming to compete with leading storage engines in performance and data safety. It stores writes durably in a log, keeps sorted tables on disk, and recovers after a restart. This checkout implements **0.6.0.2** with Bend **2.0.40** and ez **1.15.0**. The package is published on Bend Hub as `mylsm-lsm-store@0.6.0.2`.
 
+## Release 0.6.0.2
+
+[0.6.0.2](https://github.com/FabianVegaA/mylsm/releases/tag/v0.6.0.2) fixes a native
+owner crash exposed by Bend 2.0.40 when polling results were shared. Rebuild native
+binaries to pick up the fix. Public APIs and storage formats are unchanged;
+existing 0.6 databases need no migration.
+
+Validation on Darwin arm64 passed 84 formal modules, 14 runtime matrix cases,
+16 storage/host checks, six backend checks, decoder corpora, lint and Nix
+installation checks. See the [compatibility evidence](bench/results/mylsm-0.6.0.2-compatibility.md)
+for commands, scope and limitations. Linux and GPU compatibility require separate validation.
+
 ## Install with Nix
 
-The GitHub commands require a published revision containing this flake. Use the
-local checkout commands below while working on unpublished changes.
+The commands below install the published `v0.6.0.2` release.
 
 ```sh
-nix profile install github:FabianVegaA/mylsm
+nix profile install github:FabianVegaA/mylsm/v0.6.0.2
 mylsm doctor
 mylsm repl --dir ./my-data
 ```
@@ -16,7 +27,7 @@ mylsm repl --dir ./my-data
 To run without installing:
 
 ```sh
-nix run github:FabianVegaA/mylsm -- repl --dir ./my-data
+nix run github:FabianVegaA/mylsm/v0.6.0.2 -- repl --dir ./my-data
 ```
 
 The package provides a native CPU CLI with `demo`, `repl`, `doctor` and `--help`.
@@ -31,9 +42,10 @@ These commands require Nix's `nix-command` and `flakes` features; see Developmen
 
 ## Run from source
 
-Use Bend 2.0.39 and a native C compiler. From this checkout:
+Use the pinned Bend 2.0.40 environment and its native C compiler. From this checkout:
 
 ```sh
+nix develop
 scripts/mylsm.sh doctor
 scripts/mylsm.sh demo
 scripts/mylsm.sh repl --dir ./my-data
@@ -51,6 +63,8 @@ Import the published package, or import `mylsm.bend` from this checkout:
 ```bend
 import mylsm-lsm-store@0.6.0.2/mylsm.bend as MyLSM
 ```
+
+Published Hub hash: `0x7586b743ff7fd05e412d5115859629b6`.
 
 The public durable API has two views of the same database:
 
@@ -76,11 +90,12 @@ nix --extra-experimental-features 'nix-command flakes' develop
 lefthook install
 ```
 
-The flake supplies Bend 2.0.39, Bolt 1.18.0, Lefthook, Clang, Bash, Git, Unix tools,
+The flake supplies Bend 2.0.40, Bolt 1.18.0, Lefthook, Clang, Bash, Git, Unix tools,
 Python, Node and Bun. `flake.lock` pins the inputs; Bolt is built from its pinned
 source and dependency lock without using a sibling checkout or the personal Bend
 cache. The first entry downloads tools and builds Bolt. Entering the shell does not
-install Git hooks; run `lefthook install` once after cloning.
+install Git hooks; run `lefthook install` once after cloning. The flake uses ez 1.15.0
+for dependency and package construction; the ez executable is not on the shell's `PATH`.
 
 The shell is defined for Apple Silicon macOS, and ARM64 and x86-64 Linux.
 On macOS, install Apple's Command Line Tools with `xcode-select --install` if they
@@ -152,8 +167,8 @@ git diff --check
 | Runtime checks and measurements | [0.6.0.2 compatibility evidence](bench/results/mylsm-0.6.0.2-compatibility.md), [bench map](bench/README.md), and [0.6 acceptance evidence](bench/results/mylsm-0.6.0.0-acceptance.md) |
 
 0.6.0.2 compatibility is validated on Apple Silicon macOS. Earlier Linux x86-64
-validation remains partial: the
-proofs and engine smokes pass, while owner coordination and the workload matrix remain
+validation remains partial: the proofs and engine smokes pass, while owner
+coordination and the workload matrix remain
 open; the 0.6.0.2 checks do not establish Linux compatibility. Writes are about ten
 times slower than the 0.5 engine; see the acceptance evidence for the known limitations.
 Each feature document records its current limits and links to the relevant evidence.
