@@ -75,7 +75,10 @@ Term unix_socket_poll_many_run(Env e, Term* f, IoWork* w) {
     if (descriptors[index - 1].revents == 0) {
       continue;
     }
-    u64 location = heap_alloc(e, cls_fit(2));
+    Term event = io_node(e,
+      CID_______src_coordinator_UnixSocketTypes_ReadyEvent,
+      (Term)connection_ids[index - 1],
+      (Term)(uint16_t)descriptors[index - 1].revents);
     if (err_seen(e.mem)) {
       term_drop(e, events);
       free(descriptors);
@@ -83,11 +86,7 @@ Term unix_socket_poll_many_run(Env e, Term* f, IoWork* w) {
       (void)w;
       return io_tup(e, interests, io_fail(e, ENOMEM, NULL));
     }
-    e.mem[location] = (Term)connection_ids[index - 1];
-    e.mem[location + 1] = (Term)(uint16_t)descriptors[index - 1].revents;
-    Term event = term_ctr(CID_______src_coordinator_UnixSocketTypes_ReadyEvent,
-      location);
-    u64 list_node = heap_alloc(e, cls_fit(2));
+    Term next_events = io_node(e, CID_Con, event, events);
     if (err_seen(e.mem)) {
       term_drop(e, event);
       term_drop(e, events);
@@ -96,9 +95,7 @@ Term unix_socket_poll_many_run(Env e, Term* f, IoWork* w) {
       (void)w;
       return io_tup(e, interests, io_fail(e, ENOMEM, NULL));
     }
-    e.mem[list_node] = event;
-    e.mem[list_node + 1] = events;
-    events = term_ctr(CID_Con, list_node);
+    events = next_events;
   }
   free(descriptors);
   free(connection_ids);

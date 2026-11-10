@@ -1,7 +1,7 @@
 # Vendored from bend-collections 0x9ee2e9a299991dcc089fe22c7f3ceb5f
-# (src/crypto/sha/core.bend), byte-identical except `Window` renamed to
-# `ShaWindow`: Bend 2.0.28 Base added a GUI `Window` type that collides with
-# this module's schedule-window type. Verify against NIST vectors, not the
+# (src/crypto/sha/core.bend), with whitespace changes and `Window` renamed
+# to `ShaWindow`: Bend 2.0.28 Base added a GUI `Window` type that collides
+# with this module's schedule-window type. Verify against NIST vectors, not the
 # upstream PROOF.bend (which covers the original names).
 import Base
 import ./state.bend as S
@@ -272,7 +272,9 @@ def digest(state: S.State) -> List<&2, U32>:
 # fast path below is proved equal to it with the FIPS table.
 def block_bytes(bytes: List<&2, U32>, +extra: Nat, +ks: List<&2, U32>, state: S.State) -> S.State:
   match bytes:
-    case b0 <> b1 <> b2 <> b3 <> b4 <> b5 <> b6 <> b7 <> b8 <> b9 <> b10 <> b11 <> b12 <> b13 <> b14 <> b15 <> b16 <> b17 <> b18 <> b19 <> b20 <> b21 <> b22 <> b23 <> b24 <> b25 <> b26 <> b27 <> b28 <> b29 <> b30 <> b31 <> b32 <> b33 <> b34 <> b35 <> b36 <> b37 <> b38 <> b39 <> b40 <> b41 <> b42 <> b43 <> b44 <> b45 <> b46 <> b47 <> b48 <> b49 <> b50 <> b51 <> b52 <> b53 <> b54 <> b55 <> b56 <> b57 <> b58 <> b59 <> b60 <> b61 <> b62 <> b63 <> rest:
+    case b0 <> b1 <> b2 <> b3 <> b4 <> b5 <> b6 <> b7 <> b8 <> b9 <> b10 <> b11 <> b12 <> b13 <> b14 <> b15 <> b16 <> b17 <> b18 <> b19 <> b20 <> b21 <> b22 <> b23 <> b24 <> b25 <> b26 <>
+      b27 <> b28 <> b29 <> b30 <> b31 <> b32 <> b33 <> b34 <> b35 <> b36 <> b37 <> b38 <> b39 <> b40 <> b41 <> b42 <> b43 <> b44 <> b45 <> b46 <> b47 <> b48 <> b49 <> b50 <> b51 <> b52 <>
+      b53 <> b54 <> b55 <> b56 <> b57 <> b58 <> b59 <> b60 <> b61 <> b62 <> b63 <> rest:
       block_bytes(rest, extra, ks, window_compress16(
         pack(b0, b1, b2, b3), pack(b4, b5, b6, b7), pack(b8, b9, b10, b11), pack(b12, b13, b14, b15),
         pack(b16, b17, b18, b19), pack(b20, b21, b22, b23), pack(b24, b25, b26, b27), pack(b28, b29, b30, b31),
@@ -813,22 +815,26 @@ def len_lo(+byte_length: Nat) -> U32:
 # zero fill and the big-endian bit length are packed straight into schedule
 # words, so no padded list is built.
 def fin0(+byte_length: Nat, +extra: Nat, state: S.State) -> S.State:
-  fips_compress16(pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0,
+    0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 1 to the compression state.
 def fin1(+t0: U32, +byte_length: Nat, +extra: Nat, state: S.State) -> S.State:
-  fips_compress16(pack(t0, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0,
+    0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 2 to the compression state.
 def fin2(+t0: U32, +t1: U32, +byte_length: Nat, +extra: Nat, state: S.State) -> S.State:
-  fips_compress16(pack(t0, t1, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0),
+    pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 3 to the compression state.
 def fin3(+t0: U32, +t1: U32, +t2: U32, +byte_length: Nat, +extra: Nat, state: S.State) -> S.State:
-  fips_compress16(pack(t0, t1, t2, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0),
+    pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 4 to the compression state.
@@ -841,7 +847,8 @@ def fin4(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0),
+    pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 5 to the compression state.
@@ -855,7 +862,8 @@ def fin5(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0),
+    pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 6 to the compression state.
@@ -870,7 +878,8 @@ def fin6(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0),
+    pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 7 to the compression state.
@@ -886,7 +895,8 @@ def fin7(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0),
+    pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 8 to the compression state.
@@ -903,7 +913,8 @@ def fin8(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0),
+    pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 9 to the compression state.
@@ -921,7 +932,8 @@ def fin9(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0),
+    pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 10 to the compression state.
@@ -940,7 +952,8 @@ def fin10(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0,
+    0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 11 to the compression state.
@@ -960,7 +973,8 @@ def fin11(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0,
+    0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 12 to the compression state.
@@ -981,7 +995,8 @@ def fin12(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0,
+    0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 13 to the compression state.
@@ -1003,7 +1018,8 @@ def fin13(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0,
+    0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 14 to the compression state.
@@ -1026,7 +1042,8 @@ def fin14(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0,
+    0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 15 to the compression state.
@@ -1050,7 +1067,8 @@ def fin15(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0),
+    pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 16 to the compression state.
@@ -1075,7 +1093,8 @@ def fin16(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0),
+    pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 17 to the compression state.
@@ -1101,7 +1120,8 @@ def fin17(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0),
+    pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 18 to the compression state.
@@ -1128,7 +1148,8 @@ def fin18(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0),
+    pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 19 to the compression state.
@@ -1156,7 +1177,8 @@ def fin19(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0,
+    0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 20 to the compression state.
@@ -1185,7 +1207,8 @@ def fin20(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0,
+    0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 21 to the compression state.
@@ -1215,7 +1238,8 @@ def fin21(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0,
+    0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 22 to the compression state.
@@ -1246,7 +1270,8 @@ def fin22(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, 128, 0), pack(0, 0, 0, 0), pack(0, 0,
+    0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 23 to the compression state.
@@ -1278,7 +1303,8 @@ def fin23(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, 128), pack(0, 0, 0, 0), pack(0,
+    0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 24 to the compression state.
@@ -1311,7 +1337,8 @@ def fin24(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(128, 0, 0, 0),
+    pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 25 to the compression state.
@@ -1345,7 +1372,8 @@ def fin25(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, 128, 0, 0),
+    pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 26 to the compression state.
@@ -1380,7 +1408,8 @@ def fin26(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, 128, 0),
+    pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 27 to the compression state.
@@ -1416,7 +1445,8 @@ def fin27(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, 128),
+    pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 28 to the compression state.
@@ -1453,7 +1483,8 @@ def fin28(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 29 to the compression state.
@@ -1491,7 +1522,8 @@ def fin29(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 30 to the compression state.
@@ -1530,7 +1562,8 @@ def fin30(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 31 to the compression state.
@@ -1570,7 +1603,8 @@ def fin31(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 32 to the compression state.
@@ -1611,7 +1645,8 @@ def fin32(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 33 to the compression state.
@@ -1653,7 +1688,8 @@ def fin33(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 34 to the compression state.
@@ -1696,7 +1732,8 @@ def fin34(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 35 to the compression state.
@@ -1740,7 +1777,8 @@ def fin35(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 36 to the compression state.
@@ -1785,7 +1823,8 @@ def fin36(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 37 to the compression state.
@@ -1831,7 +1870,8 @@ def fin37(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 38 to the compression state.
@@ -1878,7 +1918,8 @@ def fin38(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 39 to the compression state.
@@ -1926,7 +1967,8 @@ def fin39(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 40 to the compression state.
@@ -1975,7 +2017,8 @@ def fin40(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 41 to the compression state.
@@ -2025,7 +2068,8 @@ def fin41(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 42 to the compression state.
@@ -2076,7 +2120,9 @@ def fin42(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length),
+    len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 43 to the compression state.
@@ -2128,7 +2174,9 @@ def fin43(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length),
+    len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 44 to the compression state.
@@ -2181,7 +2229,9 @@ def fin44(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(128, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length),
+    len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 45 to the compression state.
@@ -2235,7 +2285,9 @@ def fin45(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, 128, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length),
+    len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 46 to the compression state.
@@ -2290,7 +2342,9 @@ def fin46(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, 128, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length),
+    len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 47 to the compression state.
@@ -2346,7 +2400,9 @@ def fin47(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, 128), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length),
+    len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 48 to the compression state.
@@ -2403,7 +2459,9 @@ def fin48(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(128, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(128, 0, 0, 0), pack(0, 0, 0, 0),
+    len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 49 to the compression state.
@@ -2461,7 +2519,9 @@ def fin49(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, 128, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, 128, 0, 0), pack(0, 0, 0, 0),
+    len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 50 to the compression state.
@@ -2520,7 +2580,9 @@ def fin50(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, 128, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, 128, 0), pack(0, 0, 0, 0),
+    len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 51 to the compression state.
@@ -2580,7 +2642,9 @@ def fin51(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, 128), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, 128), pack(0, 0, 0, 0),
+    len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 52 to the compression state.
@@ -2641,7 +2705,9 @@ def fin52(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(128, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(128, 0, 0, 0),
+    len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 53 to the compression state.
@@ -2703,7 +2769,9 @@ def fin53(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, 128, 0, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, 128, 0, 0),
+    len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 54 to the compression state.
@@ -2766,7 +2834,9 @@ def fin54(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, t53, 128, 0), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, t53, 128, 0),
+    len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 55 to the compression state.
@@ -2830,7 +2900,9 @@ def fin55(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, t53, t54, 128), len_hi(byte_length), len_lo(byte_length),
+  fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27),
+    pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, t53, t54, 128),
+    len_hi(byte_length), len_lo(byte_length),
     extra, state)
 
 # Apply SHA-256 round 56 to the compression state.
@@ -2895,8 +2967,11 @@ def fin56(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
-    extra, fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, t53, t54, t55), pack(128, 0, 0, 0), pack(0, 0, 0, 0),
+  fips_compress16(pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0,
+    0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+    extra, fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25,
+      t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, t53,
+      t54, t55), pack(128, 0, 0, 0), pack(0, 0, 0, 0),
     extra, state))
 
 # Apply SHA-256 round 57 to the compression state.
@@ -2962,8 +3037,11 @@ def fin57(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
-    extra, fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, t53, t54, t55), pack(t56, 128, 0, 0), pack(0, 0, 0, 0),
+  fips_compress16(pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0,
+    0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+    extra, fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25,
+      t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, t53,
+      t54, t55), pack(t56, 128, 0, 0), pack(0, 0, 0, 0),
     extra, state))
 
 # Apply SHA-256 round 58 to the compression state.
@@ -3030,8 +3108,11 @@ def fin58(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
-    extra, fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, t53, t54, t55), pack(t56, t57, 128, 0), pack(0, 0, 0, 0),
+  fips_compress16(pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0,
+    0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+    extra, fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25,
+      t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, t53,
+      t54, t55), pack(t56, t57, 128, 0), pack(0, 0, 0, 0),
     extra, state))
 
 # Apply SHA-256 round 59 to the compression state.
@@ -3099,8 +3180,11 @@ def fin59(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
-    extra, fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, t53, t54, t55), pack(t56, t57, t58, 128), pack(0, 0, 0, 0),
+  fips_compress16(pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0,
+    0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+    extra, fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25,
+      t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, t53,
+      t54, t55), pack(t56, t57, t58, 128), pack(0, 0, 0, 0),
     extra, state))
 
 # Apply SHA-256 round 60 to the compression state.
@@ -3169,8 +3253,11 @@ def fin60(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
-    extra, fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, t53, t54, t55), pack(t56, t57, t58, t59), pack(128, 0, 0, 0),
+  fips_compress16(pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0,
+    0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+    extra, fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25,
+      t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, t53,
+      t54, t55), pack(t56, t57, t58, t59), pack(128, 0, 0, 0),
     extra, state))
 
 # Apply SHA-256 round 61 to the compression state.
@@ -3240,8 +3327,11 @@ def fin61(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
-    extra, fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, t53, t54, t55), pack(t56, t57, t58, t59), pack(t60, 128, 0, 0),
+  fips_compress16(pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0,
+    0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+    extra, fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25,
+      t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, t53,
+      t54, t55), pack(t56, t57, t58, t59), pack(t60, 128, 0, 0),
     extra, state))
 
 # Apply SHA-256 round 62 to the compression state.
@@ -3312,8 +3402,11 @@ def fin62(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
-    extra, fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, t53, t54, t55), pack(t56, t57, t58, t59), pack(t60, t61, 128, 0),
+  fips_compress16(pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0,
+    0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+    extra, fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25,
+      t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, t53,
+      t54, t55), pack(t56, t57, t58, t59), pack(t60, t61, 128, 0),
     extra, state))
 
 # Apply SHA-256 round 63 to the compression state.
@@ -3385,15 +3478,22 @@ def fin63(
   +extra: Nat,
   state: S.State
 ) -> S.State:
-  fips_compress16(pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
-    extra, fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25, t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, t53, t54, t55), pack(t56, t57, t58, t59), pack(t60, t61, t62, 128),
+  fips_compress16(pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0,
+    0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), pack(0, 0, 0, 0), len_hi(byte_length), len_lo(byte_length),
+    extra, fips_compress16(pack(t0, t1, t2, t3), pack(t4, t5, t6, t7), pack(t8, t9, t10, t11), pack(t12, t13, t14, t15), pack(t16, t17, t18, t19), pack(t20, t21, t22, t23), pack(t24, t25,
+      t26, t27), pack(t28, t29, t30, t31), pack(t32, t33, t34, t35), pack(t36, t37, t38, t39), pack(t40, t41, t42, t43), pack(t44, t45, t46, t47), pack(t48, t49, t50, t51), pack(t52, t53,
+      t54, t55), pack(t56, t57, t58, t59), pack(t60, t61, t62, 128),
     extra, state))
 
 # Tail-recursive block loop over an already padded byte list.
 def fips_blocks(bytes: List<&2, U32>, +extra: Nat, state: S.State) -> S.State:
   match bytes:
-    case b0 <> b1 <> b2 <> b3 <> b4 <> b5 <> b6 <> b7 <> b8 <> b9 <> b10 <> b11 <> b12 <> b13 <> b14 <> b15 <> b16 <> b17 <> b18 <> b19 <> b20 <> b21 <> b22 <> b23 <> b24 <> b25 <> b26 <> b27 <> b28 <> b29 <> b30 <> b31 <> b32 <> b33 <> b34 <> b35 <> b36 <> b37 <> b38 <> b39 <> b40 <> b41 <> b42 <> b43 <> b44 <> b45 <> b46 <> b47 <> b48 <> b49 <> b50 <> b51 <> b52 <> b53 <> b54 <> b55 <> b56 <> b57 <> b58 <> b59 <> b60 <> b61 <> b62 <> b63 <> rest:
-      fips_blocks(rest, extra, fips_compress16(pack(b0, b1, b2, b3), pack(b4, b5, b6, b7), pack(b8, b9, b10, b11), pack(b12, b13, b14, b15), pack(b16, b17, b18, b19), pack(b20, b21, b22, b23), pack(b24, b25, b26, b27), pack(b28, b29, b30, b31), pack(b32, b33, b34, b35), pack(b36, b37, b38, b39), pack(b40, b41, b42, b43), pack(b44, b45, b46, b47), pack(b48, b49, b50, b51), pack(b52, b53, b54, b55), pack(b56, b57, b58, b59), pack(b60, b61, b62, b63), extra, state))
+    case b0 <> b1 <> b2 <> b3 <> b4 <> b5 <> b6 <> b7 <> b8 <> b9 <> b10 <> b11 <> b12 <> b13 <> b14 <> b15 <> b16 <> b17 <> b18 <> b19 <> b20 <> b21 <> b22 <> b23 <> b24 <> b25 <> b26 <>
+      b27 <> b28 <> b29 <> b30 <> b31 <> b32 <> b33 <> b34 <> b35 <> b36 <> b37 <> b38 <> b39 <> b40 <> b41 <> b42 <> b43 <> b44 <> b45 <> b46 <> b47 <> b48 <> b49 <> b50 <> b51 <> b52 <>
+      b53 <> b54 <> b55 <> b56 <> b57 <> b58 <> b59 <> b60 <> b61 <> b62 <> b63 <> rest:
+      fips_blocks(rest, extra, fips_compress16(pack(b0, b1, b2, b3), pack(b4, b5, b6, b7), pack(b8, b9, b10, b11), pack(b12, b13, b14, b15), pack(b16, b17, b18, b19), pack(b20, b21, b22,
+        b23), pack(b24, b25, b26, b27), pack(b28, b29, b30, b31), pack(b32, b33, b34, b35), pack(b36, b37, b38, b39), pack(b40, b41, b42, b43), pack(b44, b45, b46, b47), pack(b48, b49, b50,
+        b51), pack(b52, b53, b54, b55), pack(b56, b57, b58, b59), pack(b60, b61, b62, b63), extra, state))
     case _:
       state
 
@@ -3481,80 +3581,160 @@ def finish_n(+tail: List<&2, U32>, +byte_length: Nat, +extra: Nat, state: S.Stat
       fin26(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, byte_length, extra, state)
     case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> Nil{}:
       fin27(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> Nil{}:
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> Nil{}:
       fin28(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> Nil{}:
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> Nil{}:
       fin29(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> Nil{}:
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> Nil{}:
       fin30(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> Nil{}:
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> Nil{}:
       fin31(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> Nil{}:
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> Nil{}:
       fin32(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> Nil{}:
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> Nil{}:
       fin33(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> Nil{}:
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> Nil{}:
       fin34(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> Nil{}:
-      fin35(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> Nil{}:
-      fin36(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> Nil{}:
-      fin37(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> Nil{}:
-      fin38(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> Nil{}:
-      fin39(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> Nil{}:
-      fin40(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> Nil{}:
-      fin41(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> Nil{}:
-      fin42(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> Nil{}:
-      fin43(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> Nil{}:
-      fin44(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> Nil{}:
-      fin45(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, t44, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> Nil{}:
-      fin46(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, t44, t45, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> Nil{}:
-      fin47(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> Nil{}:
-      fin48(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> Nil{}:
-      fin49(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> Nil{}:
-      fin50(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> Nil{}:
-      fin51(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> Nil{}:
-      fin52(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <> Nil{}:
-      fin53(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <> t53 <> Nil{}:
-      fin54(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <> t53 <> t54 <> Nil{}:
-      fin55(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <> t53 <> t54 <> t55 <> Nil{}:
-      fin56(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <> t53 <> t54 <> t55 <> t56 <> Nil{}:
-      fin57(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <> t53 <> t54 <> t55 <> t56 <> t57 <> Nil{}:
-      fin58(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, t57, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <> t53 <> t54 <> t55 <> t56 <> t57 <> t58 <> Nil{}:
-      fin59(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, t57, t58, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <> t53 <> t54 <> t55 <> t56 <> t57 <> t58 <> t59 <> Nil{}:
-      fin60(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, t57, t58, t59, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <> t53 <> t54 <> t55 <> t56 <> t57 <> t58 <> t59 <> t60 <> Nil{}:
-      fin61(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, t57, t58, t59, t60, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <> t53 <> t54 <> t55 <> t56 <> t57 <> t58 <> t59 <> t60 <> t61 <> Nil{}:
-      fin62(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, t57, t58, t59, t60, t61, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <> t53 <> t54 <> t55 <> t56 <> t57 <> t58 <> t59 <> t60 <> t61 <> t62 <> Nil{}:
-      fin63(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, t57, t58, t59, t60, t61, t62, byte_length, extra, state)
-    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <> t53 <> t54 <> t55 <> t56 <> t57 <> t58 <> t59 <> t60 <> t61 <> t62 <> t63 <> rest:
-      fips_blocks(List.reverse.go(&2, U32, List.reverse(&2, U32, t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <> t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <> t53 <> t54 <> t55 <> t56 <> t57 <> t58 <> t59 <> t60 <> t61 <> t62 <> t63 <> rest), padding(byte_length)), extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> Nil{}:
+      fin35(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, byte_length,
+        extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> Nil{}:
+      fin36(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35,
+        byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> Nil{}:
+      fin37(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> Nil{}:
+      fin38(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> Nil{}:
+      fin39(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> Nil{}:
+      fin40(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> Nil{}:
+      fin41(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> Nil{}:
+      fin42(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> Nil{}:
+      fin43(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> Nil{}:
+      fin44(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, t43, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> Nil{}:
+      fin45(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, t43, t44, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> Nil{}:
+      fin46(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, t43, t44, t45, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> Nil{}:
+      fin47(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> Nil{}:
+      fin48(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> Nil{}:
+      fin49(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> Nil{}:
+      fin50(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> Nil{}:
+      fin51(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> Nil{}:
+      fin52(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <> Nil{}:
+      fin53(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <>
+      t53 <> Nil{}:
+      fin54(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <>
+      t53 <> t54 <> Nil{}:
+      fin55(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <>
+      t53 <> t54 <> t55 <> Nil{}:
+      fin56(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <>
+      t53 <> t54 <> t55 <> t56 <> Nil{}:
+      fin57(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <>
+      t53 <> t54 <> t55 <> t56 <> t57 <> Nil{}:
+      fin58(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, t57, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <>
+      t53 <> t54 <> t55 <> t56 <> t57 <> t58 <> Nil{}:
+      fin59(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, t57, t58, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <>
+      t53 <> t54 <> t55 <> t56 <> t57 <> t58 <> t59 <> Nil{}:
+      fin60(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, t57, t58, t59, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <>
+      t53 <> t54 <> t55 <> t56 <> t57 <> t58 <> t59 <> t60 <> Nil{}:
+      fin61(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, t57, t58, t59, t60, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <>
+      t53 <> t54 <> t55 <> t56 <> t57 <> t58 <> t59 <> t60 <> t61 <> Nil{}:
+      fin62(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, t57, t58, t59, t60, t61, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <>
+      t53 <> t54 <> t55 <> t56 <> t57 <> t58 <> t59 <> t60 <> t61 <> t62 <> Nil{}:
+      fin63(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36,
+        t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, t57, t58, t59, t60, t61, t62, byte_length, extra, state)
+    case t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+      t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <>
+      t53 <> t54 <> t55 <> t56 <> t57 <> t58 <> t59 <> t60 <> t61 <> t62 <> t63 <> rest:
+      fips_blocks(List.reverse.go(&2, U32, List.reverse(&2, U32,
+        t0 <> t1 <> t2 <> t3 <> t4 <> t5 <> t6 <> t7 <> t8 <> t9 <> t10 <> t11 <> t12 <> t13 <> t14 <> t15 <> t16 <> t17 <> t18 <> t19 <> t20 <> t21 <> t22 <> t23 <> t24 <> t25 <> t26 <>
+        t27 <> t28 <> t29 <> t30 <> t31 <> t32 <> t33 <> t34 <> t35 <> t36 <> t37 <> t38 <> t39 <> t40 <> t41 <> t42 <> t43 <> t44 <> t45 <> t46 <> t47 <> t48 <> t49 <> t50 <> t51 <> t52 <>
+        t53 <> t54 <> t55 <> t56 <> t57 <> t58 <> t59 <> t60 <> t61 <> t62 <> t63 <> rest), padding(byte_length)), extra, state)
 
 # count is the number of bytes already hashed, always a multiple of 64.
 def finish(+tail: List<&2, U32>, count: Nat, +extra: Nat, state: S.State) -> S.State:
@@ -3565,7 +3745,9 @@ def finish(+tail: List<&2, U32>, count: Nat, +extra: Nat, state: S.State) -> S.S
 # already hashed and extra the number of derived schedule words (48).
 def stream(+bytes: List<&2, U32>, count: Nat, +extra: Nat, state: S.State) -> S.State:
   match bytes:
-    case b0 <> b1 <> b2 <> b3 <> b4 <> b5 <> b6 <> b7 <> b8 <> b9 <> b10 <> b11 <> b12 <> b13 <> b14 <> b15 <> b16 <> b17 <> b18 <> b19 <> b20 <> b21 <> b22 <> b23 <> b24 <> b25 <> b26 <> b27 <> b28 <> b29 <> b30 <> b31 <> b32 <> b33 <> b34 <> b35 <> b36 <> b37 <> b38 <> b39 <> b40 <> b41 <> b42 <> b43 <> b44 <> b45 <> b46 <> b47 <> b48 <> b49 <> b50 <> b51 <> b52 <> b53 <> b54 <> b55 <> b56 <> b57 <> b58 <> b59 <> b60 <> b61 <> b62 <> b63 <> rest:
+    case b0 <> b1 <> b2 <> b3 <> b4 <> b5 <> b6 <> b7 <> b8 <> b9 <> b10 <> b11 <> b12 <> b13 <> b14 <> b15 <> b16 <> b17 <> b18 <> b19 <> b20 <> b21 <> b22 <> b23 <> b24 <> b25 <> b26 <>
+      b27 <> b28 <> b29 <> b30 <> b31 <> b32 <> b33 <> b34 <> b35 <> b36 <> b37 <> b38 <> b39 <> b40 <> b41 <> b42 <> b43 <> b44 <> b45 <> b46 <> b47 <> b48 <> b49 <> b50 <> b51 <> b52 <>
+      b53 <> b54 <> b55 <> b56 <> b57 <> b58 <> b59 <> b60 <> b61 <> b62 <> b63 <> rest:
       stream(rest, Nat.add(64n, count), extra, fips_compress16(
         pack(b0, b1, b2, b3), pack(b4, b5, b6, b7), pack(b8, b9, b10, b11), pack(b12, b13, b14, b15),
         pack(b16, b17, b18, b19), pack(b20, b21, b22, b23), pack(b24, b25, b26, b27), pack(b28, b29, b30, b31),

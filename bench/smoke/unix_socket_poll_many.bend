@@ -56,10 +56,21 @@ def event.is.third(event: SocketTypes.ReadyEvent) -> Bool:
       Bool.not(U32.is_eq(flags, 0))
     case _: False{}
 
-def events.only.second(events: List<&2, SocketTypes.ReadyEvent>) -> Bool:
+def events.only.second.shape(events: List<&2, SocketTypes.ReadyEvent>) -> Bool:
   match events:
     case Con{event, Nil{}}: event.is.second(event)
     case _: False{}
+
+def events.counted.valid(
+  counted: List<&2, SocketTypes.ReadyEvent> & Nat
+) -> Bool:
+  match counted:
+    case (events, count):
+      Nat.is_eq(count, 1n) && events.only.second.shape(events)
+
+def events.only.second(+events: List<&2, SocketTypes.ReadyEvent>) -> Bool:
+  events.counted.valid(ConnectionStore.event.count.keep(events)) &&
+    events.only.second.shape(events)
 
 def events.empty(events: List<&2, SocketTypes.ReadyEvent>) -> Bool:
   match events:

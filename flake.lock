@@ -7,17 +7,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1792791901,
-        "narHash": "sha256-mQ6NNSxVT19Wx0LJuT0IS+xw1mPw5qsvXqmkPU89aUg=",
+        "lastModified": 1793930808,
+        "narHash": "sha256-LZmQC1pwH0yqNgakjqlKpaucocPq0UfKCR97VniLL/M=",
         "owner": "bendlang",
         "repo": "bend",
-        "rev": "295e996574573e3a88827b1cf7045b437333c8f0",
+        "rev": "222de9901d4e3551c2b347da02e02a10098a28b2",
         "type": "github"
       },
       "original": {
         "owner": "bendlang",
         "repo": "bend",
-        "rev": "295e996574573e3a88827b1cf7045b437333c8f0",
+        "rev": "222de9901d4e3551c2b347da02e02a10098a28b2",
         "type": "github"
       }
     },
@@ -41,17 +41,17 @@
     "ez": {
       "flake": false,
       "locked": {
-        "lastModified": 1792730458,
-        "narHash": "sha256-gpyP8MmnJcmOdvlWRm5SGMKomi/pimr9dKaq0DExVew=",
+        "lastModified": 1794193572,
+        "narHash": "sha256-6nZySCbX1R/lgQEOMpJatYFlzsSCsZXwp3LhBorpiLk=",
         "owner": "Emerging-Patterns",
         "repo": "ez",
-        "rev": "166a23c54b1c5a7bf587abd3d906332bd73a856b",
+        "rev": "376d36dadb613d957baed1521036c6f10c398a91",
         "type": "github"
       },
       "original": {
         "owner": "Emerging-Patterns",
         "repo": "ez",
-        "rev": "166a23c54b1c5a7bf587abd3d906332bd73a856b",
+        "rev": "376d36dadb613d957baed1521036c6f10c398a91",
         "type": "github"
       }
     },

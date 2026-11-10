@@ -4,7 +4,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     bend = {
-      url = "github:bendlang/bend/295e996574573e3a88827b1cf7045b437333c8f0";
+      url = "github:bendlang/bend/222de9901d4e3551c2b347da02e02a10098a28b2";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     bolt = {
@@ -12,7 +12,7 @@
       flake = false;
     };
     ez = {
-      url = "github:Emerging-Patterns/ez/166a23c54b1c5a7bf587abd3d906332bd73a856b";
+      url = "github:Emerging-Patterns/ez/376d36dadb613d957baed1521036c6f10c398a91";
       flake = false;
     };
   };

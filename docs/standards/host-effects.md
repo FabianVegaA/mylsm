@@ -25,6 +25,16 @@ Effects are in [src/effs](../../src/effs/); Bend adapters, such as
 The `bend-kit-files` contract, its IO limits, and nominal byte versions
 are recorded in [hub-dependencies.json](../../tools/hub-dependencies.json).
 
+## Native runtime values
+
+Construct two-field native values with Bend's `io_node` helper, including list
+nodes returned by an effect. The helper prepares child references for sharing
+according to the constructor metadata. Writing raw child terms into manually
+allocated nodes can pass a single-consumer test yet fail when Bend shares the
+result: on 2.0.40, the owner hit a reference-count fail-stop while traversing
+poll readiness events. The `unix_socket_poll_many` smoke exercises this shared
+consumption as well as readiness and connection identity.
+
 ## Platforms
 
 The native path implements filesystem, locking, and Unix socket effects. The JavaScript

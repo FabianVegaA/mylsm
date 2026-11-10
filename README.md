@@ -1,6 +1,6 @@
 # MyLSM
 
-MyLSM is an LSM key-value database written in [Bend](https://github.com/bendlang/bend), aiming to compete with leading storage engines in performance and data safety. It stores writes durably in a log, keeps sorted tables on disk, and recovers after a restart. This checkout implements **0.6.0.0**. The package is published on Bend Hub as `mylsm-lsm-store@0.6.0.0`.
+MyLSM is an LSM key-value database written in [Bend](https://github.com/bendlang/bend), aiming to compete with leading storage engines in performance and data safety. It stores writes durably in a log, keeps sorted tables on disk, and recovers after a restart. This checkout implements **0.6.0.2** with Bend **2.0.40** and ez **1.15.0**. The previously published Bend Hub package is `mylsm-lsm-store@0.6.0.0`.
 
 ## Install with Nix
 
@@ -139,7 +139,7 @@ git diff --check
 
 | Topic | Reference |
 | --- | --- |
-| Release highlights, upgrade notes and limitations | [0.6.0.0 release notes](docs/releases/0.6.0.0.md) |
+| Release highlights, upgrade notes and limitations | [0.6.0.2 compatibility notes](docs/releases/0.6.0.2.md), [0.6.0.0 features](docs/releases/0.6.0.0.md) |
 | Purpose, users and scope | [PRODUCT.md](PRODUCT.md) |
 | Agent rules | [AGENTS.md](AGENTS.md) |
 | Bend conventions and development gates | [Bend](docs/standards/bend.md), [formal verification](docs/standards/formal-verification.md), [host effects](docs/standards/host-effects.md) |
@@ -149,12 +149,13 @@ git diff --check
 | Process ownership and local clients | [Coordination](docs/features/coordination.md) |
 | Export, restore and legacy migration | [Backup and migration](docs/features/backup-and-migration.md) |
 | Launcher, demo and REPL | [CLI](docs/features/cli.md) |
-| Runtime checks and measurements | [Bench map](bench/README.md) and [0.6 acceptance evidence](bench/results/mylsm-0.6.0.0-acceptance.md) |
+| Runtime checks and measurements | [0.6.0.2 compatibility evidence](bench/results/mylsm-0.6.0.2-compatibility.md), [bench map](bench/README.md), and [0.6 acceptance evidence](bench/results/mylsm-0.6.0.0-acceptance.md) |
 
-0.6.0.0 is accepted on Apple Silicon macOS. Linux x86-64 is partially verified: the
+0.6.0.2 compatibility is validated on Apple Silicon macOS. Earlier Linux x86-64
+validation remains partial: the
 proofs and engine smokes pass, while owner coordination and the workload matrix remain
-open for 0.6.0.1. Writes are about ten times slower than the 0.5 engine; see the
-acceptance evidence for the known limitations.
+open; the 0.6.0.2 checks do not establish Linux compatibility. Writes are about ten
+times slower than the 0.5 engine; see the acceptance evidence for the known limitations.
 Each feature document records its current limits and links to the relevant evidence.
 Formal laws cover pure decisions; they do not prove the filesystem or host effects.
 
